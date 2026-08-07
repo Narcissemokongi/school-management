@@ -43,6 +43,10 @@ workflows:
         script: sudo gem install cocoapods
       - name: Capacitor sync
         script: npx cap sync ios
+      - name: Install pods
+        script: |
+          cd ios/App
+          pod install
       - name: Build IPA
         script: |
           cd ios/App
