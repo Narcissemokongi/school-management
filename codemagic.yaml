@@ -3,7 +3,7 @@ workflows:
     name: Build Android
     environment:
       vars:
-        NODE_VERSION: 18
+        NODE_VERSION: 20.19
         JAVA_VERSION: 17
       groups:
         - app-env
@@ -30,7 +30,7 @@ workflows:
     name: Build iOS
     environment:
       vars:
-        NODE_VERSION: 18
+        NODE_VERSION: 20.19
         XCODE_VERSION: 15.4
       groups:
         - app-env
@@ -57,7 +57,7 @@ workflows:
     name: Build Desktop
     environment:
       vars:
-        NODE_VERSION: 18
+        NODE_VERSION: 20.19
       groups:
         - app-env
     scripts:
