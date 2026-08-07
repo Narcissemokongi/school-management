@@ -26,7 +26,7 @@ workflows:
         recipients:
           - narcissemokongi@gmail.com
 
-    ios-build:
+  ios-build:
     name: Build iOS
     environment:
       vars:
