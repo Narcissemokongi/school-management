@@ -26,7 +26,7 @@ workflows:
         recipients:
           - narcissemokongi@gmail.com
 
-  ios-build:
+    ios-build:
     name: Build iOS
     environment:
       vars:
@@ -41,24 +41,12 @@ workflows:
         script: npm run build
       - name: Install CocoaPods
         script: sudo gem install cocoapods
-      - name: Remove old ios folder
-        script: rm -rf ios
-      - name: Add iOS platform
-        script: npx cap add ios
-      - name: Create exportOptions.plist
-        script: |
-          cat <<EOF > ios/exportOptions.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>development</string>
-          </dict>
-          </plist>
-          EOF
       - name: Capacitor sync
         script: npx cap sync ios
+      - name: Install pods
+        script: |
+          cd ios/App
+          pod install
       - name: Build IPA
         script: |
           cd ios/App
