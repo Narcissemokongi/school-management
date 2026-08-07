@@ -1,0 +1,77 @@
+workflows:
+  android-build:
+    name: Build Android
+    environment:
+      vars:
+        NODE_VERSION: 18
+        JAVA_VERSION: 17
+      groups:
+        - app-env
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Build web app
+        script: npm run build
+      - name: Capacitor sync
+        script: npx cap sync android
+      - name: Build APK
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+    artifacts:
+      - android/app/build/outputs/apk/debug/app-debug.apk
+    publishing:
+      email:
+        recipients:
+          - narcissemokongi@gmail.com
+
+  ios-build:
+    name: Build iOS
+    environment:
+      vars:
+        NODE_VERSION: 18
+        XCODE_VERSION: 15.4
+      groups:
+        - app-env
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Build web app
+        script: npm run build
+      - name: Capacitor sync
+        script: npx cap sync ios
+      - name: Build IPA
+        script: |
+          cd ios
+          xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Debug archive -archivePath $CM_BUILD_DIR/App.xcarchive
+          xcodebuild -exportArchive -archivePath $CM_BUILD_DIR/App.xcarchive -exportPath $CM_BUILD_DIR/output -exportOptionsPlist exportOptions.plist
+    artifacts:
+      - $CM_BUILD_DIR/output/*.ipa
+    publishing:
+      email:
+        recipients:
+          - narcissemokongi@gmail.com
+
+  desktop-build:
+    name: Build Desktop
+    environment:
+      vars:
+        NODE_VERSION: 18
+      groups:
+        - app-env
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Build web app
+        script: npm run build
+      - name: Capacitor sync electron
+        script: npx cap sync electron
+      - name: Package Electron
+        script: |
+          cd electron
+          npm run electron:build
+    artifacts:
+      - electron/release/*.exe
+      - electron/release/*.dmg
+      - electron/release/*.AppImage

@@ -1,0 +1,15 @@
+{
+  "appId": "com.edudiscipline.app",
+  "appName": "School Management",
+  "webDir": "dist",
+  "server": {
+    "url": "https://educdiscipline.vercel.app",
+    "cleartext": false
+  },
+  "plugins": {
+    "CapacitorAssets": {
+      "icon": "resources/icon.png",
+      "splash": "resources/splash.png"
+    }
+  }
+}

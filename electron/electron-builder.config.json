@@ -1,0 +1,38 @@
+{
+  "appId": "com.edudiscipline.app",
+  "productName": "School Management",
+  "directories": {
+    "output": "release",
+    "buildResources": "resources"
+  },
+  "electronVersion": "26.2.2",
+  "electronDist": "./node_modules/electron/dist",
+  "files": [
+    "assets/**/*",
+    "build/**/*",
+    "capacitor.config.*",
+    "app/**/*"
+  ],
+  "nsis": {
+    "allowElevation": true,
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "runAfterFinish": false,
+    "createDesktopShortcut": true,
+    "installerSidebar": false
+  },
+  "win": {
+    "target": "nsis",
+    "icon": "resources/icon.png"
+  },
+  "mac": {
+    "category": "public.app-category.education",
+    "target": ["dmg", "zip"],
+    "icon": "resources/icon.png"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "category": "Education",
+    "icon": "resources/icon.png"
+  }
+}
