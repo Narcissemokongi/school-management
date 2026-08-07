@@ -58,7 +58,7 @@ Desktop.ini
 .vercel
 
 # Convex (si nécessaire)
-convex/_generated/
+#convex/_generated/
 
 # Fichiers de clés (à ne jamais committer)
 *.p8
