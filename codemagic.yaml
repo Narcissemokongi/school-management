@@ -43,11 +43,15 @@ workflows:
         script: sudo gem install cocoapods
       - name: Capacitor sync
         script: npx cap sync ios
+      - name: Install pods
+        script: |
+          cd ios/App
+          pod install
       - name: Build IPA
         script: |
-          cd ios
+          cd ios/App
           xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Debug archive -archivePath $CM_BUILD_DIR/App.xcarchive
-          xcodebuild -exportArchive -archivePath $CM_BUILD_DIR/App.xcarchive -exportPath $CM_BUILD_DIR/output -exportOptionsPlist exportOptions.plist
+          xcodebuild -exportArchive -archivePath $CM_BUILD_DIR/App.xcarchive -exportPath $CM_BUILD_DIR/output -exportOptionsPlist ../../ios/exportOptions.plist
     artifacts:
       - $CM_BUILD_DIR/output/*.ipa
     publishing:
