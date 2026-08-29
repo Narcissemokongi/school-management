@@ -11,6 +11,7 @@ import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import {
   DollarSign, BarChart3, MessageCircle, Phone, HelpCircle,
   FileText, Shield, User, Calendar, TrendingUp, AlertCircle,
@@ -30,8 +31,13 @@ export function ComptableApp({
   handleLogout,
 }) {
   const { S } = useStyles();
-  const [tab, setTab] = useState("dashboard");
-  const [messagingContactId, setMessagingContactId] = useState(null);
+
+  // Onglet actif et contact de messagerie depuis le store
+  const tab = useAppStore((state) => state.comptableTab);
+  const setTab = useAppStore((state) => state.setComptableTab);
+  const messagingContactId = useAppStore((state) => state.messagingContactId);
+  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatut, setFilterStatut] = useState("all"); // all, paye, impaye, partiel
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,7 +59,7 @@ export function ComptableApp({
     { id: "confidentialite", label: "Confidentialité", icon: <Shield size={20} /> },
   ];
 
-  // Query pour les frais (déjà disponible ?)
+  // Query pour les frais
   const fraisQuery = useQuery(api.frais.listByEcole, {
     ecoleId,
     anneeId,
@@ -71,7 +77,7 @@ export function ComptableApp({
     return { totalEleves, totalFrais, totalPaye, totalRestant, tauxRecouvrement, elevesEnRetard };
   }, [frais, eleves]);
 
-  // Filtrage des frais pour la vue "frais"
+  // Filtrage des frais
   const filteredFrais = useMemo(() => {
     let result = frais;
     if (searchTerm.trim()) {

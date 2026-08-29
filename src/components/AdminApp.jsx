@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
@@ -18,7 +17,8 @@ import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AnneeSelector } from "./AnneeSelector";
-import { ParentLinkRequests } from "./ParentLinkRequests"; // <-- Nouveau
+import { ParentLinkRequests } from "./ParentLinkRequests";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import {
   Home,
   Users,
@@ -63,9 +63,15 @@ export function AdminApp({
   handleLogout,
 }) {
   const { S } = useStyles();
-  const [tab, setTab] = useState("accueil");
+
+  // ✅ Onglet actif et contact de messagerie depuis le store
+  const tab = useAppStore((state) => state.adminTab);
+  const setTab = useAppStore((state) => state.setAdminTab);
+  const messagingContactId = useAppStore((state) => state.messagingContactId);
+  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
+
+  // États locaux (non persistés)
   const [dirty, setDirty] = useState(false);
-  const [messagingContactId, setMessagingContactId] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingTab, setPendingTab] = useState(null);
 
@@ -89,7 +95,7 @@ export function AdminApp({
       icon: <Shield size={20} />,
       badge: pendingUsers.length > 0 ? pendingUsers.length : null,
     },
-    { id: "liaisons-parents", label: "Liaisons parents", icon: <Link2 size={20} /> }, // <-- Nouvel onglet
+    { id: "liaisons-parents", label: "Liaisons parents", icon: <Link2 size={20} /> },
     { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
     { id: "appels", label: "Appels", icon: <Phone size={20} /> },
     { id: "audit", label: "Audit", icon: <ScrollText size={20} /> },
@@ -204,7 +210,7 @@ export function AdminApp({
         return <GestionUtilisateurs ecoleId={ecoleId} userId={user._id} />;
 
       case "liaisons-parents":
-        return <ParentLinkRequests user={user} />; // <-- Rendu du nouveau composant
+        return <ParentLinkRequests user={user} />;
 
       case "messagerie":
         return <MessagerieApp user={user} ecoleId={ecoleId} initialSelectedUserId={messagingContactId} />;
@@ -250,7 +256,6 @@ export function AdminApp({
         onToggleTheme={toggle}
         onLogout={handleLogout}
       >
-        {/* Sélecteur d'année pour consulter les archives */}
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px 24px 0", display: "flex", justifyContent: "flex-end" }}>
           <AnneeSelector
             ecoleId={ecoleId}

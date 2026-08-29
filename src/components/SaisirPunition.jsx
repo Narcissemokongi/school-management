@@ -3,38 +3,46 @@ import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
 import { getFaute } from "../utils";
-import { trierEleves } from "../utils/tri";   // ✅ import du tri
+import { trierEleves } from "../utils/tri";
 import toast from "react-hot-toast";
 import { Loader, Search, Check, AlertTriangle, Info } from "lucide-react";
 import { userFriendlyError } from "../utils/errorMessages";
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 
 export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPunition, onNotif, anneeId, anneeActive }) {
-  const { S, dark } = useStyles();   // ✅ extraire dark
+  const { S, dark } = useStyles();
   const { confirm, dialogProps } = useConfirm();
 
-  const [search, setSearch] = useState("");
-  const [selectedEleve, setSelectedEleve] = useState(null);
-  const [idFaute, setIdFaute] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [commentaire, setCommentaire] = useState("");
-  const [sanction, setSanction] = useState("");
-  const [graviteFilter, setGraviteFilter] = useState("toutes");
+  // ===== Persistance via le store Zustand =====
+  const search = useAppStore((state) => state.saisirPunitionSearch || "");
+  const setSearch = useAppStore((state) => state.setSaisirPunitionSearch);
+  const selectedEleve = useAppStore((state) => state.saisirPunitionSelectedEleve);
+  const setSelectedEleve = useAppStore((state) => state.setSaisirPunitionSelectedEleve);
+  const idFaute = useAppStore((state) => state.saisirPunitionIdFaute || "");
+  const setIdFaute = useAppStore((state) => state.setSaisirPunitionIdFaute);
+  const date = useAppStore((state) => state.saisirPunitionDate || new Date().toISOString().split("T")[0]);
+  const setDate = useAppStore((state) => state.setSaisirPunitionDate);
+  const commentaire = useAppStore((state) => state.saisirPunitionCommentaire || "");
+  const setCommentaire = useAppStore((state) => state.setSaisirPunitionCommentaire);
+  const sanction = useAppStore((state) => state.saisirPunitionSanction || "");
+  const setSanction = useAppStore((state) => state.setSaisirPunitionSanction);
+  const graviteFilter = useAppStore((state) => state.saisirPunitionGraviteFilter || "toutes");
+  const setGraviteFilter = useAppStore((state) => state.setSaisirPunitionGraviteFilter);
+  // =========================================
+
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
-
   const addPunitionMutation = useMutation(api.punitions.add);
   const searchTimeoutRef = useRef(null);
 
-  // Filtrer les fautes selon la gravité sélectionnée
   const filteredFautes = useMemo(() => {
     if (graviteFilter === "toutes") return fautes;
     return fautes.filter(f => f.gravite === graviteFilter);
   }, [fautes, graviteFilter]);
 
-  // Recherche avec debounce (300ms)
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
@@ -43,13 +51,12 @@ export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPu
     return () => clearTimeout(searchTimeoutRef.current);
   }, [search]);
 
-  // Résultats de recherche triés alphabétiquement et par classe
   const filteredEleves = useMemo(() => {
     if (debouncedSearch.trim().length < 2) return [];
     const query = debouncedSearch.toLowerCase();
     return eleves
       .filter(e => `${e.nom} ${e.postnom} ${e.prenom || ''}`.toLowerCase().includes(query))
-      .sort(trierEleves)   // ✅ tri classe puis nom
+      .sort(trierEleves)
       .slice(0, 10);
   }, [eleves, debouncedSearch]);
 
@@ -140,7 +147,6 @@ export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPu
   const isFormValid = selectedEleve && idFaute && date && sanction;
   const fauteSelectionnee = idFaute ? getFaute(fautes, idFaute) : null;
 
-  // Couleurs adaptatives
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";

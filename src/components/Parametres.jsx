@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import {
   User, Building, Shield, Save, Upload, Eye, EyeOff,
   Calendar, Loader, AlertCircle, ShieldCheck, Mail,
@@ -225,7 +226,10 @@ function TwoFactorEmailSettings({ userId }) {
 export function Parametres({ ecoleId, user }) {
   const { S, dark } = useStyles();
   const { confirm, dialogProps } = useConfirm();
-  const [tab, setTab] = useState("profil");
+
+  // Onglet actif persisté dans le store
+  const tab = useAppStore((state) => state.parametresTab || "profil");
+  const setTab = useAppStore((state) => state.setParametresTab);
 
   const ecole = useQuery(api.ecoles.get, ecoleId ? { ecoleId } : "skip");
   const users = useQuery(api.users.listByEcole, ecoleId ? { ecoleId } : "skip") ?? [];

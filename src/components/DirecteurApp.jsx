@@ -14,6 +14,7 @@ import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { StatistiquesAvancees } from "./StatistiquesAvancees";
 import { AssistantPassage } from "./AssistantPassage";
+import { useAppStore } from "../store/appStore";   // <-- Import
 import {
   Home, User, Building, MessageCircle, Phone, HelpCircle,
   FileText, Shield, Calendar, BarChart, ArrowRight,
@@ -33,8 +34,14 @@ export function DirecteurApp({
   handleLogout,
 }) {
   const { S } = useStyles();
-  const [tab, setTab] = useState("accueil");
-  const [messagingContactId, setMessagingContactId] = useState(null);
+
+  // Onglet actif depuis le store, avec setter
+  const tab = useAppStore((state) => state.directeurTab);
+  const setTab = useAppStore((state) => state.setDirecteurTab);
+
+  // Contact de messagerie, également conservé
+  const messagingContactId = useAppStore((state) => state.messagingContactId);
+  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
 
   // ========== HOOKS TOUJOURS EN PREMIER ==========
   const annees = useQuery(
@@ -42,7 +49,6 @@ export function DirecteurApp({
     user.ecoleId ? { ecoleId: user.ecoleId } : "skip"
   ) ?? [];
 
-  // ✅ Pour le badge Passage : récupérer les inscriptions et propositions
   const inscriptions = useQuery(
     api.inscriptions.listByAnnee,
     user.ecoleId && anneeId ? { ecoleId: user.ecoleId, anneeId } : "skip"
@@ -53,7 +59,6 @@ export function DirecteurApp({
     user.ecoleId && anneeId ? { ecoleId: user.ecoleId, anneeId } : "skip"
   ) ?? [];
 
-  // Calcul du nombre d'élèves sans décision
   const nbElevesSansDecision = useMemo(() => {
     if (!inscriptions || !propositions) return 0;
     const elevesProposes = new Set(propositions.map((p) => p.eleveId));
@@ -121,7 +126,6 @@ export function DirecteurApp({
             anneeActiveId={anneeId}
             classes={classes}
             user={user}
-            // ✅ On peut passer les inscriptions et propositions déjà chargées pour éviter des queries en double
             initialInscriptions={inscriptions}
             initialPropositions={propositions}
           />

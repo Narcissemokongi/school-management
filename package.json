@@ -15,6 +15,7 @@
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
     "@capacitor/ios": "^8.5.0",
+    "@capacitor/preferences": "^8.0.1",
     "@vite-pwa/assets-generator": "^1.0.2",
     "agora-access-token": "^2.0.4",
     "agora-rtc-react": "^2.5.1",
@@ -30,7 +31,8 @@
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.18.2",
     "recharts": "^3.8.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@capacitor-community/electron": "^5.0.1",

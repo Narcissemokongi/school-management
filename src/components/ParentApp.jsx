@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
@@ -14,6 +14,7 @@ import { AbsencesEnfant } from "./AbsencesEnfant";
 import { MentionsLegales } from "./MentionsLegales";
 import { Aide } from "./Aide";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import {
   Users, MessageCircle, Calendar, Phone, HelpCircle,
   FileText, Shield, ArrowLeft, BookOpen, DollarSign,
@@ -36,11 +37,23 @@ export function ParentApp({
 }) {
   const { S } = useStyles();
   const isMobile = useIsMobile();
-  const [tab, setTab] = useState("enfants");
-  const [selectedEnfant, setSelectedEnfant] = useState(null);
-  const [messagingContactId, setMessagingContactId] = useState(null);
-  const [searchEnfant, setSearchEnfant] = useState("");
-  const [showAddChild, setShowAddChild] = useState(false); // Nouvel état
+
+  // ===== Persistance via le store Zustand =====
+  const tab = useAppStore((state) => state.parentTab);
+  const setTab = useAppStore((state) => state.setParentTab);
+
+  const selectedEnfant = useAppStore((state) => state.parentSelectedEnfant);
+  const setSelectedEnfant = useAppStore((state) => state.setParentSelectedEnfant);
+
+  const messagingContactId = useAppStore((state) => state.messagingContactId);
+  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
+
+  const searchEnfant = useAppStore((state) => state.parentSearchEnfant);
+  const setSearchEnfant = useAppStore((state) => state.setParentSearchEnfant);
+
+  const showAddChild = useAppStore((state) => state.parentShowAddChild);
+  const setShowAddChild = useAppStore((state) => state.setParentShowAddChild);
+  // =========================================
 
   const handleNavigateToMessaging = (contactId) => {
     setMessagingContactId(contactId);
@@ -79,8 +92,6 @@ export function ParentApp({
             />
           );
         }
-
-        // Afficher soit le formulaire de demande, soit la liste des enfants
         return showAddChild ? (
           <DemandeAssociation
             user={user}
@@ -406,7 +417,7 @@ function DemandeAssociation({ user, dark, onClose }) {
   );
 }
 
-// ----- Liste des enfants (avec bouton d'ajout) -----
+// ===== Liste des enfants (avec bouton d'ajout) =====
 function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMobile, dark, search, setSearch, onAddChild }) {
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
@@ -599,7 +610,7 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
   );
 }
 
-// Composant petit stat card
+// ===== StatCardMini =====
 function StatCardMini({ icon, value, label, color, dark }) {
   return (
     <div style={{
@@ -617,7 +628,7 @@ function StatCardMini({ icon, value, label, color, dark }) {
   );
 }
 
-// ----- Dossier d'un enfant (inchangé mais inclus pour compilation) -----
+// ===== Dossier d'un enfant =====
 function DossierEnfant({ enfant, punitions, fautes, ecoleId, anneeId, userId, onBack, S, isMobile, dark }) {
   const [subTab, setSubTab] = useState("punitions");
 

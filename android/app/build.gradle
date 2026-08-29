@@ -7,19 +7,32 @@ android {
         applicationId "com.edudiscipline.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    // ✅ Configuration de la signature pour le release
+    signingConfigs {
+        release {
+            storeFile file("release.keystore")          // fichier à la racine du dossier android/
+            storePassword "19761975"
+            keyAlias "edudiscipline"                    // alias que vous avez utilisé
+            keyPassword "19761975"        // souvent identique au mot de passe keystore
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
     // ✅ Configuration Java 17
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

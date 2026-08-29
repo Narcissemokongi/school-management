@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
@@ -12,11 +12,12 @@ import { GestionNotes } from "./GestionNotes";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { AssistantPassageEnseignant } from "./AssistantPassageEnseignant"; // ✅ import ajouté
+import { AssistantPassageEnseignant } from "./AssistantPassageEnseignant";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import {
   BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, ArrowLeft, BarChart3, GraduationCap,
-  Clock, TrendingUp, ClipboardList, // ✅ icône ajoutée
+  Clock, TrendingUp, ClipboardList,
 } from "lucide-react";
 import { ConsultationExamens } from "./ConsultationExamens";
 
@@ -27,9 +28,14 @@ export function EnseignantApp({
   const { S } = useStyles();
   const classe = user.classe;
   const elevesDeMaClasse = eleves.filter((e) => e.classe === classe);
-  const [tab, setTab] = useState("dashboard");
-  const [selectedCours, setSelectedCours] = useState(null);
-  const [messagingContactId, setMessagingContactId] = useState(null);
+
+  // ✅ Onglet actif, cours sélectionné et contact de messagerie depuis le store
+  const tab = useAppStore((state) => state.enseignantTab);
+  const setTab = useAppStore((state) => state.setEnseignantTab);
+  const selectedCours = useAppStore((state) => state.enseignantSelectedCours);
+  const setSelectedCours = useAppStore((state) => state.setEnseignantSelectedCours);
+  const messagingContactId = useAppStore((state) => state.messagingContactId);
+  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
 
   const handleNavigateToMessaging = (contactId) => {
     setMessagingContactId(contactId);
@@ -71,7 +77,7 @@ export function EnseignantApp({
 
   const menu = [
     { id: "dashboard", label: "Tableau de bord", icon: <BarChart3 size={20} /> },
-    { id: "passage", label: "Passage", icon: <ClipboardList size={20} /> }, // ✅ nouvel onglet
+    { id: "passage", label: "Passage", icon: <ClipboardList size={20} /> },
     { id: "cours", label: "Notes", icon: <BookOpen size={20} /> },
     { id: "absences", label: "Absences", icon: <AlertTriangle size={20} /> },
     { id: "emploi", label: "Emploi du temps", icon: <Calendar size={20} /> },
@@ -84,7 +90,6 @@ export function EnseignantApp({
     { id: "confidentialite", label: "Confidentialité", icon: <Shield size={20} /> },
   ];
 
-  // Couleurs adaptatives (inchangées)
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
@@ -95,7 +100,6 @@ export function EnseignantApp({
   const iconColor = dark ? "#A5B4FC" : "#4F46E5";
   const warningBg = dark ? "#78350F" : "#FEF3C7";
   const warningText = dark ? "#FBBF24" : "#92400E";
-  const selectBg = dark ? "#0F172A" : "#F9FAFB";
 
   const renderContent = () => {
     if (!anneeId && (tab === "dashboard" || tab === "cours" || tab === "absences")) {
@@ -268,7 +272,7 @@ export function EnseignantApp({
         return <SaisirAbsence ecoleId={ecoleId} eleves={elevesDeMaClasse} user={user} anneeId={anneeId} anneeActive={anneeActive} />;
 
       case "emploi":
-        return <ConsultationEmploiDuTemps ecoleId={ecoleId} classe={classe} anneeId={anneeId} />; // ✅ anneeId ajouté
+        return <ConsultationEmploiDuTemps ecoleId={ecoleId} classe={classe} anneeId={anneeId} />;
 
       case "examens":
         return <ConsultationExamens ecoleId={ecoleId} anneeId={anneeId} classe={classe} />;
@@ -325,7 +329,6 @@ export function EnseignantApp({
   );
 }
 
-// Carte statistique adaptative
 function StatCard({ icon, value, label, color, dark }) {
   return (
     <div style={{

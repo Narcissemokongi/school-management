@@ -18,12 +18,13 @@ import { OverviewTab } from "./OverviewTab";
 import { PendingTab } from "./PendingTab";
 import { SchoolTable } from "./SchoolTable";
 import { GestionSuperAdmins } from "./GestionSuperAdmins";
-import { SettingsTab } from "./SettingsTab"; // <-- Nouveau composant
+import { SettingsTab } from "./SettingsTab";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import toast from "react-hot-toast";
 
-// Hook pour détecter les breakpoints
+// Hook pour détecter les breakpoints (inchangé)
 function useMediaQuery(query) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
@@ -323,26 +324,43 @@ export function SuperAdminDashboard({ onSelectEcole, user, onLogout }) {
   const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)");
   const isDesktop = useMediaQuery("(min-width: 1025px)");
 
-  const [activeSection, setActiveSection] = useState("overview");
+  // ===== États persistés dans le store =====
+  const activeSection = useAppStore((state) => state.superadminActiveSection);
+  const setActiveSection = useAppStore((state) => state.setSuperadminActiveSection);
+
+  const searchTerm = useAppStore((state) => state.superadminSearchTerm);
+  const setSearchTerm = useAppStore((state) => state.setSuperadminSearchTerm);
+
+  const schoolFilter = useAppStore((state) => state.superadminSchoolFilter);
+  const setSchoolFilter = useAppStore((state) => state.setSuperadminSchoolFilter);
+
+  const schoolView = useAppStore((state) => state.superadminSchoolView);
+  const setSchoolView = useAppStore((state) => state.setSuperadminSchoolView);
+
+  const pendingFilterRole = useAppStore((state) => state.superadminPendingFilterRole);
+  const setPendingFilterRole = useAppStore((state) => state.setSuperadminPendingFilterRole);
+
+  const pendingSearch = useAppStore((state) => state.superadminPendingSearch);
+  const setPendingSearch = useAppStore((state) => state.setSuperadminPendingSearch);
+
+  const currentPage = useAppStore((state) => state.superadminCurrentPage);
+  const setCurrentPage = useAppStore((state) => state.setSuperadminCurrentPage);
+
+  const selectedSchoolIdsArray = useAppStore((state) => state.superadminSelectedSchoolIds);
+  const setSelectedSchoolIdsArray = useAppStore((state) => state.setSuperadminSelectedSchoolIds);
+  const selectedSchoolIds = useMemo(() => new Set(selectedSchoolIdsArray), [selectedSchoolIdsArray]);
+  // ========================================
+
+  // États locaux non persistés
   const [refreshing, setRefreshing] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [schoolFilter, setSchoolFilter] = useState("all");
-  const [schoolView, setSchoolView] = useState("table");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [nouveauNom, setNouveauNom] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [pendingFilterRole, setPendingFilterRole] = useState("all");
-  const [pendingSearch, setPendingSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-
-  // Nouveaux états pour la sélection
-  const [selectedSchoolIds, setSelectedSchoolIds] = useState(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [pageSize, setPageSize] = useState(10); // pourrait être persisté aussi
 
-  // Recherche différée
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
   // Queries
@@ -366,7 +384,7 @@ export function SuperAdminDashboard({ onSelectEcole, user, onLogout }) {
   const reactiverEcole = useMutation(api.ecoles.reactiverEcole);
   const updateEcole = useMutation(api.ecoles.update);
 
-  // Handlers (useCallback pour éviter re-rendus inutiles)
+  // Handlers
   const refreshQueries = useCallback(async () => {
     setRefreshing(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -476,35 +494,31 @@ export function SuperAdminDashboard({ onSelectEcole, user, onLogout }) {
   // Reset page quand filtre change
   useEffect(() => {
     setCurrentPage(1);
-  }, [schoolFilter, deferredSearchTerm]);
+  }, [schoolFilter, deferredSearchTerm, setCurrentPage]);
 
-  // Sélection multiple
+  // Sélection multiple : mise à jour du store
   const toggleSchoolSelection = useCallback((id) => {
-    setSelectedSchoolIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+    const newSet = new Set(selectedSchoolIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedSchoolIdsArray(Array.from(newSet));
+  }, [selectedSchoolIds, setSelectedSchoolIdsArray]);
 
   const toggleSelectAllVisible = useCallback(() => {
-    setSelectedSchoolIds((prev) => {
-      const allVisibleIds = paginatedEcoles.map((e) => e._id);
-      const allSelected = allVisibleIds.every((id) => prev.has(id));
-      const next = new Set(prev);
-      if (allSelected) {
-        allVisibleIds.forEach((id) => next.delete(id));
-      } else {
-        allVisibleIds.forEach((id) => next.add(id));
-      }
-      return next;
-    });
-  }, [paginatedEcoles]);
+    const allVisibleIds = paginatedEcoles.map((e) => e._id);
+    const allSelected = allVisibleIds.every((id) => selectedSchoolIds.has(id));
+    const newSet = new Set(selectedSchoolIds);
+    if (allSelected) {
+      allVisibleIds.forEach((id) => newSet.delete(id));
+    } else {
+      allVisibleIds.forEach((id) => newSet.add(id));
+    }
+    setSelectedSchoolIdsArray(Array.from(newSet));
+  }, [paginatedEcoles, selectedSchoolIds, setSelectedSchoolIdsArray]);
 
   const clearSchoolSelection = useCallback(() => {
-    setSelectedSchoolIds(new Set());
-  }, []);
+    setSelectedSchoolIdsArray([]);
+  }, [setSelectedSchoolIdsArray]);
 
   // Actions groupées
   const bulkSuspendSchools = async () => {
@@ -555,7 +569,7 @@ export function SuperAdminDashboard({ onSelectEcole, user, onLogout }) {
     }
   };
 
-  // Export Excel (après filteredEcoles)
+  // Export Excel
   const handleExportExcel = useCallback(() => {
     if (filteredEcoles.length === 0) {
       toast.error("Aucune donnée à exporter");

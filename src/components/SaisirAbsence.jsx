@@ -2,27 +2,36 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
-import { Search, Calendar, Check, X, Loader } from "lucide-react";
+import { Search, Calendar, Check, X, Loader, RotateCcw, CalendarDays } from "lucide-react";
 import toast from "react-hot-toast";
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { trierEleves } from "../utils/tri";   // ✅ import du tri
+import { trierEleves } from "../utils/tri";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 
 export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
-  const { S, dark } = useStyles();   // ✅ extraire dark
+  const { S, dark } = useStyles();
   const { confirm, dialogProps } = useConfirm();
   const addAbsence = useMutation(api.absences.add);
 
-  const [selectedEleve, setSelectedEleve] = useState(null);
-  const [type, setType] = useState("absence");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [commentaire, setCommentaire] = useState("");
-  const [search, setSearch] = useState("");
+  // ===== États persistés dans le store =====
+  const selectedEleve = useAppStore((state) => state.saisirAbsenceSelectedEleve);
+  const setSelectedEleve = useAppStore((state) => state.setSaisirAbsenceSelectedEleve);
+  const type = useAppStore((state) => state.saisirAbsenceType || "absence");
+  const setType = useAppStore((state) => state.setSaisirAbsenceType);
+  const date = useAppStore((state) => state.saisirAbsenceDate || new Date().toISOString().split("T")[0]);
+  const setDate = useAppStore((state) => state.setSaisirAbsenceDate);
+  const commentaire = useAppStore((state) => state.saisirAbsenceCommentaire || "");
+  const setCommentaire = useAppStore((state) => state.setSaisirAbsenceCommentaire);
+  const search = useAppStore((state) => state.saisirAbsenceSearch || "");
+  const setSearch = useAppStore((state) => state.setSaisirAbsenceSearch);
+  // =========================================
+
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
   // Debounce de la recherche
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const timeoutRef = useRef(null);
   useEffect(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -37,7 +46,7 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
     const query = debouncedSearch.toLowerCase();
     return eleves
       .filter(e => `${e.nom} ${e.postnom} ${e.prenom || ''}`.toLowerCase().includes(query))
-      .sort(trierEleves)   // ✅ tri classe puis nom
+      .sort(trierEleves)
       .slice(0, 10);
   }, [eleves, debouncedSearch]);
 
@@ -50,6 +59,7 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
   const clearSelectedEleve = () => {
     setSelectedEleve(null);
     setSearch("");
+    setErrors(prev => ({ ...prev, selectedEleve: undefined }));
   };
 
   const validate = () => {
@@ -99,6 +109,12 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
     }
   };
 
+  // Raccourci pour la date du jour
+  const setToday = () => {
+    setDate(new Date().toISOString().split("T")[0]);
+    setErrors(prev => ({ ...prev, date: undefined }));
+  };
+
   // Couleurs adaptatives
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
@@ -111,7 +127,6 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
   const badgeBg = dark ? "#312E81" : "#EEF2FF";
   const badgeText = dark ? "#A5B4FC" : "#4F46E5";
   const buttonBg = dark ? "#818CF8" : "#4F46E5";
-  const buttonHoverBg = dark ? "#6366F1" : "#4338CA";
   const secondaryBtnBg = dark ? "#334155" : "#F1F5F9";
   const secondaryBtnText = dark ? "#F1F5F9" : "#1E293B";
   const accent = dark ? "#818CF8" : "#4F46E5";
@@ -266,7 +281,6 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
               outline: "none",
               background: inputBg,
               color: inputText,
-              transition: "border-color 0.2s, background-color 0.3s",
             }}
           >
             <option value="absence">Absence</option>
@@ -278,18 +292,37 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
           <label htmlFor="date" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
             Date
           </label>
-          <div style={{ position: "relative" }}>
-            <Calendar size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
-            <input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setErrors(prev => ({ ...prev, date: undefined }));
+          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <Calendar size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
+              <input
+                id="date"
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setErrors(prev => ({ ...prev, date: undefined }));
+                }}
+                style={inputStyle("date")}
+              />
+            </div>
+            <button
+              onClick={setToday}
+              title="Aujourd'hui"
+              style={{
+                background: "none",
+                border: `1px solid ${cardBorder}`,
+                borderRadius: 8,
+                padding: "8px 10px",
+                cursor: "pointer",
+                color: textSecondary,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
               }}
-              style={inputStyle("date")}
-            />
+            >
+              <CalendarDays size={16} /> Aujourd'hui
+            </button>
           </div>
           {errors.date && <div style={{ color: errorText, fontSize: 13, marginTop: 4 }}>{errors.date}</div>}
         </div>
@@ -315,7 +348,6 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
               height: 100,
               resize: "vertical",
               fontFamily: "inherit",
-              transition: "border-color 0.2s, background-color 0.3s",
             }}
           />
         </div>
@@ -365,9 +397,12 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
             fontSize: 16,
             fontWeight: 500,
             cursor: submitting ? "not-allowed" : "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          Annuler
+          <RotateCcw size={16} /> Réinitialiser
         </button>
       </div>
 

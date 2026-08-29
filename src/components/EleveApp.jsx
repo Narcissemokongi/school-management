@@ -12,6 +12,7 @@ import { FraisEnfant } from "./FraisEnfant";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import {
   Home, BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, TrendingUp, DollarSign, Clock,
@@ -127,8 +128,12 @@ export function EleveApp({
   handleLogout,
 }) {
   const { S } = useStyles();
-  const [tab, setTab] = useState("accueil");
-  const [messagingContactId, setMessagingContactId] = useState(null);
+
+  // Onglet actif et contact de messagerie depuis le store
+  const tab = useAppStore((state) => state.eleveTab);
+  const setTab = useAppStore((state) => state.setEleveTab);
+  const messagingContactId = useAppStore((state) => state.messagingContactId);
+  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
 
   const handleNavigateToMessaging = (contactId) => {
     setMessagingContactId(contactId);

@@ -12,6 +12,7 @@ import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { Skeleton } from "./Skeleton";
+import { useAppStore } from "../store/appStore"; // <-- Import du store
 import {
   Home, Pen, ClipboardList, AlertTriangle, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, Calendar, CheckCircle,
@@ -22,18 +23,22 @@ export function DisciplinaireApp({
   dark, toggle, handleLogout,
 }) {
   const { S } = useStyles();
-  const [tab, setTab] = useState("accueil");
-  const [messagingContactId, setMessagingContactId] = useState(null);
+
+  // Onglet actif depuis le store
+  const tab = useAppStore((state) => state.disciplinaireTab);
+  const setTab = useAppStore((state) => state.setDisciplinaireTab);
+
+  // Contact de messagerie
+  const messagingContactId = useAppStore((state) => state.messagingContactId);
+  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
 
   const handleNavigateToMessaging = (contactId) => {
     setMessagingContactId(contactId);
     setTab("messagerie");
   };
 
-  // Calcul du nombre de punitions pour le badge
   const nbPunitions = useMemo(() => (punitions ? punitions.length : 0), [punitions]);
 
-  // Vérifier si les données nécessaires sont en cours de chargement
   const loading = punitions === undefined || eleves === undefined || fautes === undefined;
 
   const menu = [

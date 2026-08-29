@@ -5,11 +5,12 @@ import { ScrollToTop } from "./ScrollToTop";
 import { Menu } from "lucide-react";
 import { OfflineBanner } from "./OfflineBanner";
 import { useStyles } from "../styles/theme";
+import { useAppStore } from "../store/appStore"; // <-- import du store
 
 export function Layout({
   children,
   menu,
-  activeTab,
+  activeTab,           // on laisse venir de l'extérieur, mais on synchronise avec le store
   onTabChange,
   user,
   dark,
@@ -18,25 +19,30 @@ export function Layout({
 }) {
   const isMobile = useIsMobile();
   const { S } = useStyles();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+
+  // Récupération depuis le store
+  const sidebarCollapsed = useAppStore((state) => state.sidebarCollapsed);
+  const setSidebarCollapsed = useAppStore((state) => state.setSidebarCollapsed);
+  const mobileSidebarOpen = useAppStore((state) => state.mobileSidebarOpen);
+  const setMobileSidebarOpen = useAppStore((state) => state.setMobileSidebarOpen);
+
   const mainRef = useRef(null);
 
   // Ferme la sidebar mobile lors d'un changement d'onglet
   useEffect(() => {
-    if (isMobile && sidebarOpen) {
-      setSidebarOpen(false);
+    if (isMobile && mobileSidebarOpen) {
+      setMobileSidebarOpen(false);
     }
-  }, [activeTab, isMobile, sidebarOpen]);
+  }, [activeTab, isMobile, mobileSidebarOpen, setMobileSidebarOpen]);
 
   // Ferme la sidebar mobile si on clique en dehors
   const handleMainClick = useCallback(() => {
-    if (isMobile && sidebarOpen) {
-      setSidebarOpen(false);
+    if (isMobile && mobileSidebarOpen) {
+      setMobileSidebarOpen(false);
     }
-  }, [isMobile, sidebarOpen]);
+  }, [isMobile, mobileSidebarOpen, setMobileSidebarOpen]);
 
-  const sidebarWidth = isMobile ? 0 : collapsed ? 72 : 260;
+  const sidebarWidth = isMobile ? 0 : sidebarCollapsed ? 72 : 260;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -48,10 +54,10 @@ export function Layout({
         dark={dark}
         onToggleTheme={onToggleTheme}
         onLogout={onLogout}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed((prev) => !prev)}
+        isOpen={isMobile ? mobileSidebarOpen : true}
+        onClose={() => setMobileSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
       <OfflineBanner dark={dark} />
@@ -73,12 +79,11 @@ export function Layout({
           position: "relative",
         }}
       >
-        {/* Bouton hamburger mobile */}
         {isMobile && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setSidebarOpen(true);
+              setMobileSidebarOpen(true);
             }}
             style={{
               position: "fixed",
@@ -102,7 +107,6 @@ export function Layout({
           </button>
         )}
 
-        {/* Contenu */}
         <div style={{ maxWidth: 1280, margin: "0 auto", width: "100%", paddingTop: isMobile ? 60 : 0 }}>
           {children}
         </div>
