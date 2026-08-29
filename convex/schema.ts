@@ -63,6 +63,7 @@ export default defineSchema({
     nom: v.string(),
     postnom: v.string(),
     prenom: v.optional(v.string()),
+    classe: v.optional(v.string()),   // <-- AJOUTÉ ICI
     code: v.optional(v.string()),
     codeUtilise: v.optional(v.boolean()),
     ecoleId: v.id("ecoles"),
@@ -186,7 +187,7 @@ export default defineSchema({
     .index("by_ecoleId", ["ecoleId"])
     .index("by_anneeId", ["anneeId"]),
 
-  // ========== FRAIS PAR CLASSE (NOUVEAU) ==========
+  // ========== FRAIS PAR CLASSE ==========
   fraisClasses: defineTable({
     classe: v.string(),
     montantTotal: v.float64(),
@@ -325,15 +326,15 @@ export default defineSchema({
   }).index("by_key", ["key"]),
 
   // ========== TWO FACTOR EMAIL ==========
-twoFactorEmail: defineTable({
-  userId: v.id("users"),
-  email: v.string(),
-  enabled: v.boolean(),
-  code: v.optional(v.string()),
-  expiresAt: v.optional(v.number()),
-  attempts: v.number(),
-  createdAt: v.string(),
-}).index("by_userId", ["userId"]),
+  twoFactorEmail: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    enabled: v.boolean(),
+    code: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    attempts: v.number(),
+    createdAt: v.string(),
+  }).index("by_userId", ["userId"]),
 
   // ========== AUDIT ==========
   audit: defineTable({
@@ -348,15 +349,14 @@ twoFactorEmail: defineTable({
     .index("by_ecoleId", ["ecoleId"])
     .index("by_date", ["date"]),
 
-  // Dans schema.ts
-parentLinkRequests: defineTable({
-  parentId: v.id("users"),
-  eleveId: v.id("eleves"),
-  status: v.string(), // "pending", "approved", "rejected"
-  createdAt: v.string(),
-  reviewedBy: v.optional(v.id("users")),
-})
-.index("by_parentId", ["parentId"])
-.index("by_eleveId", ["eleveId"]),
+  // ========== DEMANDES DE LIAISON PARENT-ENFANT ==========
+  parentLinkRequests: defineTable({
+    parentId: v.id("users"),
+    eleveId: v.id("eleves"),
+    status: v.string(), // "pending", "approved", "rejected"
+    createdAt: v.string(),
+    reviewedBy: v.optional(v.id("users")),
+  })
+    .index("by_parentId", ["parentId"])
+    .index("by_eleveId", ["eleveId"]),
 });
-
