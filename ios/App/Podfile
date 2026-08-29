@@ -3,6 +3,5 @@ platform :ios, '14.0'
 target 'App' do
   pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
   pod 'CapacitorApp', :path => '../../node_modules/@capacitor/app'
-  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/cordova'
   # Ajoutez ici d'autres pods si nécessaire
 end
