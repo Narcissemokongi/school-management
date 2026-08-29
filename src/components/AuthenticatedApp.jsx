@@ -42,7 +42,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
   const isSuperAdmin = user.role === "admin" && !user.ecoleId;
 
-  // Pile de navigation
   const [screenStack, setScreenStack] = useState([
     isSuperAdmin ? "superadmin" : "ecole",
   ]);
@@ -66,7 +65,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
   useHistoryNavigation(popScreen);
 
-  // Gestion du bouton retour mobile
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = App.addListener("backButton", () => {
@@ -81,7 +79,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     return () => listener.remove();
   }, [screenStack, popScreen]);
 
-  // ----- Appels -----
   const pendingCall = useQuery(api.appels.getPendingCall, { userId: user._id });
   const activeCallFromConvex = useQuery(api.appels.getActiveCall, { userId: user._id });
   const outgoingCall = useQuery(api.appels.getOutgoingCall, { userId: user._id });
@@ -91,7 +88,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
   const [localActiveCall, setLocalActiveCall] = useState(null);
 
-  // ✅ Correction : dépendances scalaires pour éviter les boucles
   useEffect(() => {
     if (activeCallFromConvex) {
       setLocalActiveCall({
@@ -112,14 +108,12 @@ export function AuthenticatedApp({ user, handleLogout }) {
     }
   };
 
-  // Année active
   const anneeActiveQuery = useQuery(
     api.anneesScolaires.getActive,
     selectedEcoleId ? { ecoleId: selectedEcoleId } : "skip"
   );
   const [anneeActive, setAnneeActive] = useState(null);
 
-  // ✅ Correction : comparaison par ID pour éviter les boucles
   useEffect(() => {
     if (anneeActiveQuery && anneeActiveQuery._id !== anneeActive?._id) {
       setAnneeActive(anneeActiveQuery);
@@ -128,7 +122,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
   const anneeId = anneeActive?._id || undefined;
 
-  // État pour l'année sélectionnée (consultation des archives)
   const [selectedAnneeId, setSelectedAnneeId] = useState(anneeId);
   useEffect(() => {
     if (!selectedAnneeId && anneeActive?._id) {
@@ -136,12 +129,10 @@ export function AuthenticatedApp({ user, handleLogout }) {
     }
   }, [selectedAnneeId, anneeActive?._id]);
 
-  // Année utilisée pour les données
   const dataAnneeId = user.role === "admin" ? selectedAnneeId : anneeId;
 
   const ecoleId = selectedEcoleId || user.ecoleId;
 
-  // Queries (utilisent dataAnneeId)
   const ecoles = isSuperAdmin ? useQuery(api.ecoles.list) ?? [] : [];
   const eleves = useQuery(
     api.eleves.list,
@@ -163,7 +154,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
   ) ?? [];
 
-  // Pour le parent (reste sur l'année active)
   const enfants = useQuery(
     api.eleves.listByParent,
     user.role === "parent" && anneeId
@@ -176,7 +166,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     user.role === "parent" && anneeId ? { eleveIds, anneeId } : "skip"
   ) ?? [];
 
-  // Mutations
   const addEleve = useMutation(api.eleves.add);
   const removeEleve = useMutation(api.eleves.remove);
   const importEleves = useMutation(api.eleves.importEleves);
@@ -187,7 +176,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const removeFaute = useMutation(api.fautes.remove);
   const addPunition = useMutation(api.punitions.add);
 
-  // Notifications
   const [notifs, setNotifs] = useState([]);
   const handleNotif = (msg) => setNotifs((prev) => [...prev, msg]);
 
@@ -215,7 +203,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     prevPunitionsEnfantsRef.current = punitionsEnfants;
   }, [punitionsEnfants, user.role, enfants, fautes]);
 
-  // Appel vidéo actif prioritaire
   if (localActiveCall) {
     return (
       <AppelVideo
@@ -228,14 +215,11 @@ export function AuthenticatedApp({ user, handleLogout }) {
     );
   }
 
-  // Écran superadmin
   if (currentScreen === "superadmin") {
     return (
       <>
         <NotifBanner notifs={notifs} />
-        {/* Conteneur pleine largeur pour le superadmin */}
         <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-          {/* Barre supérieure pleine largeur */}
           <div style={{
             width: "100%",
             padding: "12px 24px",
@@ -250,7 +234,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
             <div style={{ fontWeight: 600, color: S.textMuted }}>Super Admin</div>
           </div>
 
-          {/* Le tableau de bord occupe le reste de l'espace */}
           <div style={{ flex: 1, width: "100%", overflow: "hidden" }}>
             <SuperAdminDashboard
               onSelectEcole={(id) => {
@@ -258,6 +241,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
                 pushScreen("ecole");
               }}
               user={user}
+              onLogout={handleLogout}   // ✅ Correction ici
             />
           </div>
         </div>
@@ -265,7 +249,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     );
   }
 
-  // Écran école
   if (currentScreen === "ecole") {
     if (
       dataAnneeId &&
@@ -279,29 +262,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         frais === undefined)
     ) {
       return (
-        <div
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: dark ? "#0F172A" : "#F5F7FB",
-            fontFamily: "'Inter', sans-serif",
-            color: dark ? "#CBD5E1" : "#64748B",
-          }}
-        >
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: dark ? "#0F172A" : "#F5F7FB", fontFamily: "'Inter', sans-serif", color: dark ? "#CBD5E1" : "#64748B" }}>
           <div style={{ textAlign: "center" }}>
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                border: `3px solid ${dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"}`,
-                borderTopColor: dark ? "#818CF8" : "#4F46E5",
-                borderRadius: "50%",
-                animation: "spin 0.8s linear infinite",
-                margin: "0 auto 16px",
-              }}
-            />
+            <div style={{ width: 40, height: 40, border: `3px solid ${dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"}`, borderTopColor: dark ? "#818CF8" : "#4F46E5", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
             Chargement...
           </div>
         </div>
@@ -313,32 +276,13 @@ export function AuthenticatedApp({ user, handleLogout }) {
         <NotifBanner notifs={notifs} />
 
         {isSuperAdmin && (
-          <div
-            style={{
-              maxWidth: 1280,
-              margin: "0 auto",
-              padding: "16px 24px 0",
-              display: isMobile ? "none" : "block",
-            }}
-          >
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px 24px 0", display: isMobile ? "none" : "block" }}>
             <button
               onClick={() => {
                 setSelectedEcoleId(null);
                 popScreen();
               }}
-              style={{
-                background: dark ? "#1E293B" : "#FFFFFF",
-                border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "#E2E8F0"}`,
-                color: "#4F46E5",
-                borderRadius: 8,
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-              }}
+              style={{ background: dark ? "#1E293B" : "#FFFFFF", border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "#E2E8F0"}`, color: "#4F46E5", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               ← Retour aux écoles
             </button>
@@ -363,7 +307,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
           />
         )}
 
-        {/* Rendu selon le rôle */}
         {user.role === "disciplinaire" && (
           <DisciplinaireApp
             user={user}
