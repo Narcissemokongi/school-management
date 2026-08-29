@@ -1,4 +1,13 @@
+require_relative '../../node_modules/@capacitor/ios/scripts/pods'
+
 platform :ios, '14.0'
+
+def capacitor_pods
+  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
+  pod 'CapacitorApp', :path => '../../node_modules/@capacitor/app'
+  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/cordova'
+  # Les plugins Capacitor supplémentaires sont inclus automatiquement par le script 'pods'
+end
 
 target 'App' do
   capacitor_pods
