@@ -14,7 +14,7 @@
     "@capacitor/app": "^8.1.1",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
-    "@capacitor/ios": "^8.3.1",
+    "@capacitor/ios": "^8.5.0",
     "@vite-pwa/assets-generator": "^1.0.2",
     "agora-access-token": "^2.0.4",
     "agora-rtc-react": "^2.5.1",
