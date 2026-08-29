@@ -1,24 +1,46 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronUp } from "lucide-react";
 import { useStyles } from "../styles/theme";
 
-export function ScrollToTop() {
+export function ScrollToTop({
+  bottom = 24,               // position basse personnalisable
+  right = 24,                // position droite personnalisable
+  showAfter = 300,           // seuil de défilement (px)
+}) {
   const { dark } = useStyles();
   const [visible, setVisible] = useState(false);
-  const [progress, setProgress] = useState(0); // 0 à 100
+  const [progress, setProgress] = useState(0);
+  const rafRef = useRef(null);
+  const prefersReducedMotion = useRef(false);
+
+  useEffect(() => {
+    // Détection de la préférence de réduction des animations
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    prefersReducedMotion.current = mediaQuery.matches;
+    const handleChange = (e) => { prefersReducedMotion.current = e.matches; };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => {
-      const scrollTop = window.scrollY;
-      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-      const pct = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
-      setProgress(pct);
-      setVisible(scrollTop > 300);
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        const scrollTop = window.scrollY;
+        const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+        const pct = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+        setProgress(pct);
+        setVisible(scrollTop > showAfter);
+        rafRef.current = null;
+      });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll(); // initialisation
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [showAfter]);
 
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -29,13 +51,14 @@ export function ScrollToTop() {
   const buttonColor = "#FFFFFF";
   const boxShadow = dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 4px 12px rgba(79,70,229,0.3)";
   const hoverBg = dark ? "#6366F1" : "#4338CA";
+  const trackColor = dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)";
 
   return (
     <div
       style={{
         position: "fixed",
-        bottom: 24,
-        right: 24,
+        bottom,
+        right,
         zIndex: 1000,
         opacity: visible ? 1 : 0,
         transform: visible ? "scale(1)" : "scale(0.8)",
@@ -47,7 +70,6 @@ export function ScrollToTop() {
         gap: 4,
       }}
     >
-      {/* Barre de progression circulaire autour du bouton */}
       <div
         style={{
           position: "relative",
@@ -65,7 +87,7 @@ export function ScrollToTop() {
             cy="25"
             r="22"
             fill="none"
-            stroke={dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"}
+            stroke={trackColor}
             strokeWidth="3"
           />
           <circle
@@ -102,7 +124,8 @@ export function ScrollToTop() {
             justifyContent: "center",
             cursor: "pointer",
             transition: "background 0.2s, transform 0.2s",
-            animation: "pulse 2s infinite",
+            animation: prefersReducedMotion.current ? "none" : "pulse 2s infinite",
+            outline: "none",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = hoverBg;
@@ -111,6 +134,13 @@ export function ScrollToTop() {
           onMouseLeave={(e) => {
             e.currentTarget.style.background = buttonBg;
             e.currentTarget.style.transform = "translate(-50%, -50%) scale(1)";
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.outline = `2px solid ${buttonBg}`;
+            e.currentTarget.style.outlineOffset = "2px";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.outline = "none";
           }}
         >
           <ChevronUp size={20} />

@@ -7,16 +7,16 @@ import {
 } from "lucide-react";
 
 export function Sidebar({
-  menu,
+  menu = [],
   activeTab,
   onTabChange,
   user,
   dark,
   onToggleTheme,
   onLogout,
-  isOpen,
+  isOpen = false,          // par défaut false sur mobile
   onClose,
-  collapsed,
+  collapsed = false,       // par défaut non réduit
   onToggleCollapse,
 }) {
   const { S } = useStyles();
@@ -41,8 +41,8 @@ export function Sidebar({
 
   return (
     <>
-      {/* Overlay mobile avec animation */}
-      {isMobile && (
+      {/* Overlay mobile : uniquement si isOpen */}
+      {isMobile && isOpen && (
         <div
           onClick={onClose}
           style={{
@@ -75,7 +75,7 @@ export function Sidebar({
           transform: isMobile ? (isOpen ? "translateX(0)" : "translateX(-100%)") : "translateX(0)",
         }}
       >
-        {/* Bouton de basculement */}
+        {/* Bouton de basculement / fermeture */}
         <button
           onClick={() => {
             if (isMobile) onClose?.();

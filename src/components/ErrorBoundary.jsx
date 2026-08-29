@@ -2,12 +2,22 @@ import { Component, useState } from "react";
 import { useTheme } from "./ThemeProvider";
 import { AlertTriangle, RefreshCw, Home, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 
-// Composant d'affichage (fonctionnel) avec thème et animations
-function ErrorDisplay({ error, onRetry, onReload }) {
+// Composant d'affichage avec thème et animations
+function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = false }) {
   const { dark } = useTheme();
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const isDev = import.meta.env.DEV;
+  const isDev = import.meta.env.DEV || showDetailsInProduction;
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Détecter la préférence de mouvement
+  useState(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(media.matches);
+    const handler = (e) => setReduceMotion(e.matches);
+    media.addEventListener("change", handler);
+    return () => media.removeEventListener("change", handler);
+  });
 
   const handleCopyError = async () => {
     if (!error) return;
@@ -22,6 +32,8 @@ function ErrorDisplay({ error, onRetry, onReload }) {
 
   return (
     <div
+      role="alert"
+      aria-live="assertive"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -33,7 +45,7 @@ function ErrorDisplay({ error, onRetry, onReload }) {
         background: dark ? "#0F172A" : "#F8FAFC",
         color: dark ? "#F1F5F9" : "#1E293B",
         transition: "background-color 0.3s, color 0.3s",
-        animation: "fadeIn 0.5s ease-out",
+        animation: reduceMotion ? "none" : "fadeIn 0.5s ease-out",
       }}
     >
       <div
@@ -47,7 +59,7 @@ function ErrorDisplay({ error, onRetry, onReload }) {
           justifyContent: "center",
           marginBottom: 24,
           boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(0,0,0,0.1)",
-          animation: "pulse 2s infinite",
+          animation: reduceMotion ? "none" : "pulse 2s infinite",
         }}
       >
         <AlertTriangle size={44} color="#EF4444" />
@@ -93,6 +105,8 @@ function ErrorDisplay({ error, onRetry, onReload }) {
                   gap: 4,
                   fontSize: 11,
                 }}
+                aria-expanded={showDetails}
+                aria-controls="error-details"
               >
                 {showDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 {showDetails ? "Masquer" : "Afficher"}
@@ -109,23 +123,22 @@ function ErrorDisplay({ error, onRetry, onReload }) {
                   gap: 4,
                   fontSize: 11,
                 }}
+                aria-label="Copier les détails de l'erreur"
               >
                 {copied ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
                 {copied ? "Copié" : "Copier"}
               </button>
             </div>
           </div>
-          {showDetails && (
-            <div style={{ marginTop: 8, maxHeight: 200, overflowY: "auto" }}>
-              {error.toString()}
-            </div>
-          )}
+          <div id="error-details" style={{ marginTop: 8, maxHeight: 200, overflowY: "auto", display: showDetails ? "block" : "none" }}>
+            {error.toString()}
+          </div>
         </div>
       )}
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
         <button
-          onClick={onReload}
+          onClick={onRetry}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -150,7 +163,35 @@ function ErrorDisplay({ error, onRetry, onReload }) {
             e.currentTarget.style.transform = "translateY(0)";
           }}
         >
-          <RefreshCw size={20} /> Recharger la page
+          <RefreshCw size={20} /> Réessayer
+        </button>
+        <button
+          onClick={onReload}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 24px",
+            background: dark ? "#1E293B" : "#FFFFFF",
+            color: dark ? "#F1F5F9" : "#1E293B",
+            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+            borderRadius: 12,
+            fontSize: 15,
+            fontWeight: 500,
+            textDecoration: "none",
+            cursor: "pointer",
+            transition: "background 0.2s, transform 0.1s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = dark ? "#263142" : "#F1F5F9";
+            e.currentTarget.style.transform = "translateY(-2px)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = dark ? "#1E293B" : "#FFFFFF";
+            e.currentTarget.style.transform = "translateY(0)";
+          }}
+        >
+          <RefreshCw size={20} /> Recharger
         </button>
         <a
           href="/"
@@ -197,7 +238,6 @@ function ErrorDisplay({ error, onRetry, onReload }) {
   );
 }
 
-// Composant classe (capture les erreurs) exporté sous le nom ErrorBoundary
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -206,6 +246,11 @@ export class ErrorBoundary extends Component {
 
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    // Journaliser l'erreur (remplacer par un service comme Sentry)
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 
   handleRetry = () => {
@@ -223,6 +268,7 @@ export class ErrorBoundary extends Component {
           error={this.state.error}
           onRetry={this.handleRetry}
           onReload={this.handleReload}
+          showDetailsInProduction={this.props.showDetailsInProduction}
         />
       );
     }
