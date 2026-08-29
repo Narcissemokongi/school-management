@@ -4,7 +4,7 @@ workflows:
     environment:
       vars:
         NODE_VERSION: 20.19
-        JAVA_VERSION: 21   # Codemagic fournit Java 21 directement
+        JAVA_VERSION: 17   # <-- Changé de 21 à 17
       groups:
         - app-env
     scripts:
@@ -37,6 +37,8 @@ workflows:
     scripts:
       - name: Install dependencies
         script: npm ci
+      - name: Install Capacitor iOS package   # <-- Nouvelle étape
+        script: npm install @capacitor/ios
       - name: Build web app
         script: npm run build
       - name: Install CocoaPods
