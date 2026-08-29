@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Phone, PhoneOutgoing, MessageCircle, Clock } from "lucide-react";
+import {
+  Phone, PhoneOutgoing, MessageCircle, Clock, Video, Users, Search, X,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { useStyles } from "../styles/theme";
 import { HistoriqueAppels } from "./HistoriqueAppels";
 
 export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
-  const { S, dark } = useStyles();
+  const { dark } = useStyles();
   const cleanupCalls = useMutation(api.appels.cleanupExpiredCalls);
 
   useEffect(() => {
@@ -15,21 +17,62 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
   }, [cleanupCalls]);
 
   const [tab, setTab] = useState("contacts");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [groupCallMode, setGroupCallMode] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [selectedParticipants, setSelectedParticipants] = useState([]);
 
   const contacts = useQuery(api.appels.listContacts, { ecoleId, userId: user._id }) ?? [];
+  const classes = useQuery(api.classes.list, ecoleId ? { ecoleId } : "skip") ?? [];
   const createCall = useMutation(api.appels.createCall);
+  const createGroupCall = useMutation(api.appels.createGroupCall);
+
+  // Couleurs adaptatives
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const borderColor = dark ? "#334155" : "#E2E8F0";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const accentHover = dark ? "#6366F1" : "#4338CA";
+  const hoverBg = dark ? "#26334D" : "#F1F5F9";
+  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+  const buttonShadow = dark
+    ? "0 2px 6px rgba(129,140,248,0.3)"
+    : "0 2px 6px rgba(79,70,229,0.2)";
+
+  // Rôles autorisés à créer un appel de groupe
+  const canCreateGroupCall = ["admin", "directeur", "disciplinaire", "enseignant"].includes(user.role);
 
   // Filtrage des contacts selon le rôle
-  const visibleContacts =
-    user.role === "parent" || user.role === "eleve"
+  const visibleContacts = useMemo(() => {
+    let filtered = user.role === "parent" || user.role === "eleve"
       ? contacts.filter((c) =>
           ["admin", "directeur", "disciplinaire", "enseignant", "comptable"].includes(c.role)
         )
       : contacts;
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter((c) => c.nom.toLowerCase().includes(q));
+    }
+    return filtered;
+  }, [contacts, user.role, searchTerm]);
 
-  const handleCall = async (contact) => {
+  // Groupes disponibles pour appel de groupe (classes)
+  const groups = useMemo(() => {
+    if (!canCreateGroupCall) return [];
+    return classes.map((c) => ({ id: `classe_${c.nom}`, label: `Classe ${c.nom}` }));
+  }, [classes, canCreateGroupCall]);
+
+  const handleCall = async (contact, type = "audio") => {
     try {
-      await createCall({ calleeId: contact._id, ecoleId, anneeId, userId: user._id });
+      await createCall({
+        calleeId: contact._id,
+        ecoleId,
+        anneeId,
+        userId: user._id,
+        type,
+      });
+      toast.success(`Appel ${type} lancé...`);
     } catch (err) {
       toast.error(
         err.message.includes("déjà en cours")
@@ -39,24 +82,61 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
     }
   };
 
+  const handleGroupCall = async () => {
+    if (!selectedGroupId || selectedParticipants.length === 0) {
+      toast.error("Veuillez choisir un groupe et des participants.");
+      return;
+    }
+    try {
+      await createGroupCall({
+        ecoleId,
+        anneeId,
+        userId: user._id,
+        groupId: selectedGroupId,
+        participantIds: selectedParticipants,
+        type: "video",
+      });
+      toast.success("Appel de groupe lancé...");
+      setGroupCallMode(false);
+      setSelectedParticipants([]);
+      setSelectedGroupId("");
+    } catch (err) {
+      toast.error("Erreur : " + err.message);
+    }
+  };
+
   const handleMessage = (contactId) => {
     if (onNavigateToMessaging) onNavigateToMessaging(contactId);
+  };
+
+  const toggleParticipant = (id) => {
+    setSelectedParticipants((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   };
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
       {/* En-tête */}
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: "#1E293B", margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-          <Phone size={24} /> Appels
+        <h2 style={{
+          fontSize: 28,
+          fontWeight: 700,
+          color: textPrimary,
+          margin: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
+          <Phone size={24} color={accent} /> Appels
         </h2>
-        <p style={{ color: "#64748B", marginTop: 4, fontSize: 14 }}>
-          Gérez vos appels et contacts
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+          Gérez vos appels audio, vidéo et de groupe
         </p>
       </div>
 
       {/* Onglets */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #E2E8F0", marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${borderColor}`, marginBottom: 24 }}>
         {[
           { id: "contacts", label: "Contacts", icon: <Phone size={18} /> },
           { id: "historique", label: "Historique", icon: <Clock size={18} /> },
@@ -71,9 +151,9 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               padding: "12px 20px",
               border: "none",
               background: "transparent",
-              color: tab === t.id ? "#4F46E5" : "#64748B",
+              color: tab === t.id ? accent : textSecondary,
               fontWeight: tab === t.id ? 600 : 400,
-              borderBottom: tab === t.id ? "3px solid #4F46E5" : "3px solid transparent",
+              borderBottom: tab === t.id ? `3px solid ${accent}` : "3px solid transparent",
               cursor: "pointer",
               transition: "all 0.2s",
             }}
@@ -82,97 +162,231 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             {t.label}
           </button>
         ))}
+        {canCreateGroupCall && (
+          <button
+            onClick={() => setGroupCallMode(!groupCallMode)}
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 16px",
+              background: groupCallMode ? accent : "transparent",
+              color: groupCallMode ? "#FFF" : accent,
+              border: `1px solid ${accent}`,
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: 13,
+            }}
+          >
+            <Users size={16} /> Appel de groupe
+          </button>
+        )}
       </div>
 
-      {/* Contenu */}
+      {/* Mode appel de groupe */}
+      {groupCallMode && (
+        <div style={{
+          background: cardBg,
+          borderRadius: 16,
+          padding: 20,
+          marginBottom: 24,
+          boxShadow: shadow,
+          border: `1px solid ${borderColor}`,
+        }}>
+          <h3 style={{ marginTop: 0, color: textPrimary }}>Nouvel appel de groupe</h3>
+          <label style={{ display: "block", marginBottom: 6, color: textSecondary }}>Groupe</label>
+          <select
+            value={selectedGroupId}
+            onChange={(e) => setSelectedGroupId(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: `1px solid ${borderColor}`,
+              background: dark ? "#0F172A" : "#F9FAFB",
+              color: textPrimary,
+              marginBottom: 16,
+            }}
+          >
+            <option value="">-- Choisir un groupe --</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>{g.label}</option>
+            ))}
+          </select>
+
+          <label style={{ display: "block", marginBottom: 6, color: textSecondary }}>Participants</label>
+          <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 16 }}>
+            {visibleContacts.map((c) => (
+              <label key={c._id} style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 8px",
+                borderRadius: 6,
+                cursor: "pointer",
+                color: textPrimary,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={selectedParticipants.includes(c._id)}
+                  onChange={() => toggleParticipant(c._id)}
+                  style={{ accentColor: accent }}
+                />
+                {c.nom} ({c.role})
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={handleGroupCall}
+            disabled={!selectedGroupId || selectedParticipants.length === 0}
+            style={{
+              width: "100%",
+              padding: "10px 20px",
+              background: accent,
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              fontWeight: 600,
+              cursor: "pointer",
+              opacity: !selectedGroupId || selectedParticipants.length === 0 ? 0.6 : 1,
+            }}
+          >
+            Lancer l'appel de groupe
+          </button>
+        </div>
+      )}
+
+      {/* Contenu principal */}
       {tab === "contacts" ? (
         <div>
-          <p style={{ color: "#64748B", fontSize: 14, marginBottom: 20 }}>
-            Sélectionnez un contact pour lancer un appel audio ou envoyer un message.
-          </p>
+          {/* Barre de recherche */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <Search size={16} color={textSecondary} />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Rechercher un contact..."
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: `1px solid ${borderColor}`,
+                background: dark ? "#0F172A" : "#F9FAFB",
+                color: textPrimary,
+              }}
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                <X size={16} color={textSecondary} />
+              </button>
+            )}
+          </div>
 
-          {visibleContacts.length === 0 && (
+          {visibleContacts.length === 0 ? (
             <div style={{
-              background: "#FFF",
+              background: cardBg,
               borderRadius: 16,
               padding: 48,
               textAlign: "center",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-              color: "#64748B",
+              boxShadow: shadow,
+              color: textSecondary,
+              border: `1px solid ${borderColor}`,
             }}>
               <Phone size={32} style={{ marginBottom: 8 }} />
               <p>Aucun contact disponible</p>
             </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {visibleContacts.map((contact) => (
+                <div
+                  key={contact._id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "14px 18px",
+                    background: cardBg,
+                    borderRadius: 12,
+                    border: `1px solid ${borderColor}`,
+                    boxShadow: shadow,
+                    transition: "box-shadow 0.15s, background-color 0.3s",
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: 15, color: textPrimary }}>
+                      {contact.nom}
+                    </span>
+                    <span style={{ color: textSecondary, fontSize: 13, marginLeft: 8 }}>
+                      ({contact.role})
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => handleMessage(contact._id)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: textSecondary,
+                        padding: 8,
+                        borderRadius: 8,
+                        transition: "background 0.15s",
+                      }}
+                      title={`Envoyer un message à ${contact.nom}`}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <MessageCircle size={20} />
+                    </button>
+                    <button
+                      onClick={() => handleCall(contact, "audio")}
+                      style={{
+                        padding: "8px 12px",
+                        background: accent,
+                        color: "#FFFFFF",
+                        border: "none",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        fontSize: 13,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        boxShadow: buttonShadow,
+                        transition: "background 0.2s",
+                      }}
+                      title="Appel audio"
+                    >
+                      <PhoneOutgoing size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleCall(contact, "video")}
+                      style={{
+                        padding: "8px 12px",
+                        background: accent,
+                        color: "#FFFFFF",
+                        border: "none",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        fontSize: 13,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        boxShadow: buttonShadow,
+                        transition: "background 0.2s",
+                      }}
+                      title="Appel vidéo"
+                    >
+                      <Video size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {visibleContacts.map((contact) => (
-              <div
-                key={contact._id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "14px 18px",
-                  background: dark ? "#1E293B" : "#FFFFFF",
-                  borderRadius: 12,
-                  border: "1px solid #E2E8F0",
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-                  transition: "box-shadow 0.15s",
-                }}
-              >
-                <div>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>
-                    {contact.nom}
-                  </span>
-                  <span style={{ color: "#64748B", fontSize: 13, marginLeft: 8 }}>
-                    ({contact.role})
-                  </span>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={() => handleMessage(contact._id)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#64748B",
-                      padding: 8,
-                      borderRadius: 8,
-                      transition: "background 0.15s",
-                    }}
-                    title={`Envoyer un message à ${contact.nom}`}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#F1F5F9")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <MessageCircle size={20} />
-                  </button>
-                  <button
-                    onClick={() => handleCall(contact)}
-                    style={{
-                      padding: "8px 16px",
-                      background: "#4F46E5",
-                      color: "#FFFFFF",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      boxShadow: "0 2px 6px rgba(79,70,229,0.2)",
-                      transition: "background 0.2s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#4338CA")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "#4F46E5")}
-                  >
-                    <PhoneOutgoing size={16} /> Appeler
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       ) : (
         <HistoriqueAppels

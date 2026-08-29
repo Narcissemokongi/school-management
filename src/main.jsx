@@ -3,14 +3,14 @@ import ReactDOM from "react-dom/client";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import App from "./App";   // ← import par défaut corrigé
+import App from "./App";
 import toast from "react-hot-toast";
-import "./index.css";
-
+import './fonts.css';
+import './index.css';
+import './App.css';
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
 
-// Gestion globale des erreurs réseau non capturées
 window.addEventListener("unhandledrejection", (event) => {
   console.error("Erreur réseau non gérée :", event.reason);
   toast.error("Une erreur réseau est survenue. Veuillez réessayer.", { duration: 5000 });
@@ -25,12 +25,12 @@ window.addEventListener("error", (event) => {
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <ThemeProvider>
+    <ThemeProvider>
+      <ErrorBoundary>
         <ConvexProvider client={convex}>
           <App />
         </ConvexProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </ThemeProvider>
   </React.StrictMode>
 );

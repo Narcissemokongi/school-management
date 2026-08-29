@@ -5,35 +5,72 @@ import { DollarSign, TrendingDown, CheckCircle, Clock } from "lucide-react";
 import { Skeleton } from "./Skeleton";
 
 export function FraisEnfant({ eleveId }) {
-  const { S } = useStyles();
-  const frais = useQuery(api.frais.listByEleve, { eleveId }) ?? [];
+  const { dark } = useStyles(); // ✅ récupère le mode sombre/clair
 
-  // État de chargement
-  if (frais === undefined) {
+  const frais = useQuery(api.frais.listByEleve, { eleveId }) ?? [];
+  const eleve = useQuery(api.eleves.get, { id: eleveId });
+  const ecole = useQuery(api.ecoles.get, eleve ? { ecoleId: eleve.ecoleId } : "skip");
+
+  // Couleurs adaptatives
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const success = dark ? "#34D399" : "#10B981";
+  const danger = dark ? "#F87171" : "#EF4444";
+  const badgePayeBg = dark ? "#064E3B" : "#D1FAE5";
+  const badgePayeText = dark ? "#34D399" : "#065F46";
+  const badgeAttenteBg = dark ? "#78350F" : "#FEF3C7";
+  const badgeAttenteText = dark ? "#FBBF24" : "#92400E";
+  const progressBg = dark ? "#334155" : "#F1F5F9";
+  const borderLight = dark ? "rgba(255,255,255,0.05)" : "#F1F5F9";
+
+  if (eleve === undefined || (eleve && ecole === undefined)) {
     return <Skeleton height={200} style={{ marginTop: 16 }} />;
   }
 
-  // Aucun frais
+  if (eleve === null) {
+    return (
+      <div style={{
+        background: cardBg,
+        borderRadius: 16,
+        padding: 24,
+        boxShadow: shadow,
+        marginTop: 16,
+        textAlign: "center",
+        border: `1px solid ${cardBorder}`,
+      }}>
+        <p style={{ color: textSecondary, fontSize: 14, margin: 0 }}>Élève introuvable.</p>
+      </div>
+    );
+  }
+
   if (frais.length === 0) {
     return (
       <div style={{
-        background: "#FFF",
+        background: cardBg,
         borderRadius: 16,
         padding: 24,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        boxShadow: shadow,
         marginTop: 16,
         textAlign: "center",
+        border: `1px solid ${cardBorder}`,
       }}>
-        <DollarSign size={32} color="#94A3B8" style={{ marginBottom: 8 }} />
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: "#1E293B", margin: "0 0 4px" }}>
+        <DollarSign size={32} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 8 }} />
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: textPrimary, margin: "0 0 4px" }}>
           Frais scolaires
         </h3>
-        <p style={{ color: "#64748B", fontSize: 14, margin: 0 }}>
+        <p style={{ color: textSecondary, fontSize: 14, margin: 0 }}>
           Aucune information de frais disponible.
         </p>
       </div>
     );
   }
+
+  const devise = ecole?.devise || "CDF";
+  const deviseLabel = devise === "USD" ? "$" : "FC";
 
   return (
     <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
@@ -42,15 +79,20 @@ export function FraisEnfant({ eleveId }) {
         const pourcentagePaye = f.montantTotal > 0 ? Math.round((f.montantPaye / f.montantTotal) * 100) : 0;
         const estPaye = reste <= 0;
 
+        const montantTotalFormatted = f.montantTotal.toFixed(2);
+        const montantPayeFormatted = f.montantPaye.toFixed(2);
+        const resteFormatted = reste.toFixed(2);
+
         return (
           <div
             key={f._id}
             style={{
-              background: "#FFF",
+              background: cardBg,
               borderRadius: 16,
               padding: 20,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-              transition: "box-shadow 0.15s",
+              boxShadow: shadow,
+              border: `1px solid ${cardBorder}`,
+              transition: "box-shadow 0.15s, background-color 0.3s",
             }}
           >
             {/* En-tête */}
@@ -63,13 +105,13 @@ export function FraisEnfant({ eleveId }) {
               <h3 style={{
                 fontSize: 16,
                 fontWeight: 600,
-                color: "#1E293B",
+                color: textPrimary,
                 margin: 0,
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
               }}>
-                <DollarSign size={20} color="#4F46E5" />
+                <DollarSign size={20} color={accent} />
                 Frais scolaires
               </h3>
               {estPaye ? (
@@ -77,8 +119,8 @@ export function FraisEnfant({ eleveId }) {
                   display: "flex",
                   alignItems: "center",
                   gap: 4,
-                  background: "#D1FAE5",
-                  color: "#065F46",
+                  background: badgePayeBg,
+                  color: badgePayeText,
                   padding: "4px 10px",
                   borderRadius: 20,
                   fontSize: 12,
@@ -92,8 +134,8 @@ export function FraisEnfant({ eleveId }) {
                   display: "flex",
                   alignItems: "center",
                   gap: 4,
-                  background: "#FEF3C7",
-                  color: "#92400E",
+                  background: badgeAttenteBg,
+                  color: badgeAttenteText,
                   padding: "4px 10px",
                   borderRadius: 20,
                   fontSize: 12,
@@ -108,32 +150,32 @@ export function FraisEnfant({ eleveId }) {
             {/* Montants */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ color: "#64748B", fontSize: 14 }}>Montant total</span>
-                <span style={{ fontWeight: 600, fontSize: 14, color: "#1E293B" }}>
-                  {f.montantTotal.toLocaleString()} FC
+                <span style={{ color: textSecondary, fontSize: 14 }}>Montant total</span>
+                <span style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
+                  {montantTotalFormatted} {deviseLabel}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ color: "#64748B", fontSize: 14 }}>Montant payé</span>
-                <span style={{ fontWeight: 600, fontSize: 14, color: "#10B981" }}>
-                  {f.montantPaye.toLocaleString()} FC
+                <span style={{ color: textSecondary, fontSize: 14 }}>Montant payé</span>
+                <span style={{ fontWeight: 600, fontSize: 14, color: success }}>
+                  {montantPayeFormatted} {deviseLabel}
                 </span>
               </div>
               <div style={{
                 display: "flex",
                 justifyContent: "space-between",
                 paddingTop: 8,
-                borderTop: "1px solid #F1F5F9",
+                borderTop: `1px solid ${borderLight}`,
               }}>
-                <span style={{ fontWeight: 600, fontSize: 14, color: "#1E293B" }}>
+                <span style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
                   Reste à payer
                 </span>
                 <span style={{
                   fontWeight: 700,
                   fontSize: 14,
-                  color: reste > 0 ? "#EF4444" : "#10B981",
+                  color: reste > 0 ? danger : success,
                 }}>
-                  {reste.toLocaleString()} FC
+                  {resteFormatted} {deviseLabel}
                 </span>
               </div>
             </div>
@@ -145,7 +187,7 @@ export function FraisEnfant({ eleveId }) {
                 justifyContent: "space-between",
                 marginBottom: 4,
                 fontSize: 12,
-                color: "#64748B",
+                color: textSecondary,
               }}>
                 <span>Progression</span>
                 <span>{pourcentagePaye}%</span>
@@ -153,14 +195,14 @@ export function FraisEnfant({ eleveId }) {
               <div style={{
                 width: "100%",
                 height: 8,
-                background: "#F1F5F9",
+                background: progressBg,
                 borderRadius: 4,
                 overflow: "hidden",
               }}>
                 <div style={{
                   width: `${pourcentagePaye}%`,
                   height: "100%",
-                  background: estPaye ? "#10B981" : "#4F46E5",
+                  background: estPaye ? success : accent,
                   borderRadius: 4,
                   transition: "width 0.3s ease",
                 }} />
@@ -171,7 +213,7 @@ export function FraisEnfant({ eleveId }) {
             {f.commentaire && (
               <div style={{
                 fontSize: 13,
-                color: "#64748B",
+                color: textSecondary,
                 display: "flex",
                 alignItems: "center",
                 gap: 4,

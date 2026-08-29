@@ -1,38 +1,23 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
-import { Plus, Trash2, BookOpen, Filter } from "lucide-react";
+import { useConfirm } from "../hooks/useConfirm";
+import { ConfirmDialog } from "./ConfirmDialog";
+import {
+  Plus, Trash2, BookOpen, Filter, Loader, Edit2, Search,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 export function GestionCours({ ecoleId, classes, user, anneeId, anneeActive }) {
-  const { S } = useStyles();
+  const { dark } = useStyles();
+  const { confirm, dialogProps } = useConfirm();
 
-  // Message si aucune année active
-  if (!anneeId) {
-    return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
-        <div style={{
-          background: "#FFF",
-          borderRadius: 16,
-          padding: 48,
-          textAlign: "center",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
-        }}>
-          <BookOpen size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
-            Aucune année scolaire active
-          </h2>
-          <p style={{ color: "#64748B", fontSize: 14 }}>
-            Veuillez créer ou activer une année scolaire dans les paramètres.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  // ================= TOUS LES HOOKS EN PREMIER =================
   const [mode, setMode] = useState("individuel");
   const [classeFiltre, setClasseFiltre] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editData, setEditData] = useState(null);
 
   const cours = useQuery(
     api.cours.list,
@@ -42,28 +27,82 @@ export function GestionCours({ ecoleId, classes, user, anneeId, anneeActive }) {
   const addCours = useMutation(api.cours.add);
   const addBulk = useMutation(api.cours.addBulk);
   const removeCours = useMutation(api.cours.remove);
+  const updateCours = useMutation(api.cours.update);
+
+  // ================= COULEURS ADAPTATIVES =================
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const inputBg = dark ? "#0F172A" : "#F8FAFC";
+  const inputText = dark ? "#F1F5F9" : "#1E293B";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const danger = "#EF4444";
+  const warning = "#F59E0B";
+
+  // ================= TRI DES CLASSES =================
+  const sortedClasses = useMemo(() => {
+    return [...classes].sort((a, b) =>
+      a.nom.localeCompare(b.nom, undefined, { numeric: true, sensitivity: "base" })
+    );
+  }, [classes]);
+
+  // ================= FILTRAGE PAR RECHERCHE =================
+  const filteredCours = useMemo(() => {
+    if (!searchTerm.trim()) return cours;
+    return cours.filter(c =>
+      c.nom.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [cours, searchTerm]);
+
+  // ================= CONDITIONS APRÈS TOUS LES HOOKS =================
+  if (!anneeId) {
+    return (
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+        <div style={{
+          background: cardBg,
+          borderRadius: 16,
+          padding: 48,
+          textAlign: "center",
+          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+          border: `1px solid ${cardBorder}`,
+          transition: "background-color 0.3s",
+        }}>
+          <BookOpen size={48} color={warning} style={{ marginBottom: 16 }} />
+          <h2 style={{ fontSize: 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
+            Aucune année scolaire active
+          </h2>
+          <p style={{ color: textSecondary, fontSize: 14 }}>
+            Veuillez créer ou activer une année scolaire dans les paramètres.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+
       {/* En-tête */}
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: "#1E293B", margin: 0 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Gestion des cours
         </h2>
-        <p style={{ color: "#64748B", marginTop: 4, fontSize: 14 }}>
-          {cours.length} cours {anneeActive ? `· ${anneeActive.nom}` : ""}
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+          {filteredCours.length} cours {anneeActive ? `· ${anneeActive.nom}` : ""}
         </p>
       </div>
 
-      {/* Sélecteur de mode d'ajout */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #E2E8F0", marginBottom: 24 }}>
+      {/* Sélecteur de mode */}
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: 24 }}>
         {[
           { id: "individuel", label: "Ajout individuel" },
           { id: "groupe", label: "Ajout groupé" },
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setMode(tab.id)}
+            onClick={() => { setMode(tab.id); setEditData(null); }}
             style={{
               display: "flex",
               alignItems: "center",
@@ -71,9 +110,9 @@ export function GestionCours({ ecoleId, classes, user, anneeId, anneeActive }) {
               padding: "12px 20px",
               border: "none",
               background: "transparent",
-              color: mode === tab.id ? "#4F46E5" : "#64748B",
+              color: mode === tab.id ? accent : textSecondary,
               fontWeight: mode === tab.id ? 600 : 400,
-              borderBottom: mode === tab.id ? "3px solid #4F46E5" : "3px solid transparent",
+              borderBottom: mode === tab.id ? `3px solid ${accent}` : "3px solid transparent",
               cursor: "pointer",
               transition: "all 0.2s",
             }}
@@ -83,157 +122,267 @@ export function GestionCours({ ecoleId, classes, user, anneeId, anneeActive }) {
         ))}
       </div>
 
-      {/* Formulaire d'ajout selon le mode */}
+      {/* Formulaire */}
       {mode === "individuel" ? (
         <AddCoursIndividuel
-          classes={classes}
+          classes={sortedClasses}
           addCours={addCours}
+          updateCours={updateCours}
           ecoleId={ecoleId}
           anneeId={anneeId}
           userId={user._id}
-          S={S}
+          initialData={editData}
+          onSuccess={() => setEditData(null)}
+          dark={dark}
         />
       ) : (
         <AddCoursGroupe
-          classes={classes}
+          classes={sortedClasses}
           addBulk={addBulk}
           ecoleId={ecoleId}
           anneeId={anneeId}
           userId={user._id}
-          S={S}
+          dark={dark}
         />
       )}
 
-      {/* Filtrage par classe */}
+      {/* Filtres */}
       <div style={{
-        background: "#FFF",
+        background: cardBg,
         borderRadius: 16,
         padding: "16px 20px",
         margin: "24px 0",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+        border: `1px solid ${cardBorder}`,
         display: "flex",
+        flexWrap: "wrap",
         alignItems: "center",
         gap: 12,
       }}>
-        <Filter size={18} color="#64748B" />
+        <Filter size={18} color={textSecondary} />
         <select
           value={classeFiltre}
           onChange={(e) => setClasseFiltre(e.target.value)}
           style={{
             padding: "8px 12px",
-            border: "1px solid #E2E8F0",
+            border: `1px solid ${cardBorder}`,
             borderRadius: 8,
             fontSize: 14,
-            minWidth: 200,
+            minWidth: 180,
             outline: "none",
-            background: "#F8FAFC",
+            background: inputBg,
+            color: inputText,
           }}
         >
           <option value="">Toutes les classes</option>
-          {classes.map((c) => (
-            <option key={c._id} value={c.nom}>{c.nom}</option>
+          {sortedClasses.map((c) => (
+            <option key={c._id} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c.nom}</option>
           ))}
         </select>
+
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          background: inputBg,
+          borderRadius: 8,
+          padding: "4px 8px",
+          border: `1px solid ${cardBorder}`,
+          flex: 1,
+          minWidth: 200,
+        }}>
+          <Search size={16} color={textSecondary} />
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Rechercher un cours..."
+            style={{
+              border: "none",
+              outline: "none",
+              marginLeft: 6,
+              fontSize: 14,
+              width: "100%",
+              background: "transparent",
+              color: inputText,
+            }}
+          />
+        </div>
       </div>
 
       {/* Liste des cours */}
       <div style={{ display: "grid", gap: 12 }}>
-        {cours.length === 0 && (
+        {filteredCours.length === 0 && (
           <div style={{
-            background: "#FFF",
+            background: cardBg,
             borderRadius: 16,
             padding: 48,
             textAlign: "center",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            color: "#64748B",
+            boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+            border: `1px solid ${cardBorder}`,
+            color: textSecondary,
           }}>
             <BookOpen size={32} style={{ marginBottom: 8 }} />
-            <p>Aucun cours trouvé{classeFiltre ? ` pour la classe ${classeFiltre}` : ""}</p>
+            <p>
+              {searchTerm
+                ? `Aucun cours trouvé pour "${searchTerm}"`
+                : classeFiltre
+                  ? `Aucun cours pour la classe ${classeFiltre}`
+                  : "Aucun cours enregistré"}
+            </p>
           </div>
         )}
-        {cours.map((c) => (
+        {filteredCours.map((c) => (
           <div
             key={c._id}
             style={{
-              background: "#FFF",
+              background: cardBg,
               borderRadius: 12,
               padding: "16px 20px",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-              transition: "box-shadow 0.15s",
+              boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+              border: `1px solid ${cardBorder}`,
+              transition: "box-shadow 0.15s, background-color 0.3s",
             }}
-            onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"}
-            onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)"}
+            onMouseEnter={(e) => e.currentTarget.style.boxShadow = dark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.08)"}
+            onMouseLeave={(e) => e.currentTarget.style.boxShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)"}
           >
             <div>
-              <div style={{ fontWeight: 600, fontSize: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>
                 {c.nom}{" "}
-                <span style={{ fontWeight: 400, fontSize: 13, color: "#64748B" }}>
+                <span style={{ fontWeight: 400, fontSize: 13, color: textSecondary }}>
                   {c.coefficient ? `coeff. ${c.coefficient}` : ""}
                   {c.bareme ? ` · bar. ${c.bareme}` : ""}
                 </span>
               </div>
-              <div style={{ color: "#64748B", fontSize: 13 }}>Classe {c.classe}</div>
+              <div style={{ color: textSecondary, fontSize: 13 }}>Classe {c.classe}</div>
             </div>
-            <button
-              onClick={async () => {
-                if (window.confirm(`Supprimer le cours "${c.nom}" ?`)) {
-                  try {
-                    await removeCours({ id: c._id, userId: user._id });
-                    toast.success("Cours supprimé");
-                  } catch (err) {
-                    toast.error(err.message);
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => {
+                  setEditData(c);
+                  setMode("individuel");
+                }}
+                style={{
+                  background: accent,
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: 8,
+                  cursor: "pointer",
+                }}
+                title="Modifier le cours"
+              >
+                <Edit2 size={16} />
+              </button>
+              <button
+                onClick={async () => {
+                  const ok = await confirm(
+                    "Supprimer le cours",
+                    `Voulez-vous vraiment supprimer le cours "${c.nom}" ?`
+                  );
+                  if (ok) {
+                    try {
+                      await removeCours({ id: c._id, userId: user._id });
+                      toast.success("Cours supprimé");
+                    } catch (err) {
+                      toast.error(err.message);
+                    }
                   }
-                }
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#EF4444",
-                cursor: "pointer",
-                padding: 8,
-                borderRadius: 8,
-              }}
-              title="Supprimer le cours"
-            >
-              <Trash2 size={18} />
-            </button>
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: danger,
+                  cursor: "pointer",
+                  padding: 8,
+                  borderRadius: 8,
+                }}
+                title="Supprimer le cours"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }
 
-// Composant interne : formulaire d'ajout individuel
-function AddCoursIndividuel({ classes, addCours, ecoleId, anneeId, userId, S }) {
-  const [nom, setNom] = useState("");
-  const [classe, setClasse] = useState("");
-  const [coefficient, setCoefficient] = useState("1");
-  const [bareme, setBareme] = useState("20");
+// ================= SOUS-COMPOSANTS =================
+
+function AddCoursIndividuel({
+  classes,
+  addCours,
+  updateCours,
+  ecoleId,
+  anneeId,
+  userId,
+  initialData,
+  onSuccess,
+  dark,
+}) {
+  const [nom, setNom] = useState(initialData?.nom || "");
+  const [classe, setClasse] = useState(initialData?.classe || "");
+  const [coefficient, setCoefficient] = useState(initialData?.coefficient?.toString() || "1");
+  const [bareme, setBareme] = useState(initialData?.bareme?.toString() || "20");
   const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState(initialData?._id || null);
+
+  const resetForm = () => {
+    setNom("");
+    setClasse("");
+    setCoefficient("1");
+    setBareme("20");
+    setEditId(null);
+    if (onSuccess) onSuccess();
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!nom.trim() || !classe) return;
+    if (!nom.trim() || !classe) {
+      toast.error("Veuillez remplir tous les champs obligatoires.");
+      return;
+    }
+    const coeffNum = parseFloat(coefficient);
+    const baremeNum = parseFloat(bareme);
+    if (isNaN(coeffNum) || coeffNum <= 0) {
+      toast.error("Coefficient invalide.");
+      return;
+    }
+    if (isNaN(baremeNum) || baremeNum <= 0) {
+      toast.error("Barème invalide.");
+      return;
+    }
+
     setAdding(true);
     try {
-      await addCours({
-        nom: nom.trim(),
-        classe,
-        coefficient: parseFloat(coefficient) || 1,
-        bareme: parseFloat(bareme) || 20,
-        ecoleId,
-        anneeId,
-        userId,
-      });
-      setNom("");
-      setClasse("");
-      setCoefficient("1");
-      setBareme("20");
-      toast.success("Cours ajouté");
+      if (editId) {
+        await updateCours({
+          id: editId,
+          nom: nom.trim(),
+          classe,
+          coefficient: coeffNum,
+          bareme: baremeNum,
+          userId,
+        });
+        toast.success("Cours mis à jour");
+      } else {
+        await addCours({
+          nom: nom.trim(),
+          classe,
+          coefficient: coeffNum,
+          bareme: baremeNum,
+          ecoleId,
+          anneeId,
+          userId,
+        });
+        toast.success("Cours ajouté");
+      }
+      resetForm();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -241,103 +390,73 @@ function AddCoursIndividuel({ classes, addCours, ecoleId, anneeId, userId, S }) 
     }
   };
 
+  const inputStyle = {
+    width: "100%",
+    padding: "10px 14px",
+    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+    borderRadius: 8,
+    fontSize: 14,
+    marginBottom: 16,
+    outline: "none",
+    background: dark ? "#0F172A" : "#F8FAFC",
+    color: dark ? "#F1F5F9" : "#1E293B",
+  };
+
   return (
-    <div style={{ background: "#FFF", borderRadius: 16, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", marginBottom: 24 }}>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Ajouter un cours à une classe</h3>
+    <div style={{
+      background: dark ? "#1E293B" : "#FFFFFF",
+      borderRadius: 16,
+      padding: 24,
+      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+      marginBottom: 24,
+    }}>
+      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+        {editId ? "Modifier le cours" : "Ajouter un cours à une classe"}
+      </h3>
       <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Nom du cours</label>
-        <input
-          value={nom}
-          onChange={(e) => setNom(e.target.value)}
-          placeholder="Ex: Mathématiques"
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 16,
-            outline: "none",
-          }}
-        />
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Classe</label>
-        <select
-          value={classe}
-          onChange={(e) => setClasse(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 16,
-            outline: "none",
-            background: "#F8FAFC",
-          }}
-        >
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Nom du cours</label>
+        <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Mathématiques" style={inputStyle} />
+
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Classe</label>
+        <select value={classe} onChange={(e) => setClasse(e.target.value)} style={inputStyle}>
           <option value="">-- Choisir une classe --</option>
           {classes.map((c) => (
-            <option key={c._id} value={c.nom}>{c.nom}</option>
+            <option key={c._id} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c.nom}</option>
           ))}
         </select>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Coefficient</label>
-        <input
-          type="number"
-          step="0.5"
-          min="0"
-          value={coefficient}
-          onChange={(e) => setCoefficient(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 16,
-            outline: "none",
-          }}
-        />
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Barème (note max)</label>
-        <input
-          type="number"
-          step="1"
-          min="1"
-          value={bareme}
-          onChange={(e) => setBareme(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 16,
-            outline: "none",
-          }}
-        />
-        <button
-          type="submit"
-          disabled={adding || !nom.trim() || !classe}
-          style={{
-            background: adding ? "#A5B4FC" : "#4F46E5",
-            color: "white",
-            border: "none",
-            borderRadius: 10,
-            padding: "10px 20px",
-            fontWeight: 600,
-            cursor: adding ? "not-allowed" : "pointer",
-            width: "100%",
-            fontSize: 14,
-          }}
-        >
-          {adding ? "Ajout en cours..." : "Ajouter le cours"}
+
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Coefficient</label>
+        <input type="number" step="0.5" min="0.5" value={coefficient} onChange={(e) => setCoefficient(e.target.value)} style={inputStyle} />
+
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Barème (note max)</label>
+        <input type="number" step="1" min="1" value={bareme} onChange={(e) => setBareme(e.target.value)} style={inputStyle} />
+
+        <button type="submit" disabled={adding || !nom.trim() || !classe} style={{
+          background: adding ? "#A5B4FC" : (dark ? "#818CF8" : "#4F46E5"),
+          color: "white", border: "none", borderRadius: 10,
+          padding: "10px 20px", fontWeight: 600,
+          cursor: adding ? "not-allowed" : "pointer", width: "100%",
+          fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          {adding ? <Loader size={16} className="animate-spin" /> : null}
+          {adding ? "Enregistrement..." : editId ? "Mettre à jour" : "Ajouter le cours"}
         </button>
+        {editId && (
+          <button type="button" onClick={resetForm} style={{
+            background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 10,
+            padding: "10px 20px", fontWeight: 500, cursor: "pointer", width: "100%", marginTop: 8,
+            color: dark ? "#F1F5F9" : "#1E293B",
+          }}>
+            Annuler
+          </button>
+        )}
       </form>
     </div>
   );
 }
 
-// Composant interne : formulaire d'ajout groupé
-function AddCoursGroupe({ classes, addBulk, ecoleId, anneeId, userId, S }) {
+function AddCoursGroupe({ classes, addBulk, ecoleId, anneeId, userId, dark }) {
   const [bulkNom, setBulkNom] = useState("");
   const [bulkCoefficient, setBulkCoefficient] = useState("1");
   const [bulkBareme, setBulkBareme] = useState("20");
@@ -349,28 +468,23 @@ function AddCoursGroupe({ classes, addBulk, ecoleId, anneeId, userId, S }) {
       prev.includes(classe) ? prev.filter((c) => c !== classe) : [...prev, classe]
     );
   };
-
   const selectAll = () => setSelectedClasses(classes.map((c) => c.nom));
   const deselectAll = () => setSelectedClasses([]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!bulkNom.trim() || selectedClasses.length === 0) return;
+    const coeffNum = parseFloat(bulkCoefficient);
+    const baremeNum = parseFloat(bulkBareme);
+    if (isNaN(coeffNum) || coeffNum <= 0) { toast.error("Coefficient invalide."); return; }
+    if (isNaN(baremeNum) || baremeNum <= 0) { toast.error("Barème invalide."); return; }
     setAdding(true);
     try {
       await addBulk({
-        nom: bulkNom.trim(),
-        coefficient: parseFloat(bulkCoefficient) || 1,
-        bareme: parseFloat(bulkBareme) || 20,
-        classes: selectedClasses,
-        ecoleId,
-        anneeId,
-        userId,
+        nom: bulkNom.trim(), coefficient: coeffNum, bareme: baremeNum,
+        classes: selectedClasses, ecoleId, anneeId, userId,
       });
-      setBulkNom("");
-      setBulkCoefficient("1");
-      setBulkBareme("20");
-      setSelectedClasses([]);
+      setBulkNom(""); setBulkCoefficient("1"); setBulkBareme("20"); setSelectedClasses([]);
       toast.success(`Cours ajouté à ${selectedClasses.length} classe(s)`);
     } catch (err) {
       toast.error(err.message);
@@ -379,141 +493,62 @@ function AddCoursGroupe({ classes, addBulk, ecoleId, anneeId, userId, S }) {
     }
   };
 
+  const inputStyle = {
+    width: "100%", padding: "10px 14px",
+    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+    borderRadius: 8, fontSize: 14, marginBottom: 16, outline: "none",
+    background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B",
+  };
+
   return (
-    <div style={{ background: "#FFF", borderRadius: 16, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", marginBottom: 24 }}>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Ajouter un cours à plusieurs classes</h3>
+    <div style={{
+      background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: 24,
+      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, marginBottom: 24,
+    }}>
+      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+        Ajouter un cours à plusieurs classes
+      </h3>
       <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Nom du cours</label>
-        <input
-          value={bulkNom}
-          onChange={(e) => setBulkNom(e.target.value)}
-          placeholder="Ex: Mathématiques"
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 16,
-            outline: "none",
-          }}
-        />
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Coefficient</label>
-        <input
-          type="number"
-          step="0.5"
-          min="0"
-          value={bulkCoefficient}
-          onChange={(e) => setBulkCoefficient(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 16,
-            outline: "none",
-          }}
-        />
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Barème (note max)</label>
-        <input
-          type="number"
-          step="1"
-          min="1"
-          value={bulkBareme}
-          onChange={(e) => setBulkBareme(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 16,
-            outline: "none",
-          }}
-        />
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Nom du cours</label>
+        <input value={bulkNom} onChange={(e) => setBulkNom(e.target.value)} placeholder="Ex: Mathématiques" style={inputStyle} />
+
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Coefficient</label>
+        <input type="number" step="0.5" min="0.5" value={bulkCoefficient} onChange={(e) => setBulkCoefficient(e.target.value)} style={inputStyle} />
+
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Barème (note max)</label>
+        <input type="number" step="1" min="1" value={bulkBareme} onChange={(e) => setBulkBareme(e.target.value)} style={inputStyle} />
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <span style={{ fontWeight: 500, fontSize: 14 }}>Classes concernées</span>
+          <span style={{ fontWeight: 500, fontSize: 14, color: dark ? "#CBD5E1" : "#374151" }}>Classes concernées</span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={selectAll} style={{
-              background: "none",
-              border: "none",
-              color: "#4F46E5",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 500,
-            }}>
-              Tout sélectionner
-            </button>
-            <button type="button" onClick={deselectAll} style={{
-              background: "none",
-              border: "none",
-              color: "#64748B",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 500,
-            }}>
-              Désélectionner
-            </button>
+            <button type="button" onClick={selectAll} style={{ background: "none", border: "none", color: dark ? "#818CF8" : "#4F46E5", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Tout sélectionner</button>
+            <button type="button" onClick={deselectAll} style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Désélectionner</button>
           </div>
         </div>
 
-        <div style={{
-          maxHeight: 220,
-          overflowY: "auto",
-          border: "1px solid #E2E8F0",
-          borderRadius: 12,
-          padding: 8,
-          marginBottom: 16,
-          background: "#F8FAFC",
-        }}>
+        <div style={{ maxHeight: 220, overflowY: "auto", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 12, padding: 8, marginBottom: 16, background: dark ? "#0F172A" : "#F8FAFC" }}>
           {classes.map((c) => (
-            <label
-              key={c._id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 8px",
-                fontSize: 14,
-                cursor: "pointer",
-                borderRadius: 6,
-                transition: "background 0.1s",
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = "#EEF2FF"}
-              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-            >
-              <input
-                type="checkbox"
-                checked={selectedClasses.includes(c.nom)}
-                onChange={() => toggleClass(c.nom)}
-                style={{ width: 16, height: 16, accentColor: "#4F46E5" }}
-              />
+            <label key={c._id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", fontSize: 14, cursor: "pointer", borderRadius: 6, color: dark ? "#F1F5F9" : "#1E293B" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = dark ? "#312E81" : "#EEF2FF"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+              <input type="checkbox" checked={selectedClasses.includes(c.nom)} onChange={() => toggleClass(c.nom)} style={{ width: 16, height: 16, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
               {c.nom}
             </label>
           ))}
         </div>
 
-        <div style={{ fontSize: 13, color: "#64748B", marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", marginBottom: 16 }}>
           {selectedClasses.length} classe(s) sélectionnée(s)
         </div>
 
-        <button
-          type="submit"
-          disabled={adding || !bulkNom.trim() || selectedClasses.length === 0}
-          style={{
-            background: adding ? "#A5B4FC" : "#4F46E5",
-            color: "white",
-            border: "none",
-            borderRadius: 10,
-            padding: "10px 20px",
-            fontWeight: 600,
-            cursor: adding ? "not-allowed" : "pointer",
-            width: "100%",
-            fontSize: 14,
-          }}
-        >
+        <button type="submit" disabled={adding || !bulkNom.trim() || selectedClasses.length === 0} style={{
+          background: adding ? "#A5B4FC" : (dark ? "#818CF8" : "#4F46E5"), color: "white",
+          border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 600,
+          cursor: adding ? "not-allowed" : "pointer", width: "100%", fontSize: 14,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          {adding ? <Loader size={16} className="animate-spin" /> : null}
           {adding ? "Ajout en cours..." : `Ajouter le cours à ${selectedClasses.length} classe(s)`}
         </button>
       </form>

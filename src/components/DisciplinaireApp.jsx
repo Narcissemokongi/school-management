@@ -1,7 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../components/ThemeProvider";
+import { useState, useMemo } from "react";
+import { useStyles } from "../styles/theme";
 import { Layout } from "./Layout";
 import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { AccueilDisciplinaire } from "./AccueilDisciplinaire";
@@ -13,9 +11,10 @@ import { Appels } from "./Appels";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
+import { Skeleton } from "./Skeleton";
 import {
   Home, Pen, ClipboardList, AlertTriangle, MessageCircle, Phone, User,
-  HelpCircle, FileText, Shield, Calendar,
+  HelpCircle, FileText, Shield, Calendar, CheckCircle,
 } from "lucide-react";
 
 export function DisciplinaireApp({
@@ -31,13 +30,21 @@ export function DisciplinaireApp({
     setTab("messagerie");
   };
 
-  // Vérifier si une année scolaire est active (pour les opérations liées)
-  const anneeActiveExiste = !!anneeId;
+  // Calcul du nombre de punitions pour le badge
+  const nbPunitions = useMemo(() => (punitions ? punitions.length : 0), [punitions]);
+
+  // Vérifier si les données nécessaires sont en cours de chargement
+  const loading = punitions === undefined || eleves === undefined || fautes === undefined;
 
   const menu = [
     { id: "accueil", label: "Tableau de bord", icon: <Home size={20} /> },
     { id: "saisir", label: "Saisir une punition", icon: <Pen size={20} /> },
-    { id: "historique", label: "Historique", icon: <ClipboardList size={20} /> },
+    {
+      id: "historique",
+      label: "Historique",
+      icon: <ClipboardList size={20} />,
+      badge: nbPunitions > 0 ? nbPunitions : null,
+    },
     { id: "absences", label: "Absences", icon: <AlertTriangle size={20} /> },
     { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
     { id: "appels", label: "Appels", icon: <Phone size={20} /> },
@@ -47,15 +54,34 @@ export function DisciplinaireApp({
     { id: "confidentialite", label: "Confidentialité", icon: <Shield size={20} /> },
   ];
 
+  if (loading) {
+    return (
+      <Layout
+        menu={menu}
+        activeTab="accueil"
+        onTabChange={setTab}
+        user={user}
+        dark={dark}
+        onToggleTheme={toggle}
+        onLogout={handleLogout}
+      >
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+          <Skeleton height={200} />
+          <Skeleton height={200} style={{ marginTop: 16 }} />
+        </div>
+      </Layout>
+    );
+  }
+
   const renderContent = () => {
-    if (!anneeActiveExiste && (tab === "saisir" || tab === "absences")) {
+    if (!anneeId && (tab === "saisir" || tab === "absences")) {
       return (
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
           <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+          <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: "#64748B", fontSize: 14 }}>
+          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
             Veuillez demander à l'administrateur d'activer une année scolaire pour pouvoir saisir des punitions ou absences.
           </p>
         </div>
@@ -79,7 +105,7 @@ export function DisciplinaireApp({
       case "profil": return <ProfilUtilisateur user={user} />;
       case "mentions": return <MentionsLegales />;
       case "confidentialite": return <PolitiqueConfidentialite />;
-      case "aide": return <Aide />;
+      case "aide": return <Aide user={user} />;
       default: return <AccueilDisciplinaire user={user} punitions={punitions} eleves={eleves} />;
     }
   };
@@ -94,11 +120,10 @@ export function DisciplinaireApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {/* Indicateur d'année scolaire en haut si elle n'est pas active */}
-      {!anneeActiveExiste && (
+      {!anneeId && (
         <div style={{
-          background: "#FEF3C7",
-          color: "#92400E",
+          background: dark ? "#78350F" : "#FEF3C7",
+          color: dark ? "#FBBF24" : "#92400E",
           padding: "10px 20px",
           fontSize: 13,
           fontWeight: 500,

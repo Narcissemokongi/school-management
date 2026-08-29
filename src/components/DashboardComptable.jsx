@@ -9,10 +9,11 @@ import {
   Clock,
   BarChart3,
   School,
+  Loader,
 } from "lucide-react";
 
 export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
-  const { S } = useStyles();
+  const { dark } = useStyles(); // ✅ mode sombre/clair
 
   // Récupération de la devise
   const ecole = useQuery(
@@ -28,6 +29,29 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
       api.frais.listByEcole,
       anneeId ? { ecoleId, anneeId } : { ecoleId }
     ) ?? [];
+
+  // Couleurs adaptatives
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const success = dark ? "#34D399" : "#10B981";
+  const warning = dark ? "#FBBF24" : "#F59E0B";
+  const danger = dark ? "#F87171" : "#EF4444";
+  const mutedBg = dark ? "#0F172A" : "#F8FAFC";
+  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+
+  // Gestion du chargement
+  const isLoading = ecole === undefined || frais === undefined;
+
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
+        <Loader size={32} className="animate-spin" style={{ color: accent }} />
+      </div>
+    );
+  }
 
   // Calculs globaux
   const totalFrais = frais.reduce((sum, f) => sum + f.montantTotal, 0);
@@ -64,11 +88,11 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
   if (!anneeId) {
     return (
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-        <DollarSign size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+        <DollarSign size={48} color={warning} style={{ marginBottom: 16 }} />
+        <h2 style={{ fontSize: 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
           Aucune année scolaire active
         </h2>
-        <p style={{ color: "#64748B", fontSize: 14 }}>
+        <p style={{ color: textSecondary, fontSize: 14 }}>
           Veuillez activer une année scolaire pour voir le tableau de bord.
         </p>
       </div>
@@ -77,12 +101,14 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+
       {/* En-tête */}
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: "#1E293B", margin: 0 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Tableau de bord comptable {anneeActive ? `· ${anneeActive.nom}` : ""}
         </h2>
-        <p style={{ color: "#64748B", marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
           Vue d'ensemble des finances de l'établissement ({deviseSymbol})
         </p>
       </div>
@@ -100,120 +126,137 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
           icon={<DollarSign size={24} />}
           value={`${totalFrais.toLocaleString()} ${deviseSymbol}`}
           label="Total dû"
-          color="#4F46E5"
+          color={accent}
+          dark={dark}
         />
         <StatCard
           icon={<CheckCircle size={24} />}
           value={`${totalPaye.toLocaleString()} ${deviseSymbol}`}
           label="Total payé"
-          color="#10B981"
+          color={success}
+          dark={dark}
         />
         <StatCard
           icon={<Clock size={24} />}
           value={`${reste.toLocaleString()} ${deviseSymbol}`}
           label="Reste à payer"
-          color={reste > 0 ? "#EF4444" : "#10B981"}
+          color={reste > 0 ? danger : success}
+          dark={dark}
         />
         <StatCard
           icon={<TrendingUp size={24} />}
           value={`${tauxPaiement}%`}
           label="Taux de paiement"
-          color="#F59E0B"
+          color={warning}
+          dark={dark}
         />
         <StatCard
           icon={<School size={24} />}
           value={nbElevesAvecFrais}
           label="Élèves avec frais"
           color="#6366F1"
+          dark={dark}
         />
       </div>
 
       {/* Statistiques par classe */}
       <div
         style={{
-          background: "#FFF",
+          background: cardBg,
           borderRadius: 16,
           padding: 24,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          boxShadow: shadow,
+          border: `1px solid ${cardBorder}`,
+          transition: "background-color 0.3s",
         }}
       >
         <h3
           style={{
             fontSize: 18,
             fontWeight: 600,
-            color: "#1E293B",
+            color: textPrimary,
             marginBottom: 20,
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}
         >
-          <BarChart3 size={20} color="#4F46E5" /> Paiements par classe
+          <BarChart3 size={20} color={accent} /> Paiements par classe
         </h3>
-        {statsParClasse.length === 0 && (
-          <p style={{ color: "#64748B", fontSize: 14 }}>Aucune donnée disponible.</p>
-        )}
-        {statsParClasse.map((c) => (
-          <div key={c.classe} style={{ marginBottom: 20 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <span style={{ fontWeight: 500, fontSize: 14 }}>
-                {c.classe} ({c.nbEleves} élève(s))
-              </span>
-              <span style={{ fontSize: 13, color: "#64748B" }}>
-                {c.paye.toLocaleString()} / {c.total.toLocaleString()} {deviseSymbol} — {c.taux}%
-              </span>
-            </div>
-            {/* Barre de progression */}
-            <div
-              style={{
-                height: 8,
-                background: "#F1F5F9",
-                borderRadius: 4,
-                overflow: "hidden",
-              }}
-            >
+        {statsParClasse.length === 0 ? (
+          <p style={{ color: textSecondary, fontSize: 14 }}>Aucune donnée disponible.</p>
+        ) : (
+          statsParClasse.map((c) => (
+            <div key={c.classe} style={{ marginBottom: 20 }}>
               <div
                 style={{
-                  width: `${c.taux}%`,
-                  height: "100%",
-                  background: c.taux >= 80 ? "#10B981" : c.taux >= 50 ? "#F59E0B" : "#EF4444",
-                  borderRadius: 4,
-                  transition: "width 0.3s ease",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                  flexWrap: "wrap",
+                  gap: 8,
                 }}
-              />
+              >
+                <span style={{ fontWeight: 500, fontSize: 14, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.classe} ({c.nbEleves} élève(s))
+                </span>
+                <span style={{ fontSize: 13, color: textSecondary, whiteSpace: "nowrap" }}>
+                  {c.paye.toLocaleString()} / {c.total.toLocaleString()} {deviseSymbol} — {c.taux}%
+                </span>
+              </div>
+              {/* Barre de progression */}
+              <div
+                style={{
+                  height: 8,
+                  background: mutedBg,
+                  borderRadius: 4,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${c.taux}%`,
+                    height: "100%",
+                    background: c.taux >= 80 ? success : c.taux >= 50 ? warning : danger,
+                    borderRadius: 4,
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function StatCard({ icon, value, label, color }) {
+function StatCard({ icon, value, label, color, dark }) {
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+  const border = dark ? "#334155" : "#E2E8F0";
+
   return (
     <div
       style={{
-        background: "#FFF",
+        background: cardBg,
         borderRadius: 16,
         padding: 20,
         display: "flex",
         alignItems: "center",
         gap: 16,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        boxShadow: shadow,
+        border: `1px solid ${border}`,
       }}
     >
       <div
         style={{
           width: 48,
           height: 48,
-          background: `${color}15`,
+          background: `${color}${dark ? "33" : "15"}`,
           borderRadius: 12,
           display: "flex",
           alignItems: "center",
@@ -224,10 +267,10 @@ function StatCard({ icon, value, label, color }) {
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: "#1E293B" }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: textPrimary }}>
           {value}
         </div>
-        <div style={{ fontSize: 14, color: "#64748B" }}>{label}</div>
+        <div style={{ fontSize: 14, color: textSecondary }}>{label}</div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useStyles } from "../components/ThemeProvider";
+import { useStyles } from "../styles/theme";
 import { ClipboardList, AlertTriangle, Users, Building } from "lucide-react";
 import { getFaute, getTopDerangeurs, getPunitionsParClasse } from "../utils";
 

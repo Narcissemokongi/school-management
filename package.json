@@ -19,6 +19,7 @@
     "agora-access-token": "^2.0.4",
     "agora-rtc-react": "^2.5.1",
     "agora-rtc-sdk-ng": "^4.24.4",
+    "agora-token": "^2.0.5",
     "convex": "^1.39.1",
     "firebase": "^12.12.1",
     "html2canvas": "^1.4.1",
@@ -27,6 +28,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-hot-toast": "^2.6.0",
+    "react-router-dom": "^7.18.2",
     "recharts": "^3.8.1",
     "xlsx": "^0.18.5"
   },

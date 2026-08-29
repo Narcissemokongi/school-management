@@ -1,28 +1,57 @@
-import { useState } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
 import { getFaute } from "../utils";
+import { trierEleves } from "../utils/tri";   // ✅ import du tri
 import toast from "react-hot-toast";
-import { Loader } from "lucide-react";
+import { Loader, Search, Check, AlertTriangle, Info } from "lucide-react";
 import { userFriendlyError } from "../utils/errorMessages";
+import { useConfirm } from "../hooks/useConfirm";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPunition, onNotif, anneeId, anneeActive }) {
-  const { S } = useStyles();
+  const { S, dark } = useStyles();   // ✅ extraire dark
+  const { confirm, dialogProps } = useConfirm();
+
   const [search, setSearch] = useState("");
   const [selectedEleve, setSelectedEleve] = useState(null);
   const [idFaute, setIdFaute] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [commentaire, setCommentaire] = useState("");
   const [sanction, setSanction] = useState("");
+  const [graviteFilter, setGraviteFilter] = useState("toutes");
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
   const addPunitionMutation = useMutation(api.punitions.add);
+  const searchTimeoutRef = useRef(null);
 
-  const filtered = search.length > 1
-    ? eleves.filter((e) => `${e.nom} ${e.postnom}`.toLowerCase().includes(search.toLowerCase()))
-    : [];
+  // Filtrer les fautes selon la gravité sélectionnée
+  const filteredFautes = useMemo(() => {
+    if (graviteFilter === "toutes") return fautes;
+    return fautes.filter(f => f.gravite === graviteFilter);
+  }, [fautes, graviteFilter]);
+
+  // Recherche avec debounce (300ms)
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(searchTimeoutRef.current);
+  }, [search]);
+
+  // Résultats de recherche triés alphabétiquement et par classe
+  const filteredEleves = useMemo(() => {
+    if (debouncedSearch.trim().length < 2) return [];
+    const query = debouncedSearch.toLowerCase();
+    return eleves
+      .filter(e => `${e.nom} ${e.postnom} ${e.prenom || ''}`.toLowerCase().includes(query))
+      .sort(trierEleves)   // ✅ tri classe puis nom
+      .slice(0, 10);
+  }, [eleves, debouncedSearch]);
 
   const validate = () => {
     const newErrors = {};
@@ -34,34 +63,53 @@ export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPu
   };
 
   const handleBlur = (field) => {
-    const currentErrors = { ...errors };
-    switch (field) {
-      case "selectedEleve":
-        if (!selectedEleve) currentErrors.selectedEleve = "Veuillez sélectionner un élève.";
-        else delete currentErrors.selectedEleve;
-        break;
-      case "idFaute":
-        if (!idFaute) currentErrors.idFaute = "Veuillez choisir un type de faute.";
-        else delete currentErrors.idFaute;
-        break;
-      case "date":
-        if (!date) currentErrors.date = "La date est requise.";
-        else delete currentErrors.date;
-        break;
-      case "sanction":
-        if (!sanction) currentErrors.sanction = "Veuillez choisir une sanction.";
-        else delete currentErrors.sanction;
-        break;
-      default:
-        break;
-    }
-    setErrors(currentErrors);
+    setErrors(prev => {
+      const updated = { ...prev };
+      switch (field) {
+        case "selectedEleve":
+          if (!selectedEleve) updated.selectedEleve = "Veuillez sélectionner un élève.";
+          else delete updated.selectedEleve;
+          break;
+        case "idFaute":
+          if (!idFaute) updated.idFaute = "Veuillez choisir un type de faute.";
+          else delete updated.idFaute;
+          break;
+        case "date":
+          if (!date) updated.date = "La date est requise.";
+          else delete updated.date;
+          break;
+        case "sanction":
+          if (!sanction) updated.sanction = "Veuillez choisir une sanction.";
+          else delete updated.sanction;
+          break;
+        default:
+          break;
+      }
+      return updated;
+    });
+  };
+
+  const resetForm = () => {
+    setSelectedEleve(null);
+    setSearch("");
+    setIdFaute("");
+    setDate(new Date().toISOString().split("T")[0]);
+    setCommentaire("");
+    setSanction("");
+    setGraviteFilter("toutes");
+    setErrors({});
   };
 
   const handleSubmit = async () => {
     const validationErrors = validate();
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
+
+    const ok = await confirm(
+      "Enregistrer la punition",
+      `Voulez-vous vraiment enregistrer cette punition pour ${selectedEleve.nom} ${selectedEleve.postnom} ?`
+    );
+    if (!ok) return;
 
     setSubmitting(true);
     try {
@@ -78,17 +126,10 @@ export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPu
         userId: user._id,
       });
       toast.success("Punition enregistrée");
-      if (faute?.gravite === "Grave") {
+      if (faute?.gravite === "Grave" && onNotif) {
         onNotif(`${selectedEleve.nom} ${selectedEleve.postnom} (${selectedEleve.classe}) — ${faute.libelle}`);
       }
-      // Réinitialisation
-      setSelectedEleve(null);
-      setSearch("");
-      setIdFaute("");
-      setDate(new Date().toISOString().split("T")[0]);
-      setCommentaire("");
-      setSanction("");
-      setErrors({});
+      resetForm();
     } catch (err) {
       toast.error(userFriendlyError(err));
     } finally {
@@ -97,147 +138,242 @@ export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPu
   };
 
   const isFormValid = selectedEleve && idFaute && date && sanction;
+  const fauteSelectionnee = idFaute ? getFaute(fautes, idFaute) : null;
+
+  // Couleurs adaptatives
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const inputBg = dark ? "#0F172A" : "#F8FAFC";
+  const inputText = dark ? "#F1F5F9" : "#1E293B";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const badgeBg = dark ? "#312E81" : "#EEF2FF";
+  const badgeText = dark ? "#A5B4FC" : "#4F46E5";
 
   return (
     <div>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       <div style={{ marginBottom: 20 }}>
-        <div style={S.h2}>Nouvelle punition</div>
-        <div style={S.muted}>Enregistrez une faute disciplinaire {anneeActive && ` · ${anneeActive.nom}`}</div>
+        <h2 style={{ ...S.h2, color: textPrimary }}>Nouvelle punition</h2>
+        <p style={{ ...S.muted, color: textSecondary }}>
+          Enregistrez une faute disciplinaire {anneeActive && ` · ${anneeActive.nom}`}
+        </p>
       </div>
 
-      <div style={S.card}>
-        <label style={S.label}>🔍 Rechercher un élève</label>
-        <input
-          style={{
-            ...S.input,
-            borderColor: errors.selectedEleve ? "#ef4444" : S.cardBorder,
-          }}
-          placeholder="Tapez le nom de l'élève..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setSelectedEleve(null);
-            setErrors((prev) => ({ ...prev, selectedEleve: undefined }));
-          }}
-          onBlur={() => handleBlur("selectedEleve")}
-        />
-        {errors.selectedEleve && (
-          <div style={{ color: "#ef4444", fontSize: 13, marginTop: 4 }}>{errors.selectedEleve}</div>
-        )}
-        {filtered.map((e) => (
-          <div
-            key={e._id}
-            onClick={() => {
-              setSelectedEleve(e);
-              setSearch(`${e.nom} ${e.postnom}`);
-              setErrors((prev) => ({ ...prev, selectedEleve: undefined }));
+      {/* Recherche d'élève */}
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}` }}>
+        <label style={{ ...S.label, color: textSecondary }}>🔍 Rechercher un élève</label>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          background: inputBg,
+          borderRadius: 10,
+          padding: "10px 14px",
+          border: `1px solid ${errors.selectedEleve ? "#EF4444" : cardBorder}`,
+        }}>
+          <Search size={16} color={textSecondary} style={{ marginRight: 8 }} />
+          <input
+            style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: 14, color: inputText }}
+            placeholder="Tapez le nom de l'élève..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelectedEleve(null);
+              setErrors(prev => ({ ...prev, selectedEleve: undefined }));
             }}
-            style={{
-              padding: "10px 14px",
-              background: "#f9fafb",
-              borderRadius: 10,
-              marginBottom: 6,
-              cursor: "pointer",
-              border: `1px solid ${selectedEleve?._id === e._id ? "#4f46e5" : S.cardBorder}`,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{e.nom} {e.postnom}</div>
-              <div style={{ fontSize: 12, color: S.textMuted }}>Classe {e.classe}</div>
-            </div>
-            {selectedEleve?._id === e._id && <span style={{ color: "#4f46e5" }}>✓</span>}
+            onBlur={() => handleBlur("selectedEleve")}
+          />
+        </div>
+        {errors.selectedEleve && <div style={{ color: "#EF4444", fontSize: 13, marginTop: 4 }}>{errors.selectedEleve}</div>}
+
+        {/* Suggestions d'élèves triées */}
+        {debouncedSearch.length >= 2 && !selectedEleve && (
+          <div style={{
+            marginTop: 8,
+            maxHeight: 200,
+            overflowY: "auto",
+            border: `1px solid ${cardBorder}`,
+            borderRadius: 10,
+            padding: 6,
+            background: cardBg,
+          }}>
+            {filteredEleves.length === 0 ? (
+              <div style={{ padding: 12, textAlign: "center", color: textSecondary, fontSize: 13 }}>Aucun élève trouvé</div>
+            ) : (
+              filteredEleves.map(e => (
+                <div
+                  key={e._id}
+                  onClick={() => {
+                    setSelectedEleve(e);
+                    setSearch(`${e.nom} ${e.postnom}`);
+                    setErrors(prev => ({ ...prev, selectedEleve: undefined }));
+                  }}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    background: "transparent",
+                    transition: "background 0.1s",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = badgeBg}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  <Search size={14} color={textSecondary} />
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: 14, color: textPrimary }}>
+                      {e.nom} {e.postnom} {e.prenom}
+                    </div>
+                    <div style={{ fontSize: 12, color: textSecondary }}>Classe {e.classe}</div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        ))}
+        )}
+
         {selectedEleve && (
-          <div style={{ ...S.badge("#4f46e5"), marginTop: 4 }}>
-            ✓ {selectedEleve.nom} {selectedEleve.postnom} — Classe {selectedEleve.classe}
+          <div style={{
+            marginTop: 8,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: badgeBg,
+            color: badgeText,
+            padding: "8px 12px",
+            borderRadius: 8,
+            fontWeight: 500,
+          }}>
+            <Check size={16} />
+            {selectedEleve.nom} {selectedEleve.postnom} {selectedEleve.prenom} — Classe {selectedEleve.classe}
           </div>
         )}
       </div>
 
-      <div style={S.card}>
-        <label style={S.label}>Type de faute</label>
+      {/* Type de faute */}
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}` }}>
+        <label style={{ ...S.label, color: textSecondary }}>Type de faute</label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          {["toutes", "Légère", "Moyenne", "Grave"].map(g => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setGraviteFilter(g)}
+              style={{
+                padding: "6px 12px",
+                border: `1px solid ${graviteFilter === g ? accent : cardBorder}`,
+                borderRadius: 20,
+                background: graviteFilter === g ? badgeBg : "transparent",
+                color: graviteFilter === g ? badgeText : textSecondary,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              {g === "toutes" ? "Toutes" : g}
+            </button>
+          ))}
+        </div>
         <select
           style={{
             ...S.select,
-            borderColor: errors.idFaute ? "#ef4444" : S.cardBorder,
+            borderColor: errors.idFaute ? "#EF4444" : cardBorder,
+            background: inputBg,
+            color: inputText,
           }}
           value={idFaute}
           onChange={(e) => {
             setIdFaute(e.target.value);
-            setErrors((prev) => ({ ...prev, idFaute: undefined }));
+            setErrors(prev => ({ ...prev, idFaute: undefined }));
           }}
           onBlur={() => handleBlur("idFaute")}
         >
           <option value="">Sélectionner une faute...</option>
-          {fautes.map((f) => (
-            <option key={f._id} value={f._id}>
+          {filteredFautes.map(f => (
+            <option key={f._id} value={f._id} style={{ background: dark ? "#1E293B" : "#FFF" }}>
               {f.libelle} ({f.gravite})
             </option>
           ))}
         </select>
-        {errors.idFaute && (
-          <div style={{ color: "#ef4444", fontSize: 13, marginTop: 4 }}>{errors.idFaute}</div>
-        )}
-        {idFaute && (
-          <div
-            style={{
-              ...S.badge(getFaute(fautes, idFaute)?.gravite === "Grave" ? "#ef4444" : "#f59e0b"),
-              marginBottom: 10,
-            }}
-          >
-            Gravité: {getFaute(fautes, idFaute)?.gravite}
+        {errors.idFaute && <div style={{ color: "#EF4444", fontSize: 13, marginTop: 4 }}>{errors.idFaute}</div>}
+        {fauteSelectionnee && (
+          <div style={{
+            marginTop: 8,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            color: fauteSelectionnee.gravite === "Grave" ? "#EF4444" : "#F59E0B",
+          }}>
+            <Info size={16} />
+            Gravité : {fauteSelectionnee.gravite}
           </div>
         )}
+      </div>
 
-        <label style={S.label}>Date</label>
+      {/* Date */}
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}` }}>
+        <label style={{ ...S.label, color: textSecondary }}>Date</label>
         <input
           style={{
             ...S.input,
-            borderColor: errors.date ? "#ef4444" : S.cardBorder,
+            borderColor: errors.date ? "#EF4444" : cardBorder,
+            background: inputBg,
+            color: inputText,
           }}
           type="date"
           value={date}
           onChange={(e) => {
             setDate(e.target.value);
-            setErrors((prev) => ({ ...prev, date: undefined }));
+            setErrors(prev => ({ ...prev, date: undefined }));
           }}
           onBlur={() => handleBlur("date")}
         />
-        {errors.date && (
-          <div style={{ color: "#ef4444", fontSize: 13, marginTop: 4 }}>{errors.date}</div>
-        )}
+        {errors.date && <div style={{ color: "#EF4444", fontSize: 13, marginTop: 4 }}>{errors.date}</div>}
+      </div>
 
-        <label style={S.label}>Sanction</label>
+      {/* Sanction */}
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}` }}>
+        <label style={{ ...S.label, color: textSecondary }}>Sanction</label>
         <select
           style={{
             ...S.select,
-            borderColor: errors.sanction ? "#ef4444" : S.cardBorder,
+            borderColor: errors.sanction ? "#EF4444" : cardBorder,
+            background: inputBg,
+            color: inputText,
           }}
           value={sanction}
           onChange={(e) => {
             setSanction(e.target.value);
-            setErrors((prev) => ({ ...prev, sanction: undefined }));
+            setErrors(prev => ({ ...prev, sanction: undefined }));
           }}
           onBlur={() => handleBlur("sanction")}
         >
           <option value="">Choisir une sanction...</option>
-          {sanctions.map((s) => (
-            <option key={s._id} value={s.libelle}>{s.libelle}</option>
+          {sanctions.map(s => (
+            <option key={s._id} value={s.libelle} style={{ background: dark ? "#1E293B" : "#FFF" }}>
+              {s.libelle}
+            </option>
           ))}
         </select>
-        {errors.sanction && (
-          <div style={{ color: "#ef4444", fontSize: 13, marginTop: 4 }}>{errors.sanction}</div>
-        )}
+        {errors.sanction && <div style={{ color: "#EF4444", fontSize: 13, marginTop: 4 }}>{errors.sanction}</div>}
+      </div>
 
-        <label style={S.label}>Commentaire</label>
+      {/* Commentaire */}
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}` }}>
+        <label style={{ ...S.label, color: textSecondary }}>Commentaire</label>
         <textarea
-          style={{ ...S.input, height: 80, resize: "none" }}
+          style={{
+            ...S.input,
+            height: 80,
+            resize: "none",
+            background: inputBg,
+            color: inputText,
+            border: `1px solid ${cardBorder}`,
+          }}
           placeholder="Détails de l'incident..."
           value={commentaire}
           onChange={(e) => setCommentaire(e.target.value)}
@@ -246,17 +382,25 @@ export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPu
 
       <button
         style={{
-          ...S.btn("#4f46e5"),
+          ...S.btn(accent),
           opacity: isFormValid && !submitting ? 1 : 0.6,
           cursor: isFormValid && !submitting ? "pointer" : "not-allowed",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
         }}
         onClick={handleSubmit}
         disabled={!isFormValid || submitting}
       >
         {submitting ? (
           <><Loader size={16} className="animate-spin" /> Enregistrement...</>
-        ) : "Enregistrer la punition"}
+        ) : (
+          <><Check size={16} /> Enregistrer la punition</>
+        )}
       </button>
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

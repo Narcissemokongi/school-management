@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useStyles } from "../components/ThemeProvider";
+import { useStyles } from "../styles/theme";
 import { Layout } from "./Layout";
 import { DashboardAdmin } from "./DashboardAdmin";
 import { GestionElevesEtClasses } from "./GestionElevesEtClasses";
@@ -17,6 +17,8 @@ import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { AnneeSelector } from "./AnneeSelector";
+import { ParentLinkRequests } from "./ParentLinkRequests"; // <-- Nouveau
 import {
   Home,
   Users,
@@ -30,7 +32,11 @@ import {
   Settings,
   HelpCircle,
   FileText,
+  ClipboardList,
+  Link2,
 } from "lucide-react";
+import { AccueilAdmin } from "./AccueilAdmin";
+import { AssistantPassage } from "./AssistantPassage";
 
 export function AdminApp({
   user,
@@ -51,6 +57,7 @@ export function AdminApp({
   frais,
   anneeId,
   anneeActive,
+  onAnneeChange,
   dark,
   toggle,
   handleLogout,
@@ -62,7 +69,6 @@ export function AdminApp({
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingTab, setPendingTab] = useState(null);
 
-  // Récupérer le nombre de demandes d'inscription en attente pour l'école
   const pendingUsers = useQuery(api.users.listPendingUsers, ecoleId ? { ecoleId } : "skip") ?? [];
 
   const handleNavigateToMessaging = (contactId) => {
@@ -72,6 +78,7 @@ export function AdminApp({
 
   const menu = [
     { id: "accueil", label: "Tableau de bord", icon: <Home size={20} /> },
+    { id: "passage", label: "Passage", icon: <ClipboardList size={20} /> },
     { id: "eleves-classes", label: "Scolarité", icon: <Users size={20} /> },
     { id: "fautes", label: "Discipline", icon: <AlertTriangle size={20} /> },
     { id: "cours-notes", label: "Évaluations", icon: <BookOpen size={20} /> },
@@ -82,6 +89,7 @@ export function AdminApp({
       icon: <Shield size={20} />,
       badge: pendingUsers.length > 0 ? pendingUsers.length : null,
     },
+    { id: "liaisons-parents", label: "Liaisons parents", icon: <Link2 size={20} /> }, // <-- Nouvel onglet
     { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
     { id: "appels", label: "Appels", icon: <Phone size={20} /> },
     { id: "audit", label: "Audit", icon: <ScrollText size={20} /> },
@@ -114,21 +122,31 @@ export function AdminApp({
     setPendingTab(null);
   };
 
-  useEffect(() => {
-    if (dirty) {
-      window.onbeforeunload = () => "Vous avez des modifications non enregistrées.";
-    } else {
-      window.onbeforeunload = null;
-    }
-    return () => {
-      window.onbeforeunload = null;
-    };
-  }, [dirty]);
-
   const renderContent = () => {
     switch (tab) {
       case "accueil":
-        return <DashboardAdmin ecoleId={ecoleId} anneeId={anneeId} anneeActive={anneeActive} />;
+        return (
+          <AccueilAdmin
+            eleves={eleves}
+            classes={classes}
+            fautes={fautes}
+            sanctions={sanctions}
+            users={users}
+            frais={frais}
+            onNavigate={(tab) => setTab(tab)}
+          />
+        );
+
+      case "passage":
+        return (
+          <AssistantPassage
+            ecoleId={ecoleId}
+            anneeActiveId={anneeId}
+            classes={classes}
+            user={user}
+          />
+        );
+
       case "eleves-classes":
         return (
           <GestionElevesEtClasses
@@ -145,6 +163,7 @@ export function AdminApp({
             anneeActive={anneeActive}
           />
         );
+
       case "fautes":
         return (
           <GestionFautesEtSanctions
@@ -157,6 +176,7 @@ export function AdminApp({
             userId={user._id}
           />
         );
+
       case "cours-notes":
         return (
           <GestionCoursEtNotes
@@ -168,6 +188,7 @@ export function AdminApp({
             anneeActive={anneeActive}
           />
         );
+
       case "frais":
         return (
           <GestionFrais
@@ -178,10 +199,16 @@ export function AdminApp({
             user={user}
           />
         );
+
       case "comptes":
         return <GestionUtilisateurs ecoleId={ecoleId} userId={user._id} />;
+
+      case "liaisons-parents":
+        return <ParentLinkRequests user={user} />; // <-- Rendu du nouveau composant
+
       case "messagerie":
         return <MessagerieApp user={user} ecoleId={ecoleId} initialSelectedUserId={messagingContactId} />;
+
       case "appels":
         return (
           <Appels
@@ -191,16 +218,22 @@ export function AdminApp({
             onNavigateToMessaging={handleNavigateToMessaging}
           />
         );
+
       case "audit":
         return <GestionAudit ecoleId={ecoleId} userId={user._id} />;
+
       case "parametres":
         return <Parametres ecoleId={ecoleId} user={user} />;
+
       case "mentions":
         return <MentionsLegales />;
+
       case "confidentialite":
         return <PolitiqueConfidentialite />;
+
       case "aide":
-        return <Aide />;
+        return <Aide user={user} />;
+
       default:
         return <DashboardAdmin ecoleId={ecoleId} anneeId={anneeId} anneeActive={anneeActive} />;
     }
@@ -217,6 +250,14 @@ export function AdminApp({
         onToggleTheme={toggle}
         onLogout={handleLogout}
       >
+        {/* Sélecteur d'année pour consulter les archives */}
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px 24px 0", display: "flex", justifyContent: "flex-end" }}>
+          <AnneeSelector
+            ecoleId={ecoleId}
+            anneeId={anneeId}
+            onAnneeChange={onAnneeChange}
+          />
+        </div>
         {renderContent()}
       </Layout>
 

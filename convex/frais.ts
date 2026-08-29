@@ -15,11 +15,10 @@ async function requireRole(
   return user;
 }
 
+// ========== QUERY ==========
+
 export const listByEleve = query({
-  args: {
-    eleveId: v.id("eleves"),
-    anneeId: v.optional(v.id("anneesScolaires")),
-  },
+  args: { eleveId: v.id("eleves"), anneeId: v.optional(v.id("anneesScolaires")) },
   handler: async (ctx, args) => {
     if (args.anneeId) {
       return await ctx.db
@@ -36,10 +35,7 @@ export const listByEleve = query({
 });
 
 export const listByEcole = query({
-  args: {
-    ecoleId: v.id("ecoles"),
-    anneeId: v.optional(v.id("anneesScolaires")),
-  },
+  args: { ecoleId: v.id("ecoles"), anneeId: v.optional(v.id("anneesScolaires")) },
   handler: async (ctx, args) => {
     if (args.anneeId) {
       return await ctx.db
@@ -55,6 +51,20 @@ export const listByEcole = query({
   },
 });
 
+// --- Frais de classe ---
+export const listFraisClasses = query({
+  args: { ecoleId: v.id("ecoles"), anneeId: v.optional(v.id("anneesScolaires")) },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("fraisClasses")
+      .withIndex("by_ecole_classe", (q) => q.eq("ecoleId", args.ecoleId))
+      .filter((q) => (args.anneeId ? q.eq(q.field("anneeId"), args.anneeId) : true))
+      .collect();
+  },
+});
+
+// ========== MUTATIONS ==========
+
 export const upsert = mutation({
   args: {
     eleveId: v.id("eleves"),
@@ -63,7 +73,7 @@ export const upsert = mutation({
     montantPaye: v.float64(),
     commentaire: v.optional(v.string()),
     anneeId: v.id("anneesScolaires"),
-    userId: v.optional(v.id("users")), // celui qui fait l'action
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     await requireRole(ctx, args.userId, ["admin", "comptable"]);
@@ -152,10 +162,7 @@ export const upsertBulk = mutation({
 });
 
 export const remove = mutation({
-  args: {
-    id: v.id("frais"),
-    userId: v.optional(v.id("users")),
-  },
+  args: { id: v.id("frais"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     await requireRole(ctx, args.userId, ["admin", "comptable"]);
 
@@ -170,6 +177,35 @@ export const remove = mutation({
         details: `Suppression frais élève ${doc.eleveId}`,
         date: new Date().toISOString(),
         ecoleId: doc.ecoleId,
+      });
+    }
+  },
+});
+
+// --- Mutation pour les frais de classe ---
+export const upsertFraisClasse = mutation({
+  args: {
+    classe: v.string(),
+    montantTotal: v.float64(),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  },
+  handler: async (ctx, args) => {
+    // Pas de requireRole ici si l'appel se fait depuis un contexte authentifié, mais vous pouvez ajouter
+    // await requireRole(ctx, args.userId, ["admin", "comptable"]); // si vous passez userId
+    const existing = await ctx.db
+      .query("fraisClasses")
+      .withIndex("by_ecole_classe", (q) => q.eq("ecoleId", args.ecoleId).eq("classe", args.classe))
+      .filter((q) => (args.anneeId ? q.eq(q.field("anneeId"), args.anneeId) : true))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { montantTotal: args.montantTotal });
+    } else {
+      await ctx.db.insert("fraisClasses", {
+        classe: args.classe,
+        montantTotal: args.montantTotal,
+        ecoleId: args.ecoleId,
+        anneeId: args.anneeId,
       });
     }
   },

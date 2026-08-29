@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useStyles } from "../components/ThemeProvider";
+import { useStyles } from "../styles/theme";
 import { Layout } from "./Layout";
 import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { MessagerieApp } from "./messagerie/MessagerieApp";
@@ -15,9 +15,108 @@ import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import {
   Home, BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, TrendingUp, DollarSign, Clock,
-  GraduationCap, Award, BarChart3,
+  GraduationCap, Award, BarChart3, ClipboardList, Trophy, Medal, Star
 } from "lucide-react";
+import { ConsultationExamens } from "./ConsultationExamens";
 
+// ---- Composant ClassementEleve adaptatif ----
+function ClassementEleve({ ecoleId, anneeId, classe, eleveId }) {
+  const { dark } = useStyles(); // ✅ récupère le mode sombre/clair
+  const classement = useQuery(
+    api.classement.getClassement,
+    (ecoleId && anneeId && classe) ? { ecoleId, anneeId, classe } : "skip"
+  ) ?? [];
+  const ecole = useQuery(api.ecoles.get, ecoleId ? { ecoleId } : "skip");
+
+  // Couleurs adaptatives
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+
+  if (!classe) return <p style={{ color: textPrimary }}>Veuillez sélectionner une classe.</p>;
+  if (classement.length === 0) return <p style={{ color: textPrimary }}>Aucun classement disponible.</p>;
+
+  const eleve = classement.find(e => e._id === eleveId);
+  if (!eleve) return <p style={{ color: textPrimary }}>Élève introuvable dans ce classement.</p>;
+
+  const moy = eleve.moyenneGenerale;
+  let mention = "";
+  if (ecole?.seuilFelicitations && moy >= ecole.seuilFelicitations) mention = "Félicitations";
+  else if (ecole?.seuilEncouragement && moy >= ecole.seuilEncouragement) mention = "Encouragement";
+  else if (ecole?.seuilAvertissement && moy <= ecole.seuilAvertissement) mention = "Avertissement";
+
+  const top3 = classement.slice(0, 3);
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }}>
+      <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, marginBottom: 24 }}>
+        Mon classement
+      </h2>
+
+      {/* Carte personnelle */}
+      <div style={{
+        background: cardBg,
+        borderRadius: 16,
+        padding: 20,
+        boxShadow: shadow,
+        marginBottom: 32,
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        borderLeft: `6px solid ${accent}`,
+        border: `1px solid ${cardBorder}`,
+      }}>
+        <Trophy size={40} color={accent} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 18, color: textPrimary }}>{eleve.nom} {eleve.postnom}</div>
+          <div style={{ color: textSecondary, fontSize: 14 }}>
+            Rang : <strong>{eleve.rang}</strong> / {classement.length}
+          </div>
+          <div style={{ color: accent, fontWeight: 600, fontSize: 13, marginTop: 4 }}>
+            {mention || "Aucune mention"}
+          </div>
+        </div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: accent }}>
+          {eleve.moyenneGenerale.toFixed(1)}%
+        </div>
+      </div>
+
+      {/* Top 3 */}
+      <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: textPrimary }}>Top 3 de la classe</h3>
+      <div style={{ display: "grid", gap: 12 }}>
+        {top3.map((e, idx) => {
+          const couleurs = ["#FFD700", "#C0C0C0", "#CD7F32"];
+          const icones = [<Trophy size={24} />, <Medal size={24} />, <Star size={24} />];
+          return (
+            <div key={e._id} style={{
+              background: cardBg,
+              borderRadius: 12,
+              padding: 16,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              boxShadow: shadow,
+              border: `1px solid ${cardBorder}`,
+              borderLeft: `6px solid ${couleurs[idx]}`,
+            }}>
+              <div style={{ color: couleurs[idx] }}>{icones[idx]}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, color: textPrimary }}>{e.nom} {e.postnom}</div>
+                <div style={{ fontSize: 13, color: textSecondary }}>Moyenne : {e.moyenneGenerale.toFixed(1)}%</div>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: couleurs[idx] }}>#{e.rang}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---- Composant principal EleveApp ----
 export function EleveApp({
   user,
   ecoleId,
@@ -36,7 +135,6 @@ export function EleveApp({
     setTab("messagerie");
   };
 
-  // Récupération de l'élève lié à ce compte (filtré par année scolaire)
   const eleve = useQuery(
     api.eleves.getByUserId,
     anneeId ? { userId: user._id, anneeId } : "skip"
@@ -49,8 +147,6 @@ export function EleveApp({
     api.absences.listByEleve,
     eleve ? { eleveId: eleve._id } : "skip"
   ) ?? [];
-
-  // Cours de la classe pour les informations du tableau de bord
   const coursDisponibles = useQuery(
     api.cours.list,
     eleve ? { ecoleId, classe: eleve.classe } : "skip"
@@ -61,6 +157,10 @@ export function EleveApp({
     { id: "notes", label: "Notes", icon: <BookOpen size={20} /> },
     { id: "absences", label: "Absences", icon: <AlertTriangle size={20} /> },
     { id: "emploi", label: "Emploi du temps", icon: <Calendar size={20} /> },
+    { id: "examens", label: "Examens", icon: <ClipboardList size={20} /> },
+    { id: "bulletin", label: "Bulletin", icon: <FileText size={20} /> },
+    { id: "frais", label: "Frais", icon: <DollarSign size={20} /> },
+    { id: "classement", label: "Classement", icon: <Award size={20} /> },
     { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
     { id: "appels", label: "Appels", icon: <Phone size={20} /> },
     { id: "profil", label: "Profil", icon: <User size={20} /> },
@@ -73,8 +173,8 @@ export function EleveApp({
   if (eleve === undefined) {
     return (
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-        <GraduationCap size={48} color="#94A3B8" style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+        <GraduationCap size={48} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 16 }} />
+        <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
           Chargement de votre profil…
         </h2>
       </div>
@@ -86,17 +186,16 @@ export function EleveApp({
     return (
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
         <GraduationCap size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+        <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
           Aucun élève associé à ce compte
         </h2>
-        <p style={{ color: "#64748B", fontSize: 14 }}>
+        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
           Veuillez contacter l'administration pour associer votre compte à un élève.
         </p>
       </div>
     );
   }
 
-  // Calculs pour le tableau de bord
   const totalNotes = notes.length;
   const absencesCount = absences.filter((a) => a.type === "absence").length;
   const retardsCount = absences.filter((a) => a.type === "retard").length;
@@ -115,10 +214,10 @@ export function EleveApp({
       return (
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
           <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+          <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: "#64748B", fontSize: 14 }}>
+          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
             Veuillez contacter l'administration pour activer une année scolaire.
           </p>
         </div>
@@ -130,53 +229,30 @@ export function EleveApp({
         return (
           <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
             <div style={{ marginBottom: 32 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 700, color: "#1E293B", margin: 0 }}>
+              <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
                 👋 Bonjour, {eleve.nom}
               </h2>
-              <p style={{ color: "#64748B", marginTop: 4, fontSize: 14 }}>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", marginTop: 4, fontSize: 14 }}>
                 Classe {eleve.classe} · {anneeActive?.nom}
               </p>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 32 }}>
-              <StatCard icon={<BookOpen size={24} />} value={totalNotes} label="Notes" color="#4F46E5" />
-              <StatCard icon={<Award size={24} />} value={matieresAvecNotes} label="Matières" color="#10B981" />
-              <StatCard icon={<AlertTriangle size={24} />} value={absencesCount} label="Absences" color="#EF4444" />
-              <StatCard icon={<Clock size={24} />} value={retardsCount} label="Retards" color="#F59E0B" />
+              <StatCard icon={<BookOpen size={24} />} value={totalNotes} label="Notes" color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
+              <StatCard icon={<Award size={24} />} value={matieresAvecNotes} label="Matières" color="#10B981" dark={dark} />
+              <StatCard icon={<AlertTriangle size={24} />} value={absencesCount} label="Absences" color="#EF4444" dark={dark} />
+              <StatCard icon={<Clock size={24} />} value={retardsCount} label="Retards" color="#F59E0B" dark={dark} />
               {moyenneGenerale !== "-" && (
-                <StatCard icon={<TrendingUp size={24} />} value={`${moyenneGenerale}/20`} label="Moyenne générale" color="#6366F1" />
+                <StatCard icon={<TrendingUp size={24} />} value={`${moyenneGenerale}/20`} label="Moyenne générale" color="#6366F1" dark={dark} />
               )}
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
-              <QuickAccessCard
-                icon={<BookOpen size={28} />}
-                title="Notes"
-                subtitle="Consulter vos résultats"
-                onClick={() => setTab("notes")}
-                color="#4F46E5"
-              />
-              <QuickAccessCard
-                icon={<Calendar size={28} />}
-                title="Emploi du temps"
-                subtitle="Voir les horaires"
-                onClick={() => setTab("emploi")}
-                color="#10B981"
-              />
-              <QuickAccessCard
-                icon={<DollarSign size={28} />}
-                title="Frais"
-                subtitle="Suivre vos paiements"
-                onClick={() => setTab("frais")}
-                color="#F59E0B"
-              />
-              <QuickAccessCard
-                icon={<FileText size={28} />}
-                title="Bulletin"
-                subtitle="Votre bulletin scolaire"
-                onClick={() => setTab("bulletin")}
-                color="#6366F1"
-              />
+              <QuickAccessCard icon={<BookOpen size={28} />} title="Notes" subtitle="Consulter vos résultats" onClick={() => setTab("notes")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
+              <QuickAccessCard icon={<Calendar size={28} />} title="Emploi du temps" subtitle="Voir les horaires" onClick={() => setTab("emploi")} color="#10B981" dark={dark} />
+              <QuickAccessCard icon={<DollarSign size={28} />} title="Frais" subtitle="Suivre vos paiements" onClick={() => setTab("frais")} color="#F59E0B" dark={dark} />
+              <QuickAccessCard icon={<FileText size={28} />} title="Bulletin" subtitle="Votre bulletin scolaire" onClick={() => setTab("bulletin")} color="#6366F1" dark={dark} />
+              <QuickAccessCard icon={<Award size={28} />} title="Classement" subtitle="Voir votre rang" onClick={() => setTab("classement")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
             </div>
           </div>
         );
@@ -185,11 +261,11 @@ export function EleveApp({
         if (notes.length === 0) {
           return (
             <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-              <BookOpen size={48} color="#94A3B8" style={{ marginBottom: 16 }} />
-              <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+              <BookOpen size={48} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 16 }} />
+              <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
                 Aucune note disponible
               </h2>
-              <p style={{ color: "#64748B", fontSize: 14 }}>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
                 Vos notes seront affichées ici dès qu'elles seront saisies par vos enseignants.
               </p>
             </div>
@@ -197,7 +273,7 @@ export function EleveApp({
         }
         return (
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
-            <h2 style={{ fontSize: 28, fontWeight: 700, color: "#1E293B", marginBottom: 24 }}>Mes notes</h2>
+            <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 24 }}>Mes notes</h2>
             {Array.from(new Set(notes.map((n) => n.periode)))
               .sort()
               .map((periode) => {
@@ -216,14 +292,14 @@ export function EleveApp({
                       justifyContent: "space-between",
                       alignItems: "center",
                       padding: "12px 16px",
-                      background: "#F8FAFC",
+                      background: dark ? "#0F172A" : "#F8FAFC",
                       borderRadius: 8,
                       marginBottom: 12,
                     }}>
-                      <h3 style={{ fontSize: 18, fontWeight: 600, color: "#1E293B", margin: 0 }}>
+                      <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
                         {periode}
                       </h3>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#4F46E5" }}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: dark ? "#818CF8" : "#4F46E5" }}>
                         Moyenne {moyennePeriode}/20
                       </span>
                     </div>
@@ -236,20 +312,21 @@ export function EleveApp({
                             justifyContent: "space-between",
                             alignItems: "center",
                             padding: "10px 14px",
-                            background: "#FFF",
+                            background: dark ? "#1E293B" : "#FFFFFF",
                             borderRadius: 8,
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                            boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.04)" : "0 1px 2px rgba(0,0,0,0.04)",
+                            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                           }}
                         >
                           <div>
-                            <div style={{ fontWeight: 500, fontSize: 15 }}>{n.matiere}</div>
-                            <div style={{ fontSize: 12, color: "#64748B" }}>Coeff. {n.coefficient}</div>
+                            <div style={{ fontWeight: 500, fontSize: 15, color: dark ? "#F1F5F9" : "#1E293B" }}>{n.matiere}</div>
+                            <div style={{ fontSize: 12, color: dark ? "#94A3B8" : "#64748B" }}>Coeff. {n.coefficient}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             {n.appreciation && (
-                              <span style={{ fontSize: 12, color: "#64748B", fontStyle: "italic" }}>{n.appreciation}</span>
+                              <span style={{ fontSize: 12, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>{n.appreciation}</span>
                             )}
-                            <span style={{ fontWeight: 700, fontSize: 16, color: "#1E293B" }}>{n.note}/20</span>
+                            <span style={{ fontWeight: 700, fontSize: 16, color: dark ? "#F1F5F9" : "#1E293B" }}>{n.note}/20</span>
                           </div>
                         </div>
                       ))}
@@ -265,10 +342,10 @@ export function EleveApp({
           return (
             <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
               <AlertTriangle size={48} color="#10B981" style={{ marginBottom: 16 }} />
-              <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+              <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
                 Aucune absence ou retard
               </h2>
-              <p style={{ color: "#64748B", fontSize: 14 }}>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
                 Félicitations ! Vous êtes assidu(e).
               </p>
             </div>
@@ -276,7 +353,7 @@ export function EleveApp({
         }
         return (
           <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
-            <h2 style={{ fontSize: 28, fontWeight: 700, color: "#1E293B", marginBottom: 24 }}>
+            <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 24 }}>
               Absences & Retards
             </h2>
             <div style={{ display: "grid", gap: 8 }}>
@@ -290,9 +367,10 @@ export function EleveApp({
                       justifyContent: "space-between",
                       alignItems: "center",
                       padding: "12px 16px",
-                      background: "#FFF",
+                      background: dark ? "#1E293B" : "#FFFFFF",
                       borderRadius: 8,
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                      boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.04)" : "0 1px 2px rgba(0,0,0,0.04)",
+                      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -302,16 +380,16 @@ export function EleveApp({
                           borderRadius: 12,
                           fontSize: 12,
                           fontWeight: 600,
-                          background: a.type === "absence" ? "#FEE2E2" : "#FEF3C7",
-                          color: a.type === "absence" ? "#B91C1C" : "#92400E",
+                          background: a.type === "absence" ? (dark ? "#7F1D1D" : "#FEE2E2") : (dark ? "#78350F" : "#FEF3C7"),
+                          color: a.type === "absence" ? (dark ? "#F87171" : "#B91C1C") : (dark ? "#FBBF24" : "#92400E"),
                         }}
                       >
                         {a.type === "absence" ? "Absence" : "Retard"}
                       </span>
-                      <span style={{ fontSize: 14, fontWeight: 500 }}>{a.date}</span>
+                      <span style={{ fontSize: 14, fontWeight: 500, color: dark ? "#F1F5F9" : "#1E293B" }}>{a.date}</span>
                     </div>
                     {a.commentaire && (
-                      <span style={{ fontSize: 13, color: "#64748B", fontStyle: "italic" }}>
+                      <span style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>
                         {a.commentaire}
                       </span>
                     )}
@@ -347,7 +425,7 @@ export function EleveApp({
         return <PolitiqueConfidentialite />;
 
       case "aide":
-        return <Aide />;
+        return <Aide user={user} />;
 
       case "bulletin":
         return (
@@ -362,6 +440,19 @@ export function EleveApp({
 
       case "frais":
         return <FraisEnfant eleveId={eleve._id} />;
+
+      case "examens":
+        return <ConsultationExamens ecoleId={ecoleId} anneeId={anneeId} classe={eleve.classe} />;
+
+      case "classement":
+        return (
+          <ClassementEleve
+            ecoleId={ecoleId}
+            anneeId={anneeId}
+            classe={eleve.classe}
+            eleveId={eleve._id}
+          />
+        );
 
       default:
         return null;
@@ -380,8 +471,8 @@ export function EleveApp({
     >
       {!anneeId && (tab === "accueil" || tab === "notes" || tab === "absences" || tab === "emploi") && (
         <div style={{
-          background: "#FEF3C7",
-          color: "#92400E",
+          background: dark ? "#78350F" : "#FEF3C7",
+          color: dark ? "#FBBF24" : "#92400E",
           padding: "10px 20px",
           fontSize: 13,
           fontWeight: 500,
@@ -397,22 +488,23 @@ export function EleveApp({
   );
 }
 
-// Petite carte statistique
-function StatCard({ icon, value, label, color }) {
+// ---- Composants utilitaires adaptatifs ----
+function StatCard({ icon, value, label, color, dark }) {
   return (
     <div style={{
-      background: "#FFF",
+      background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 16,
       padding: 20,
       display: "flex",
       alignItems: "center",
       gap: 16,
-      boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     }}>
       <div style={{
         width: 48,
         height: 48,
-        background: `${color}15`,
+        background: `${color}${dark ? "33" : "15"}`,
         borderRadius: 12,
         display: "flex",
         alignItems: "center",
@@ -422,33 +514,33 @@ function StatCard({ icon, value, label, color }) {
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: "#1E293B" }}>{value}</div>
-        <div style={{ fontSize: 14, color: "#64748B" }}>{label}</div>
+        <div style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
+        <div style={{ fontSize: 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
       </div>
     </div>
   );
 }
 
-// Carte d'accès rapide
-function QuickAccessCard({ icon, title, subtitle, onClick, color }) {
+function QuickAccessCard({ icon, title, subtitle, onClick, color, dark }) {
   return (
     <div
       onClick={onClick}
       style={{
-        background: "#FFF",
+        background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 16,
         padding: 20,
         textAlign: "center",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         cursor: "pointer",
         transition: "box-shadow 0.15s, transform 0.1s",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)";
+        e.currentTarget.style.boxShadow = dark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.08)";
         e.currentTarget.style.transform = "translateY(-2px)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)";
+        e.currentTarget.style.boxShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
         e.currentTarget.style.transform = "translateY(0)";
       }}
     >
@@ -456,7 +548,7 @@ function QuickAccessCard({ icon, title, subtitle, onClick, color }) {
         width: 56,
         height: 56,
         borderRadius: 14,
-        background: `${color}15`,
+        background: `${color}${dark ? "33" : "15"}`,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -465,10 +557,10 @@ function QuickAccessCard({ icon, title, subtitle, onClick, color }) {
       }}>
         {icon}
       </div>
-      <div style={{ fontWeight: 600, fontSize: 16, color: "#1E293B", marginBottom: 4 }}>
+      <div style={{ fontWeight: 600, fontSize: 16, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 4 }}>
         {title}
       </div>
-      <div style={{ fontSize: 13, color: "#64748B" }}>
+      <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>
         {subtitle}
       </div>
     </div>

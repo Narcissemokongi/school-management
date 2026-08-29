@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
-import { Loader, Plus, Trash2, Edit2 } from "lucide-react";
+import { Loader, Plus, Trash2, Edit2, Search, X } from "lucide-react";
 
 export function GestionFautesEtSanctions({
   fautes,
@@ -16,7 +16,7 @@ export function GestionFautesEtSanctions({
   sanctions,
   userId,
 }) {
-  const { S } = useStyles();
+  const { dark } = useStyles();
   const { confirm, dialogProps } = useConfirm();
   const [subTab, setSubTab] = useState("fautes");
 
@@ -25,6 +25,7 @@ export function GestionFautesEtSanctions({
   const [libelle, setLibelle] = useState("");
   const [gravite, setGravite] = useState("Légère");
   const [addingFaute, setAddingFaute] = useState(false);
+  const [searchFaute, setSearchFaute] = useState("");
 
   // ----- État pour les sanctions -----
   const addSanction = useMutation(api.sanctions.add);
@@ -33,15 +34,41 @@ export function GestionFautesEtSanctions({
   const [editSanctionMode, setEditSanctionMode] = useState(null);
   const [sanctionLibelle, setSanctionLibelle] = useState("");
   const [addingSanction, setAddingSanction] = useState(false);
+  const [searchSanction, setSearchSanction] = useState("");
 
-  // Réinitialisation du formulaire de faute
+  // Couleurs adaptatives
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const inputBg = dark ? "#0F172A" : "#F8FAFC";
+  const inputText = dark ? "#F1F5F9" : "#1E293B";
+  const buttonPrimaryBg = dark ? "#818CF8" : "#4F46E5";
+  const buttonEditBg = dark ? "#FBBF24" : "#F59E0B";
+  const buttonDangerBg = "#EF4444";
+  const buttonSecondaryBg = dark ? "#334155" : "#F1F5F9";
+  const buttonSecondaryText = dark ? "#F1F5F9" : "#1E293B";
+
+  // Filtrage des fautes
+  const filteredFautes = useMemo(() => {
+    if (!searchFaute.trim()) return fautes;
+    const q = searchFaute.toLowerCase();
+    return fautes.filter((f) => f.libelle.toLowerCase().includes(q));
+  }, [fautes, searchFaute]);
+
+  // Filtrage des sanctions
+  const filteredSanctions = useMemo(() => {
+    if (!searchSanction.trim()) return sanctions;
+    const q = searchSanction.toLowerCase();
+    return sanctions.filter((s) => s.libelle.toLowerCase().includes(q));
+  }, [sanctions, searchSanction]);
+
   const resetForm = () => {
     setLibelle("");
     setGravite("Légère");
     setEditMode(null);
   };
 
-  // Soumission d'une faute
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!libelle.trim()) return;
@@ -62,14 +89,12 @@ export function GestionFautesEtSanctions({
     }
   };
 
-  // Édition d'une faute
   const startEdit = (f) => {
     setLibelle(f.libelle);
     setGravite(f.gravite);
     setEditMode(f._id);
   };
 
-  // Suppression d'une faute
   const deleteFaute = async (id) => {
     const ok = await confirm("Supprimer la faute", "Voulez-vous vraiment supprimer cette faute ?");
     if (!ok) return;
@@ -82,7 +107,6 @@ export function GestionFautesEtSanctions({
     }
   };
 
-  // ----- Sanctions -----
   const resetSanctionForm = () => {
     setSanctionLibelle("");
     setEditSanctionMode(null);
@@ -124,32 +148,45 @@ export function GestionFautesEtSanctions({
     }
   };
 
-  // Styles d'input réutilisables
   const inputStyle = {
     width: "100%",
     padding: "10px 14px",
-    border: "1px solid #E2E8F0",
+    border: `1px solid ${cardBorder}`,
     borderRadius: 8,
     fontSize: 14,
     marginBottom: 16,
     outline: "none",
-    background: "#F8FAFC",
+    background: inputBg,
+    color: inputText,
+    transition: "border-color 0.2s, background-color 0.3s",
+  };
+
+  // Style pour la barre de recherche
+  const searchStyle = {
+    display: "flex",
+    alignItems: "center",
+    background: inputBg,
+    border: `1px solid ${cardBorder}`,
+    borderRadius: 8,
+    padding: "8px 12px",
+    marginBottom: 16,
+    gap: 8,
   };
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
       {/* En-tête */}
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: "#1E293B", margin: 0 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Discipline
         </h2>
-        <p style={{ color: "#64748B", marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
           Gérez les types de fautes et les sanctions
         </p>
       </div>
 
       {/* Onglets */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #E2E8F0", marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: 24 }}>
         {[
           { id: "fautes", label: "Types de fautes" },
           { id: "sanctions", label: "Sanctions" },
@@ -164,9 +201,9 @@ export function GestionFautesEtSanctions({
               padding: "12px 20px",
               border: "none",
               background: "transparent",
-              color: subTab === t.id ? "#4F46E5" : "#64748B",
+              color: subTab === t.id ? (dark ? "#818CF8" : "#4F46E5") : textSecondary,
               fontWeight: subTab === t.id ? 600 : 400,
-              borderBottom: subTab === t.id ? "3px solid #4F46E5" : "3px solid transparent",
+              borderBottom: subTab === t.id ? `3px solid ${dark ? "#818CF8" : "#4F46E5"}` : "3px solid transparent",
               cursor: "pointer",
               transition: "all 0.2s",
             }}
@@ -176,35 +213,37 @@ export function GestionFautesEtSanctions({
         ))}
       </div>
 
-      {/* Contenu */}
+      {/* Contenu fautes */}
       {subTab === "fautes" && (
         <div>
           {/* Formulaire */}
           <div
             style={{
-              background: "#FFF",
+              background: cardBg,
               borderRadius: 16,
               padding: 24,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+              border: `1px solid ${cardBorder}`,
               marginBottom: 24,
+              transition: "background-color 0.3s",
             }}
           >
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
               {editMode ? "Modifier la faute" : "Nouvelle faute"}
             </h3>
             <form onSubmit={handleSubmit}>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Libellé</label>
+              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Libellé</label>
               <input
                 style={inputStyle}
                 placeholder="Ex: Chewing-gum"
                 value={libelle}
                 onChange={(e) => setLibelle(e.target.value)}
               />
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Gravité</label>
+              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Gravité</label>
               <select
                 value={gravite}
                 onChange={(e) => setGravite(e.target.value)}
-                style={inputStyle}
+                style={{ ...inputStyle, background: inputBg, color: inputText }}
               >
                 <option value="Légère">Légère</option>
                 <option value="Moyenne">Moyenne</option>
@@ -219,7 +258,7 @@ export function GestionFautesEtSanctions({
                     alignItems: "center",
                     gap: 6,
                     padding: "10px 20px",
-                    background: addingFaute ? "#A5B4FC" : editMode ? "#F59E0B" : "#4F46E5",
+                    background: addingFaute ? "#A5B4FC" : editMode ? buttonEditBg : buttonPrimaryBg,
                     color: "white",
                     border: "none",
                     borderRadius: 10,
@@ -243,11 +282,12 @@ export function GestionFautesEtSanctions({
                     onClick={resetForm}
                     style={{
                       padding: "10px 20px",
-                      background: "#F1F5F9",
+                      background: buttonSecondaryBg,
                       border: "none",
                       borderRadius: 10,
                       fontWeight: 500,
                       cursor: "pointer",
+                      color: buttonSecondaryText,
                     }}
                   >
                     Annuler
@@ -257,37 +297,55 @@ export function GestionFautesEtSanctions({
             </form>
           </div>
 
+          {/* Recherche */}
+          <div style={searchStyle}>
+            <Search size={16} color={textSecondary} />
+            <input
+              value={searchFaute}
+              onChange={(e) => setSearchFaute(e.target.value)}
+              placeholder="Rechercher une faute..."
+              style={{ border: "none", outline: "none", background: "transparent", width: "100%", color: inputText }}
+            />
+            {searchFaute && (
+              <button onClick={() => setSearchFaute("")} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
           {/* Liste des fautes */}
           <div style={{ display: "grid", gap: 12 }}>
-            {fautes.length === 0 && (
+            {filteredFautes.length === 0 && (
               <div
                 style={{
-                  background: "#FFF",
+                  background: cardBg,
                   borderRadius: 16,
                   padding: 48,
                   textAlign: "center",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                  color: "#64748B",
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                  border: `1px solid ${cardBorder}`,
+                  color: textSecondary,
                 }}
               >
-                <p>Aucun type de faute défini.</p>
+                <p>{searchFaute ? "Aucune faute trouvée." : "Aucun type de faute défini."}</p>
               </div>
             )}
-            {fautes.map((f) => (
+            {filteredFautes.map((f) => (
               <div
                 key={f._id}
                 style={{
-                  background: "#FFF",
+                  background: cardBg,
                   borderRadius: 12,
                   padding: "16px 20px",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                  border: `1px solid ${cardBorder}`,
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 16 }}>{f.libelle}</div>
+                  <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>{f.libelle}</div>
                   <span
                     style={{
                       display: "inline-block",
@@ -298,16 +356,16 @@ export function GestionFautesEtSanctions({
                       fontWeight: 600,
                       background:
                         f.gravite === "Grave"
-                          ? "#FEE2E2"
+                          ? dark ? "#7F1D1D" : "#FEE2E2"
                           : f.gravite === "Moyenne"
-                          ? "#FEF3C7"
-                          : "#D1FAE5",
+                          ? dark ? "#78350F" : "#FEF3C7"
+                          : dark ? "#064E3B" : "#D1FAE5",
                       color:
                         f.gravite === "Grave"
-                          ? "#B91C1C"
+                          ? dark ? "#F87171" : "#B91C1C"
                           : f.gravite === "Moyenne"
-                          ? "#92400E"
-                          : "#065F46",
+                          ? dark ? "#FBBF24" : "#92400E"
+                          : dark ? "#34D399" : "#065F46",
                     }}
                   >
                     {f.gravite}
@@ -316,28 +374,14 @@ export function GestionFautesEtSanctions({
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     onClick={() => startEdit(f)}
-                    style={{
-                      background: "#4F46E5",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      cursor: "pointer",
-                    }}
+                    style={{ background: buttonPrimaryBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
                     title="Modifier"
                   >
                     <Edit2 size={16} />
                   </button>
                   <button
                     onClick={() => deleteFaute(f._id)}
-                    style={{
-                      background: "#EF4444",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      cursor: "pointer",
-                    }}
+                    style={{ background: buttonDangerBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
                     title="Supprimer"
                   >
                     <Trash2 size={16} />
@@ -349,23 +393,25 @@ export function GestionFautesEtSanctions({
         </div>
       )}
 
+      {/* Contenu sanctions */}
       {subTab === "sanctions" && (
         <div>
           {/* Formulaire sanction */}
           <div
             style={{
-              background: "#FFF",
+              background: cardBg,
               borderRadius: 16,
               padding: 24,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+              border: `1px solid ${cardBorder}`,
               marginBottom: 24,
             }}
           >
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
               {editSanctionMode ? "Modifier la sanction" : "Nouvelle sanction"}
             </h3>
             <form onSubmit={handleSanctionSubmit}>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Libellé</label>
+              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Libellé</label>
               <input
                 style={inputStyle}
                 placeholder="Ex: Retenue"
@@ -381,7 +427,7 @@ export function GestionFautesEtSanctions({
                     alignItems: "center",
                     gap: 6,
                     padding: "10px 20px",
-                    background: addingSanction ? "#A5B4FC" : editSanctionMode ? "#F59E0B" : "#4F46E5",
+                    background: addingSanction ? "#A5B4FC" : editSanctionMode ? buttonEditBg : buttonPrimaryBg,
                     color: "white",
                     border: "none",
                     borderRadius: 10,
@@ -405,11 +451,12 @@ export function GestionFautesEtSanctions({
                     onClick={resetSanctionForm}
                     style={{
                       padding: "10px 20px",
-                      background: "#F1F5F9",
+                      background: buttonSecondaryBg,
                       border: "none",
                       borderRadius: 10,
                       fontWeight: 500,
                       cursor: "pointer",
+                      color: buttonSecondaryText,
                     }}
                   >
                     Annuler
@@ -419,61 +466,65 @@ export function GestionFautesEtSanctions({
             </form>
           </div>
 
+          {/* Recherche */}
+          <div style={searchStyle}>
+            <Search size={16} color={textSecondary} />
+            <input
+              value={searchSanction}
+              onChange={(e) => setSearchSanction(e.target.value)}
+              placeholder="Rechercher une sanction..."
+              style={{ border: "none", outline: "none", background: "transparent", width: "100%", color: inputText }}
+            />
+            {searchSanction && (
+              <button onClick={() => setSearchSanction("")} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
           {/* Liste des sanctions */}
           <div style={{ display: "grid", gap: 12 }}>
-            {sanctions.length === 0 && (
+            {filteredSanctions.length === 0 && (
               <div
                 style={{
-                  background: "#FFF",
+                  background: cardBg,
                   borderRadius: 16,
                   padding: 48,
                   textAlign: "center",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                  color: "#64748B",
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                  border: `1px solid ${cardBorder}`,
+                  color: textSecondary,
                 }}
               >
-                <p>Aucune sanction définie.</p>
+                <p>{searchSanction ? "Aucune sanction trouvée." : "Aucune sanction définie."}</p>
               </div>
             )}
-            {sanctions.map((s) => (
+            {filteredSanctions.map((s) => (
               <div
                 key={s._id}
                 style={{
-                  background: "#FFF",
+                  background: cardBg,
                   borderRadius: 12,
                   padding: "16px 20px",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                  border: `1px solid ${cardBorder}`,
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 16 }}>{s.libelle}</div>
+                <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>{s.libelle}</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     onClick={() => startEditSanction(s)}
-                    style={{
-                      background: "#4F46E5",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      cursor: "pointer",
-                    }}
+                    style={{ background: buttonPrimaryBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
                     title="Modifier"
                   >
                     <Edit2 size={16} />
                   </button>
                   <button
                     onClick={() => handleDeleteSanction(s._id)}
-                    style={{
-                      background: "#EF4444",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      cursor: "pointer",
-                    }}
+                    style={{ background: buttonDangerBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
                     title="Supprimer"
                   >
                     <Trash2 size={16} />

@@ -72,3 +72,43 @@ export const setActive = mutation({
     return { success: true };
   },
 });
+
+// Renommer une année scolaire
+export const rename = mutation({
+  args: {
+    id: v.id("anneesScolaires"),
+    nom: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const trimmed = args.nom.trim();
+    if (!trimmed) throw new Error("Le nom est requis.");
+    await ctx.db.patch(args.id, { nom: trimmed });
+    return { success: true };
+  },
+});
+
+// Supprimer une année scolaire (avec vérification des dépendances)
+export const remove = mutation({
+  args: {
+    id: v.id("anneesScolaires"),
+  },
+  handler: async (ctx, args) => {
+    const annee = await ctx.db.get(args.id);
+    if (!annee) throw new Error("Année introuvable");
+
+    // Vérifier qu'aucune inscription n'est liée à cette année
+    const inscriptions = await ctx.db
+      .query("inscriptions")
+      .withIndex("by_anneeId", (q) => q.eq("anneeId", args.id))
+      .collect();
+    if (inscriptions.length > 0) {
+      throw new Error("Impossible de supprimer : des inscriptions sont liées à cette année.");
+    }
+
+    // Vérifier éventuellement d'autres tables (notes, frais, etc.) si nécessaire
+    // Ici nous pouvons ajouter d'autres vérifications selon votre schéma.
+
+    await ctx.db.delete(args.id);
+    return { success: true };
+  },
+});

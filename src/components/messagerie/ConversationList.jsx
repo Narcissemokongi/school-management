@@ -1,148 +1,248 @@
 import { useState, useMemo } from "react";
-import { Search, Send, GraduationCap, Users } from "lucide-react";
-import { VIEW } from "./MessagerieApp"; // Assurez-vous d'exporter VIEW si nécessaire
+import { useStyles } from "../../styles/theme";
+import { MessageSquarePlus, Megaphone, Search, X } from "lucide-react";
+import { VIEW } from "./MessagerieApp";
 
 export function ConversationList({
-  user, utilisateurs, conversations, availableGroups,
-  messagesEnvoyes, messagesRecus, selectedUserId, activeGroupId,
-  navigateTo, getUserName, S, dark, currentView, isMobile, goBack
+  user,
+  utilisateurs = [],
+  conversations = [],
+  availableGroups = [],
+  selectedUserId,
+  activeGroupId,
+  navigateTo,
+  getUserName,
+  currentView,
+  isMobile,
+  goBack,
 }) {
+  const { dark } = useStyles();
   const [searchTerm, setSearchTerm] = useState("");
-  const showNewChat = currentView.view === VIEW.NEW_CHAT;
+  const showNewChat = currentView?.view === VIEW.NEW_CHAT;
+
+  // Couleurs adaptatives
+  const bg = dark ? "#1E293B" : "#FFFFFF";
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const borderColor = dark ? "#334155" : "#E2E8F0";
+  const hoverBg = dark ? "#26334D" : "#F1F5F9";
+  const activeBg = dark ? "#312E81" : "#EEF2FF";
+  const inputBg = dark ? "#0F172A" : "#F9FAFB";
 
   const filteredUsers = useMemo(() => {
     if (!showNewChat) return [];
     let list = utilisateurs.filter((u) => {
       if (u._id === user._id) return false;
+      // Règles de visibilité selon le rôle
       if (user.role === "parent" && (u.role === "parent" || u.role === "eleve")) return false;
       if (user.role === "eleve" && (u.role === "eleve" || u.role === "parent")) return false;
+      if (user.role === "enseignant" && u.role !== "eleve") return false;
+      if (user.role === "enseignant" && u.role === "eleve" && u.classe !== user.classe) return false;
       return true;
     });
     if (searchTerm.trim()) {
-      list = list.filter((u) => u.nom.toLowerCase().includes(searchTerm.toLowerCase()));
+      const q = searchTerm.toLowerCase();
+      list = list.filter((u) => u.nom.toLowerCase().includes(q));
     }
     return list;
   }, [showNewChat, utilisateurs, user, searchTerm]);
 
   return (
     <div style={{
-      width: isMobile ? "100%" : 320,
-      minWidth: isMobile ? "100%" : 320,
-      borderRight: isMobile ? "none" : "1px solid #E2E8F0",
-      display: "flex", flexDirection: "column", height: "100%",
-      background: "#FFFFFF"
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      width: "100%",
+      background: bg,
+      transition: "background-color 0.3s",
     }}>
+      {/* En-tête */}
       <div style={{
-        padding: "16px", borderBottom: "1px solid #E2E8F0",
-        display: "flex", justifyContent: "space-between", alignItems: "center"
+        padding: 16,
+        borderBottom: `1px solid ${borderColor}`,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
       }}>
-        <h2 style={{ fontSize: 20, fontWeight: 600, color: "#1E293B", margin: 0 }}>Messages</h2>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: textPrimary }}>
+          Messages
+        </h2>
         <div style={{ display: "flex", gap: 8 }}>
-          {["admin", "directeur", "disciplinaire", "enseignant"].includes(user.role) && (
-            <button onClick={() => navigateTo(VIEW.BROADCAST)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#4F46E5" }}
+          {["admin", "directeur", "disciplinaire"].includes(user.role) && (
+            <button
+              onClick={() => navigateTo(VIEW.BROADCAST)}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: textSecondary,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                transition: "background 0.2s",
+              }}
               title="Diffusion"
             >
-              <Send size={18} />
+              <Megaphone size={20} />
             </button>
           )}
           <button
-            onClick={() => showNewChat ? navigateTo(VIEW.LIST) : navigateTo(VIEW.NEW_CHAT)}
+            onClick={() => (showNewChat ? navigateTo(VIEW.LIST) : navigateTo(VIEW.NEW_CHAT))}
             style={{
-              background: showNewChat ? "transparent" : "#4F46E5",
-              color: showNewChat ? "#1E293B" : "#FFFFFF",
-              border: showNewChat ? "1px solid #E2E8F0" : "none",
-              borderRadius: 8, padding: "6px 12px", fontSize: 13,
-              fontWeight: 600, cursor: "pointer"
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: textSecondary,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              transition: "background 0.2s",
             }}
+            title={showNewChat ? "Retour" : "Nouvelle conversation"}
           >
-            {showNewChat ? "← Retour" : "+ Nouveau"}
+            <MessageSquarePlus size={20} />
           </button>
         </div>
       </div>
 
+      {/* Contenu */}
       {showNewChat ? (
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <div style={{ padding: "8px 16px" }}>
-            <div style={{
-              display: "flex", alignItems: "center",
-              background: "#F1F5F9", borderRadius: 8, padding: "4px 12px"
-            }}>
-              <Search size={16} color="#94A3B8" />
-              <input
-                style={{
-                  border: "none", outline: "none", background: "transparent",
-                  marginLeft: 8, fontSize: 14, width: "100%"
-                }}
-                placeholder="Rechercher..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-          {filteredUsers.map((u) => (
-            <div key={u._id} onClick={() => navigateTo(VIEW.CHAT, { userId: u._id })}
+        <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+          {/* Barre de recherche */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            background: inputBg,
+            border: `1px solid ${borderColor}`,
+            borderRadius: 8,
+            padding: "8px 12px",
+            marginBottom: 8,
+          }}>
+            <Search size={16} color={textSecondary} />
+            <input
               style={{
-                padding: "12px 16px", cursor: "pointer",
-                borderBottom: "1px solid #F1F5F9",
-                transition: "background 0.15s"
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                color: textPrimary,
+                fontSize: 14,
+                width: "100%",
+                marginLeft: 8,
               }}
-              onMouseEnter={e => e.currentTarget.style.background = "#F8FAFC"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-            >
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{u.nom}</div>
-              <div style={{ fontSize: 12, color: "#64748B" }}>{u.role}</div>
+              placeholder="Rechercher un utilisateur..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* Liste des utilisateurs filtrés */}
+          {filteredUsers.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 24, color: textSecondary }}>
+              Aucun utilisateur trouvé
             </div>
-          ))}
+          ) : (
+            filteredUsers.map((u) => (
+              <div
+                key={u._id}
+                onClick={() => navigateTo(VIEW.CHAT, { userId: u._id })}
+                style={{
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  borderRadius: 8,
+                  borderBottom: `1px solid ${borderColor}`,
+                  color: textPrimary,
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                {u.nom} {u.postnom ? u.postnom : ""} {u.prenom ? u.prenom : ""}
+              </div>
+            ))
+          )}
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: "auto" }}>
+          {/* Groupes */}
           {availableGroups.length > 0 && (
-            <div style={{ borderBottom: "1px solid #E2E8F0", paddingBottom: 8 }}>
-              <div style={{ padding: "12px 16px 4px", fontSize: 12, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>
+            <div style={{ borderBottom: `1px solid ${borderColor}`, paddingBottom: 8 }}>
+              <div style={{
+                padding: "12px 16px 6px",
+                fontSize: 12,
+                fontWeight: 700,
+                color: textSecondary,
+                textTransform: "uppercase",
+              }}>
                 Groupes
               </div>
               {availableGroups.map((group) => (
-                <div key={group.id} onClick={() => navigateTo(VIEW.GROUP, { groupId: group.id })}
+                <div
+                  key={group.id}
+                  onClick={() => navigateTo(VIEW.GROUP, { groupId: group.id })}
                   style={{
-                    padding: "10px 16px", cursor: "pointer",
-                    background: activeGroupId === group.id ? "#EEF2FF" : "transparent",
-                    borderBottom: "1px solid #F1F5F9",
-                    display: "flex", alignItems: "center", gap: 8,
-                    transition: "background 0.15s"
+                    padding: "10px 16px",
+                    cursor: "pointer",
+                    background: activeGroupId === group.id ? activeBg : "transparent",
+                    borderBottom: `1px solid ${borderColor}`,
+                    color: textPrimary,
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (activeGroupId !== group.id) e.currentTarget.style.background = hoverBg;
+                  }}
+                  onMouseLeave={(e) => {
+                    if (activeGroupId !== group.id) e.currentTarget.style.background = "transparent";
                   }}
                 >
-                  {group.icon === "GraduationCap" ? <GraduationCap size={18} color="#4F46E5" /> : <Users size={18} color="#4F46E5" />}
-                  <span style={{ fontWeight: 500, fontSize: 14 }}>{group.label}</span>
+                  {group.label}
                 </div>
               ))}
             </div>
           )}
 
-          {conversations.length === 0 && (
-            <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Aucune conversation</div>
-          )}
-          {conversations.map((conv) => {
-            const lastMsg = [...messagesEnvoyes, ...messagesRecus].find(
-              (m) => (m.expediteurId === conv.userId && m.destinataireId === user._id) ||
-                     (m.destinataireId === conv.userId && m.expediteurId === user._id)
-            );
-            return (
-              <div key={conv.userId} onClick={() => navigateTo(VIEW.CHAT, { userId: conv.userId })}
+          {/* Conversations privées */}
+          {conversations.length === 0 ? (
+            <div style={{ padding: 24, textAlign: "center", color: textSecondary }}>
+              Aucune conversation
+            </div>
+          ) : (
+            conversations.map((conv) => (
+              <div
+                key={conv.userId}
+                onClick={() => navigateTo(VIEW.CHAT, { userId: conv.userId })}
                 style={{
-                  padding: "12px 16px", cursor: "pointer",
-                  background: selectedUserId === conv.userId ? "#EEF2FF" : "transparent",
-                  borderBottom: "1px solid #F1F5F9",
-                  transition: "background 0.15s"
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  background: selectedUserId === conv.userId ? activeBg : "transparent",
+                  borderBottom: `1px solid ${borderColor}`,
+                  color: textPrimary,
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedUserId !== conv.userId) e.currentTarget.style.background = hoverBg;
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedUserId !== conv.userId) e.currentTarget.style.background = "transparent";
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{getUserName(conv.userId)}</div>
-                <div style={{ fontSize: 12, color: "#64748B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {lastMsg ? lastMsg.contenu.substring(0, 40) + (lastMsg.contenu.length > 40 ? "..." : "") : "Nouvelle conversation"}
-                </div>
+                {getUserName(conv.userId)}
               </div>
-            );
-          })}
+            ))
+          )}
         </div>
       )}
     </div>

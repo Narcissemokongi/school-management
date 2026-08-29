@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useDebounce } from "../hooks/useDebounce";
 import { Skeleton } from "./Skeleton";
 import { EmptyState } from "./EmptyState";
-import { ChevronUp, ChevronDown, Search } from "lucide-react";
+import { ChevronUp, ChevronDown, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useStyles } from "../styles/theme";
 
 export function DataTable({
@@ -20,11 +20,13 @@ export function DataTable({
   const headerBg = dark ? "#0f172a" : "#f8fafc";
   const headerBorder = dark ? "#334155" : "#e2e8f0";
   const headerText = dark ? "#cbd5e1" : "#475569";
-  const rowEven = dark ? "#1e293b" : "#fff";
+  const rowEven = dark ? "#1e293b" : "#ffffff";
   const rowOdd = dark ? "#0f172a" : "#f9fafb";
   const rowBorder = dark ? "#334155" : "#e2e8f0";
   const cellText = dark ? "#f1f5f9" : "#334155";
   const iconColor = dark ? "#94a3b8" : "#94a3b8";
+  const paginationBg = dark ? "#1e293b" : "#ffffff";
+  const paginationBorder = dark ? "#334155" : "#e2e8f0";
 
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState(null);
@@ -38,7 +40,8 @@ export function DataTable({
     if (!debouncedSearch) return data;
     return data.filter((row) =>
       columns.some((col) => {
-        const val = col.accessor ? row[col.accessor] : "";
+        if (!col.accessor) return false;
+        const val = row[col.accessor];
         return String(val)
           .toLowerCase()
           .includes(debouncedSearch.toLowerCase());
@@ -50,19 +53,31 @@ export function DataTable({
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;
     return [...filteredData].sort((a, b) => {
-      const aVal = a[sortKey] ?? "";
-      const bVal = b[sortKey] ?? "";
+      const aVal = columns.find((c) => c.accessor === sortKey)?.sortValue
+        ? columns.find((c) => c.accessor === sortKey).sortValue(a)
+        : a[sortKey] ?? "";
+      const bVal = columns.find((c) => c.accessor === sortKey)?.sortValue
+        ? columns.find((c) => c.accessor === sortKey).sortValue(b)
+        : b[sortKey] ?? "";
+
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDir === "asc" ? aVal - bVal : bVal - aVal;
       }
       return sortDir === "asc"
-        ? String(aVal).localeCompare(String(bVal))
-        : String(bVal).localeCompare(String(aVal));
+        ? String(aVal).localeCompare(String(bVal), undefined, { numeric: true, sensitivity: "base" })
+        : String(bVal).localeCompare(String(aVal), undefined, { numeric: true, sensitivity: "base" });
     });
-  }, [filteredData, sortKey, sortDir]);
+  }, [filteredData, sortKey, sortDir, columns]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
   const paginatedData = sortedData.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
@@ -70,7 +85,7 @@ export function DataTable({
 
   const handleSort = (key) => {
     if (sortKey === key) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc")); // correction : toggle correct
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
       setSortDir("asc");
@@ -111,13 +126,18 @@ export function DataTable({
         />
       </div>
 
+      {/* Résumé des résultats */}
+      <div style={{ fontSize: 13, color: S.textMuted, marginBottom: 8 }}>
+        {filteredData.length} résultat(s)
+      </div>
+
       {/* Tableau */}
-      <div style={{ overflowX: "auto", maxWidth: "100%" }}>
+      <div style={{ overflowX: "auto", maxWidth: "100%", borderRadius: 8, border: `1px solid ${rowBorder}` }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr style={{ background: headerBg, borderBottom: `2px solid ${headerBorder}` }}>
               {columns.map((col) => {
-                const isSortable = col.sortable !== false;
+                const isSortable = col.sortable !== false && col.accessor;
                 const isActive = sortKey === col.accessor;
                 return (
                   <th
@@ -181,9 +201,20 @@ export function DataTable({
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
             aria-label="Page précédente"
-            style={{ ...S.btnSm(S.textMuted), width: "auto" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              background: paginationBg,
+              border: `1px solid ${paginationBorder}`,
+              borderRadius: 8,
+              padding: "6px 12px",
+              cursor: currentPage === 1 ? "not-allowed" : "pointer",
+              color: currentPage === 1 ? "#94a3b8" : dark ? "#f1f5f9" : "#1e293b",
+              opacity: currentPage === 1 ? 0.5 : 1,
+            }}
           >
-            ← Précédent
+            <ChevronLeft size={16} /> Précédent
           </button>
           <span style={{ fontSize: 13, color: S.textMuted }} aria-live="polite">
             Page {currentPage} sur {totalPages}
@@ -192,9 +223,20 @@ export function DataTable({
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
             aria-label="Page suivante"
-            style={{ ...S.btnSm(S.textMuted), width: "auto" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              background: paginationBg,
+              border: `1px solid ${paginationBorder}`,
+              borderRadius: 8,
+              padding: "6px 12px",
+              cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+              color: currentPage === totalPages ? "#94a3b8" : dark ? "#f1f5f9" : "#1e293b",
+              opacity: currentPage === totalPages ? 0.5 : 1,
+            }}
           >
-            Suivant →
+            Suivant <ChevronRight size={16} />
           </button>
         </nav>
       )}

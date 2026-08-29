@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { useStyles } from "../components/ThemeProvider";
+import { useState, useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useStyles } from "../styles/theme";
 import { Layout } from "./Layout";
 import { DashboardDirecteur } from "./DashboardDirecteur";
 import { RechercheEleve } from "./RechercheEleve";
@@ -10,16 +12,11 @@ import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
+import { StatistiquesAvancees } from "./StatistiquesAvancees";
+import { AssistantPassage } from "./AssistantPassage";
 import {
-  Home,
-  User,
-  Building,
-  MessageCircle,
-  Phone,
-  HelpCircle,
-  FileText,
-  Shield,
-  Calendar,
+  Home, User, Building, MessageCircle, Phone, HelpCircle,
+  FileText, Shield, Calendar, BarChart, ArrowRight,
 } from "lucide-react";
 
 export function DirecteurApp({
@@ -39,6 +36,30 @@ export function DirecteurApp({
   const [tab, setTab] = useState("accueil");
   const [messagingContactId, setMessagingContactId] = useState(null);
 
+  // ========== HOOKS TOUJOURS EN PREMIER ==========
+  const annees = useQuery(
+    api.anneesScolaires.listByEcole,
+    user.ecoleId ? { ecoleId: user.ecoleId } : "skip"
+  ) ?? [];
+
+  // ✅ Pour le badge Passage : récupérer les inscriptions et propositions
+  const inscriptions = useQuery(
+    api.inscriptions.listByAnnee,
+    user.ecoleId && anneeId ? { ecoleId: user.ecoleId, anneeId } : "skip"
+  ) ?? [];
+
+  const propositions = useQuery(
+    api.propositionsPassage.listPropositions,
+    user.ecoleId && anneeId ? { ecoleId: user.ecoleId, anneeId } : "skip"
+  ) ?? [];
+
+  // Calcul du nombre d'élèves sans décision
+  const nbElevesSansDecision = useMemo(() => {
+    if (!inscriptions || !propositions) return 0;
+    const elevesProposes = new Set(propositions.map((p) => p.eleveId));
+    return inscriptions.filter((insc) => !elevesProposes.has(insc.eleveId)).length;
+  }, [inscriptions, propositions]);
+
   const handleNavigateToMessaging = (contactId) => {
     setMessagingContactId(contactId);
     setTab("messagerie");
@@ -46,6 +67,13 @@ export function DirecteurApp({
 
   const menu = [
     { id: "accueil", label: "Tableau de bord", icon: <Home size={20} /> },
+    {
+      id: "passage",
+      label: "Passage",
+      icon: <ArrowRight size={20} />,
+      badge: nbElevesSansDecision > 0 ? nbElevesSansDecision : null,
+    },
+    { id: "statistiques", label: "Statistiques", icon: <BarChart size={20} /> },
     { id: "eleves", label: "Élèves", icon: <User size={20} /> },
     { id: "classes", label: "Classes", icon: <Building size={20} /> },
     { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
@@ -57,16 +85,15 @@ export function DirecteurApp({
   ];
 
   const renderContent = () => {
-    // Si aucune année scolaire active et que l'onglet nécessite des données (accueil, élèves, classes), afficher un message
-    if (!anneeId && ["accueil", "eleves", "classes"].includes(tab)) {
+    if (!anneeId && ["accueil", "eleves", "classes", "statistiques", "passage"].includes(tab)) {
       return (
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
           <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+          <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: "#64748B", fontSize: 14 }}>
-            Veuillez demander à l'administrateur d'activer une année scolaire pour accéder aux données de l'établissement.
+          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+            Veuillez demander à l'administrateur d'activer une année scolaire pour accéder à cette section.
           </p>
         </div>
       );
@@ -86,12 +113,32 @@ export function DirecteurApp({
             notifs={notifs}
           />
         );
+
+      case "passage":
+        return (
+          <AssistantPassage
+            ecoleId={user.ecoleId}
+            anneeActiveId={anneeId}
+            classes={classes}
+            user={user}
+            // ✅ On peut passer les inscriptions et propositions déjà chargées pour éviter des queries en double
+            initialInscriptions={inscriptions}
+            initialPropositions={propositions}
+          />
+        );
+
+      case "statistiques":
+        return <StatistiquesAvancees ecoleId={user.ecoleId} anneeId={anneeId} classes={classes} annees={annees} />;
+
       case "eleves":
         return <RechercheEleve punitions={punitions} eleves={eleves} fautes={fautes} />;
+
       case "classes":
         return <StatistiquesClasses punitions={punitions} eleves={eleves} classes={classes} fautes={fautes} />;
+
       case "messagerie":
         return <MessagerieApp user={user} ecoleId={user.ecoleId} initialSelectedUserId={messagingContactId} />;
+
       case "appels":
         return (
           <Appels
@@ -101,14 +148,19 @@ export function DirecteurApp({
             onNavigateToMessaging={handleNavigateToMessaging}
           />
         );
+
       case "profil":
         return <ProfilUtilisateur user={user} />;
+
       case "aide":
-        return <Aide />;
+        return <Aide user={user} />;
+
       case "mentions":
         return <MentionsLegales />;
+
       case "confidentialite":
         return <PolitiqueConfidentialite />;
+
       default:
         return null;
     }
@@ -124,11 +176,10 @@ export function DirecteurApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {/* Bannière d'avertissement si année inactive (mais pas pour les onglets hors données) */}
       {!anneeId && !["messagerie", "appels", "profil", "aide", "mentions", "confidentialite"].includes(tab) && (
         <div style={{
-          background: "#FEF3C7",
-          color: "#92400E",
+          background: dark ? "#78350F" : "#FEF3C7",
+          color: dark ? "#FBBF24" : "#92400E",
           padding: "10px 20px",
           fontSize: 13,
           fontWeight: 500,

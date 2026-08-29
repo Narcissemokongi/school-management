@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Capacitor } from "@capacitor/core";
@@ -22,14 +22,12 @@ import { NotificationsManager } from "./NotificationsManager";
 import toast from "react-hot-toast";
 import { useIsMobile } from "../hooks/useIsMobile";
 
-// Petit hook pour la navigation historique (utilisé en interne)
 function useHistoryNavigation(onBack) {
   useEffect(() => {
     const handlePopState = () => {
       onBack();
     };
     window.addEventListener("popstate", handlePopState);
-    // Pousser un état initial pour éviter de quitter l'appli au premier back
     if (window.history.state === null) {
       window.history.pushState(null, "", window.location.href);
     }
@@ -44,18 +42,16 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
   const isSuperAdmin = user.role === "admin" && !user.ecoleId;
 
-  // Pile de navigation pour les écrans principaux (superadmin / école)
+  // Pile de navigation
   const [screenStack, setScreenStack] = useState([
     isSuperAdmin ? "superadmin" : "ecole",
   ]);
   const currentScreen = screenStack[screenStack.length - 1];
 
-  // État pour l'école sélectionnée (quand on est dans l'écran "ecole")
   const [selectedEcoleId, setSelectedEcoleId] = useState(
     isSuperAdmin ? null : user.ecoleId
   );
 
-  // Fonctions de navigation
   const pushScreen = useCallback((newScreen) => {
     setScreenStack((prev) => [...prev, newScreen]);
     window.history.pushState(null, "", window.location.href);
@@ -68,17 +64,15 @@ export function AuthenticatedApp({ user, handleLogout }) {
     });
   }, []);
 
-  // Gestion du bouton retour navigateur
   useHistoryNavigation(popScreen);
 
-  // Gestion du bouton retour mobile (APK)
+  // Gestion du bouton retour mobile
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = App.addListener("backButton", () => {
       if (screenStack.length > 1) {
         popScreen();
       } else {
-        // On est à la racine : proposer de quitter
         if (window.confirm("Voulez-vous quitter l'application ?")) {
           App.exitApp();
         }
@@ -87,7 +81,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
     return () => listener.remove();
   }, [screenStack, popScreen]);
 
-  // ----- Données globales (appels, année, etc.) -----
+  // ----- Appels -----
   const pendingCall = useQuery(api.appels.getPendingCall, { userId: user._id });
   const activeCallFromConvex = useQuery(api.appels.getActiveCall, { userId: user._id });
   const outgoingCall = useQuery(api.appels.getOutgoingCall, { userId: user._id });
@@ -96,16 +90,21 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const endCall = useMutation(api.appels.endCall);
 
   const [localActiveCall, setLocalActiveCall] = useState(null);
+
+  // ✅ Correction : dépendances scalaires pour éviter les boucles
   useEffect(() => {
     if (activeCallFromConvex) {
-      setLocalActiveCall(activeCallFromConvex);
+      setLocalActiveCall({
+        _id: activeCallFromConvex._id,
+        channelName: activeCallFromConvex.channelName,
+        type: activeCallFromConvex.type || "video",
+      });
     } else {
       setLocalActiveCall(null);
     }
-  }, [activeCallFromConvex]);
+  }, [activeCallFromConvex?._id, activeCallFromConvex?.channelName, activeCallFromConvex?.type]);
 
   const handleCallEnd = () => setLocalActiveCall(null);
-
   const handleCancelCall = async () => {
     if (outgoingCall) {
       await endCall({ callId: outgoingCall._id, userId: user._id });
@@ -113,43 +112,58 @@ export function AuthenticatedApp({ user, handleLogout }) {
     }
   };
 
+  // Année active
   const anneeActiveQuery = useQuery(
     api.anneesScolaires.getActive,
     selectedEcoleId ? { ecoleId: selectedEcoleId } : "skip"
   );
   const [anneeActive, setAnneeActive] = useState(null);
+
+  // ✅ Correction : comparaison par ID pour éviter les boucles
   useEffect(() => {
-    if (anneeActiveQuery) setAnneeActive(anneeActiveQuery);
-  }, [anneeActiveQuery]);
+    if (anneeActiveQuery && anneeActiveQuery._id !== anneeActive?._id) {
+      setAnneeActive(anneeActiveQuery);
+    }
+  }, [anneeActiveQuery?._id, anneeActive?._id]);
+
   const anneeId = anneeActive?._id || undefined;
 
-  const [notifs, setNotifs] = useState([]);
-  const handleNotif = (msg) => setNotifs((prev) => [...prev, msg]);
+  // État pour l'année sélectionnée (consultation des archives)
+  const [selectedAnneeId, setSelectedAnneeId] = useState(anneeId);
+  useEffect(() => {
+    if (!selectedAnneeId && anneeActive?._id) {
+      setSelectedAnneeId(anneeActive._id);
+    }
+  }, [selectedAnneeId, anneeActive?._id]);
 
-  // Données liées à l'école
+  // Année utilisée pour les données
+  const dataAnneeId = user.role === "admin" ? selectedAnneeId : anneeId;
+
   const ecoleId = selectedEcoleId || user.ecoleId;
 
+  // Queries (utilisent dataAnneeId)
   const ecoles = isSuperAdmin ? useQuery(api.ecoles.list) ?? [] : [];
   const eleves = useQuery(
     api.eleves.list,
-    ecoleId && anneeId ? { ecoleId, anneeId } : "skip"
+    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
   ) ?? [];
   const classes = useQuery(
     api.classes.list,
-    ecoleId && anneeId ? { ecoleId, anneeId } : "skip"
+    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
   ) ?? [];
   const fautes = useQuery(api.fautes.list, ecoleId ? { ecoleId } : "skip") ?? [];
   const punitions = useQuery(
     api.punitions.list,
-    ecoleId && anneeId ? { ecoleId, anneeId } : "skip"
+    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
   ) ?? [];
   const sanctions = useQuery(api.sanctions.list, ecoleId ? { ecoleId } : "skip") ?? [];
   const users = useQuery(api.users.listByEcole, ecoleId ? { ecoleId } : "skip") ?? [];
   const frais = useQuery(
     api.frais.listByEcole,
-    ecoleId && anneeId ? { ecoleId, anneeId } : "skip"
+    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
   ) ?? [];
 
+  // Pour le parent (reste sur l'année active)
   const enfants = useQuery(
     api.eleves.listByParent,
     user.role === "parent" && anneeId
@@ -174,6 +188,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const addPunition = useMutation(api.punitions.add);
 
   // Notifications
+  const [notifs, setNotifs] = useState([]);
+  const handleNotif = (msg) => setNotifs((prev) => [...prev, msg]);
+
   useEffect(() => {
     if (!notifs.length) return;
     const t = setTimeout(() => setNotifs([]), 4000);
@@ -198,7 +215,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
     prevPunitionsEnfantsRef.current = punitionsEnfants;
   }, [punitionsEnfants, user.role, enfants, fautes]);
 
-  // Si un appel vidéo est actif, on l'affiche prioritairement
+  // Appel vidéo actif prioritaire
   if (localActiveCall) {
     return (
       <AppelVideo
@@ -206,21 +223,35 @@ export function AuthenticatedApp({ user, handleLogout }) {
         userId={user._id}
         callId={localActiveCall._id}
         onCallEnd={handleCallEnd}
+        callType={localActiveCall.type || "video"}
       />
     );
   }
 
-  // Rendu selon l'écran courant
+  // Écran superadmin
   if (currentScreen === "superadmin") {
     return (
       <>
         <NotifBanner notifs={notifs} />
-        <div style={S.wrapper}>
-          <div style={S.navbar}>
+        {/* Conteneur pleine largeur pour le superadmin */}
+        <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+          {/* Barre supérieure pleine largeur */}
+          <div style={{
+            width: "100%",
+            padding: "12px 24px",
+            background: dark ? "#0F172A" : "#FFFFFF",
+            borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            boxSizing: "border-box",
+          }}>
             <div style={S.navbarBrand}>School Management</div>
             <div style={{ fontWeight: 600, color: S.textMuted }}>Super Admin</div>
           </div>
-          <div style={S.main}>
+
+          {/* Le tableau de bord occupe le reste de l'espace */}
+          <div style={{ flex: 1, width: "100%", overflow: "hidden" }}>
             <SuperAdminDashboard
               onSelectEcole={(id) => {
                 setSelectedEcoleId(id);
@@ -234,10 +265,10 @@ export function AuthenticatedApp({ user, handleLogout }) {
     );
   }
 
-  // Écran école (interface en fonction du rôle)
+  // Écran école
   if (currentScreen === "ecole") {
     if (
-      anneeId &&
+      dataAnneeId &&
       ecoleId &&
       (eleves === undefined ||
         classes === undefined ||
@@ -254,12 +285,25 @@ export function AuthenticatedApp({ user, handleLogout }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "#f5f7fb",
+            backgroundColor: dark ? "#0F172A" : "#F5F7FB",
             fontFamily: "'Inter', sans-serif",
-            color: S.textMuted,
+            color: dark ? "#CBD5E1" : "#64748B",
           }}
         >
-          Chargement...
+          <div style={{ textAlign: "center" }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                border: `3px solid ${dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"}`,
+                borderTopColor: dark ? "#818CF8" : "#4F46E5",
+                borderRadius: "50%",
+                animation: "spin 0.8s linear infinite",
+                margin: "0 auto 16px",
+              }}
+            />
+            Chargement...
+          </div>
         </div>
       );
     }
@@ -269,20 +313,22 @@ export function AuthenticatedApp({ user, handleLogout }) {
         <NotifBanner notifs={notifs} />
 
         {isSuperAdmin && (
-          <div style={{ 
-            maxWidth: 1280, 
-            margin: "0 auto", 
-            padding: "16px 24px 0",
-            display: isMobile ? "none" : "block"   // caché sur mobile
-          }}>
+          <div
+            style={{
+              maxWidth: 1280,
+              margin: "0 auto",
+              padding: "16px 24px 0",
+              display: isMobile ? "none" : "block",
+            }}
+          >
             <button
               onClick={() => {
                 setSelectedEcoleId(null);
-                popScreen(); // revenir à superadmin
+                popScreen();
               }}
               style={{
-                background: "#FFF",
-                border: "1px solid #E2E8F0",
+                background: dark ? "#1E293B" : "#FFFFFF",
+                border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "#E2E8F0"}`,
                 color: "#4F46E5",
                 borderRadius: 8,
                 padding: "8px 16px",
@@ -317,6 +363,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
           />
         )}
 
+        {/* Rendu selon le rôle */}
         {user.role === "disciplinaire" && (
           <DisciplinaireApp
             user={user}
@@ -329,7 +376,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
             sanctions={sanctions}
             onNotif={handleNotif}
             anneeActive={anneeActive}
-            anneeId={anneeId}
+            anneeId={dataAnneeId}
             dark={dark}
             toggle={toggle}
             handleLogout={handleLogout}
@@ -344,7 +391,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
             fautes={fautes}
             notifs={notifs}
             anneeActive={anneeActive}
-            anneeId={anneeId}
+            anneeId={dataAnneeId}
             dark={dark}
             toggle={toggle}
             handleLogout={handleLogout}
@@ -369,7 +416,8 @@ export function AuthenticatedApp({ user, handleLogout }) {
             users={users}
             frais={frais}
             anneeActive={anneeActive}
-            anneeId={anneeId}
+            anneeId={dataAnneeId}
+            onAnneeChange={setSelectedAnneeId}
             dark={dark}
             toggle={toggle}
             handleLogout={handleLogout}
@@ -396,7 +444,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
             eleves={eleves}
             classes={classes}
             anneeActive={anneeActive}
-            anneeId={anneeId}
+            anneeId={dataAnneeId}
             dark={dark}
             toggle={toggle}
             handleLogout={handleLogout}
@@ -408,7 +456,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
             ecoleId={ecoleId}
             eleves={eleves}
             anneeActive={anneeActive}
-            anneeId={anneeId}
+            anneeId={dataAnneeId}
             dark={dark}
             toggle={toggle}
             handleLogout={handleLogout}
@@ -429,12 +477,8 @@ export function AuthenticatedApp({ user, handleLogout }) {
         {pendingCall && ecoleId && (
           <IncomingCallModal
             callerId={pendingCall.callerId}
-            onAccept={() =>
-              acceptCall({ callId: pendingCall._id, userId: user._id })
-            }
-            onReject={() =>
-              rejectCall({ callId: pendingCall._id, userId: user._id })
-            }
+            onAccept={() => acceptCall({ callId: pendingCall._id, userId: user._id })}
+            onReject={() => rejectCall({ callId: pendingCall._id, userId: user._id })}
           />
         )}
       </>

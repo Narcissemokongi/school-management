@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./Sidebar";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { ScrollToTop } from "./ScrollToTop";
 import { Menu } from "lucide-react";
 import { OfflineBanner } from "./OfflineBanner";
+import { useStyles } from "../styles/theme";
 
 export function Layout({
   children,
@@ -16,10 +17,25 @@ export function Layout({
   onLogout,
 }) {
   const isMobile = useIsMobile();
-  const [sidebarOpen, setSidebarOpen] = useState(false); // pour mobile (overlay)
-  const [collapsed, setCollapsed] = useState(false);      // pour desktop (réduction)
+  const { S } = useStyles();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const mainRef = useRef(null);
 
-  // Largeur dynamique de la sidebar sur desktop
+  // Ferme la sidebar mobile lors d'un changement d'onglet
+  useEffect(() => {
+    if (isMobile && sidebarOpen) {
+      setSidebarOpen(false);
+    }
+  }, [activeTab, isMobile, sidebarOpen]);
+
+  // Ferme la sidebar mobile si on clique en dehors
+  const handleMainClick = useCallback(() => {
+    if (isMobile && sidebarOpen) {
+      setSidebarOpen(false);
+    }
+  }, [isMobile, sidebarOpen]);
+
   const sidebarWidth = isMobile ? 0 : collapsed ? 72 : 260;
 
   return (
@@ -34,47 +50,62 @@ export function Layout({
         onLogout={onLogout}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        collapsed={collapsed}                     // ← nouveau
-        onToggleCollapse={() => setCollapsed(!collapsed)} // ← nouveau
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed((prev) => !prev)}
       />
 
       <OfflineBanner dark={dark} />
 
       <main
+        ref={mainRef}
+        onClick={handleMainClick}
         style={{
           flex: 1,
-          marginLeft: sidebarWidth,                 // ← dynamique
-          transition: "margin-left 0.3s ease",
-          padding: isMobile ? "16px" : "24px",
-          backgroundColor: dark ? "#1E293B" : "#F8FAFC",
+          marginLeft: sidebarWidth,
+          transition: "margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          padding: isMobile ? "16px 16px 24px" : "24px 32px 32px",
+          backgroundColor: dark ? "#0F172A" : "#F8FAFC",
           color: dark ? "#F1F5F9" : "#1E293B",
           minHeight: "100vh",
           width: "100%",
+          boxSizing: "border-box",
+          fontFamily: "'Inter', system-ui, sans-serif",
+          position: "relative",
         }}
       >
         {/* Bouton hamburger mobile */}
         {isMobile && (
           <button
-            onClick={() => setSidebarOpen(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSidebarOpen(true);
+            }}
             style={{
               position: "fixed",
               top: 16,
               left: 16,
-              zIndex: 100,
+              zIndex: 105,
               background: dark ? "#1E293B" : "#FFFFFF",
-              border: "none",
+              border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`,
               borderRadius: 8,
               padding: 10,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              boxShadow: dark ? "0 2px 8px rgba(0,0,0,0.4)" : "0 2px 8px rgba(0,0,0,0.15)",
               cursor: "pointer",
+              transition: "background-color 0.2s, box-shadow 0.2s, transform 0.1s",
             }}
             aria-label="Ouvrir le menu"
+            title="Menu"
+            onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
           >
             <Menu size={24} color={dark ? "#F1F5F9" : "#1E293B"} />
           </button>
         )}
 
-        {children}
+        {/* Contenu */}
+        <div style={{ maxWidth: 1280, margin: "0 auto", width: "100%", paddingTop: isMobile ? 60 : 0 }}>
+          {children}
+        </div>
 
         <ScrollToTop />
       </main>

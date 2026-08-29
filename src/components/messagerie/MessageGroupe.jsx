@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";           // remonte de 3 niveaux
-import { useStyles } from "../../styles/theme";                 // remonte de 2 niveaux
-import { useIsMobile } from "../../hooks/useIsMobile";         // ajout du hook manquant
-import { Send, ArrowLeft, Users, GraduationCap } from "lucide-react";
+import { api } from "../../../convex/_generated/api";
+import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile";
+import { Send, ArrowLeft, Users, GraduationCap, BookOpen, Loader } from "lucide-react";
 import toast from "react-hot-toast";
 
+// ✅ Rôles autorisés à envoyer un message groupé
+const ROLES_AUTORISES_DIFFUSION = ["admin", "directeur", "disciplinaire"];
+
 export function MessageGroupe({ user, ecoleId, onBack }) {
-  const { S } = useStyles();
-  const isMobile = useIsMobile();   // maintenant défini
+  const { S, dark } = useStyles();
+  const isMobile = useIsMobile();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [target, setTarget] = useState("parents");
@@ -18,6 +21,22 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
   const sendToAllEleves = useMutation(api.messages.sendToAllEleves);
   const sendToClasse = useMutation(api.messages.sendToClasse);
   const classes = useQuery(api.classes.list, ecoleId ? { ecoleId } : "skip") ?? [];
+
+  // ❌ Vérification de rôle : si non autorisé, on n'affiche rien
+  if (!ROLES_AUTORISES_DIFFUSION.includes(user.role)) {
+    return null;
+  }
+
+  // Couleurs adaptatives
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const inputBg = dark ? "#0F172A" : "#F9FAFB";
+  const inputText = dark ? "#F1F5F9" : "#1E293B";
+  const buttonSecondaryBg = dark ? "#334155" : "#F1F5F9";
+  const buttonSecondaryText = dark ? "#F1F5F9" : "#1E293B";
 
   const handleSend = async () => {
     if (!message.trim()) {
@@ -53,93 +72,171 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
 
   return (
     <div>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        {!isMobile && (
-          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: S.text }}>
+        {isMobile && (
+          <button
+            onClick={onBack}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: textPrimary,
+            }}
+            aria-label="Retour"
+          >
             <ArrowLeft size={24} />
           </button>
         )}
-        <h2 style={S.h2}>Message groupé</h2>
+        <h2 style={{ ...S.h2, color: textPrimary }}>Message groupé</h2>
       </div>
 
-      <div style={S.card}>
-        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}`, transition: "background-color 0.3s" }}>
+        {/* Sélecteurs de cible */}
+        <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
           <button
             onClick={() => setTarget("parents")}
+            disabled={sending}
             style={{
-              ...S.btnSm(target === "parents" ? "#4f46e5" : S.textMuted),
-              background: target === "parents" ? "#4f46e5" : "transparent",
-              color: target === "parents" ? "#fff" : S.textMuted,
-              border: `1px solid ${S.cardBorder}`,
-              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 16px",
+              borderRadius: 8,
+              background: target === "parents" ? accent : buttonSecondaryBg,
+              color: target === "parents" ? "#FFFFFF" : buttonSecondaryText,
+              border: `1px solid ${cardBorder}`,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: sending ? "not-allowed" : "pointer",
+              opacity: sending ? 0.7 : 1,
+              fontWeight: 500,
+              fontSize: 14,
             }}
           >
             <Users size={16} /> Parents
           </button>
           <button
             onClick={() => setTarget("eleves")}
+            disabled={sending}
             style={{
-              ...S.btnSm(target === "eleves" ? "#4f46e5" : S.textMuted),
-              background: target === "eleves" ? "#4f46e5" : "transparent",
-              color: target === "eleves" ? "#fff" : S.textMuted,
-              border: `1px solid ${S.cardBorder}`,
-              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 16px",
+              borderRadius: 8,
+              background: target === "eleves" ? accent : buttonSecondaryBg,
+              color: target === "eleves" ? "#FFFFFF" : buttonSecondaryText,
+              border: `1px solid ${cardBorder}`,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: sending ? "not-allowed" : "pointer",
+              opacity: sending ? 0.7 : 1,
+              fontWeight: 500,
+              fontSize: 14,
             }}
           >
             <GraduationCap size={16} /> Tous les élèves
           </button>
           <button
             onClick={() => setTarget("classe")}
+            disabled={sending}
             style={{
-              ...S.btnSm(target === "classe" ? "#4f46e5" : S.textMuted),
-              background: target === "classe" ? "#4f46e5" : "transparent",
-              color: target === "classe" ? "#fff" : S.textMuted,
-              border: `1px solid ${S.cardBorder}`,
-              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 16px",
+              borderRadius: 8,
+              background: target === "classe" ? accent : buttonSecondaryBg,
+              color: target === "classe" ? "#FFFFFF" : buttonSecondaryText,
+              border: `1px solid ${cardBorder}`,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: sending ? "not-allowed" : "pointer",
+              opacity: sending ? 0.7 : 1,
+              fontWeight: 500,
+              fontSize: 14,
             }}
           >
-            📚 Par classe
+            <BookOpen size={16} /> Par classe
           </button>
         </div>
 
+        {/* Sélecteur de classe */}
         {target === "classe" && (
           <div style={{ marginBottom: 12 }}>
-            <label style={S.label}>Classe</label>
-            <select style={S.select} value={selectedClasse} onChange={(e) => setSelectedClasse(e.target.value)}>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Classe</label>
+            <select
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: 8,
+                border: `1px solid ${cardBorder}`,
+                background: inputBg,
+                color: inputText,
+                fontSize: 14,
+                outline: "none",
+              }}
+              value={selectedClasse}
+              onChange={(e) => setSelectedClasse(e.target.value)}
+              disabled={sending}
+            >
               <option value="">-- Choisir une classe --</option>
               {classes.map((c) => (
-                <option key={c._id} value={c.nom}>{c.nom}</option>
+                <option key={c._id} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>
+                  {c.nom}
+                </option>
               ))}
             </select>
           </div>
         )}
 
-        <p style={S.muted}>
-          Ce message sera envoyé à <strong>
-            {target === "parents" ? "tous les parents" :
-             target === "eleves" ? "tous les élèves" :
-             "tous les élèves de la classe sélectionnée"}
+        <p style={{ color: textSecondary, fontSize: 14, marginBottom: 12 }}>
+          Ce message sera envoyé à{" "}
+          <strong>
+            {target === "parents"
+              ? "tous les parents"
+              : target === "eleves"
+                ? "tous les élèves"
+                : "tous les élèves de la classe sélectionnée"}
           </strong>.
         </p>
 
         <textarea
-          style={{ ...S.input, height: 120, resize: "vertical" }}
+          style={{
+            width: "100%",
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: `1px solid ${cardBorder}`,
+            background: inputBg,
+            color: inputText,
+            fontSize: 14,
+            resize: "vertical",
+            minHeight: 120,
+            outline: "none",
+          }}
           placeholder="Écrivez votre communiqué..."
           value={message}
           onChange={(e) => setMessage(e.target.value)}
+          disabled={sending}
         />
 
         <button
           onClick={handleSend}
           disabled={sending || !message.trim() || (target === "classe" && !selectedClasse)}
           style={{
-            ...S.btn("#4f46e5"),
             marginTop: 12,
-            display: "flex", alignItems: "center", gap: 8,
+            padding: "10px 20px",
+            borderRadius: 8,
+            background: accent,
+            color: "white",
+            border: "none",
+            fontWeight: 600,
+            fontSize: 14,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            cursor: sending ? "not-allowed" : "pointer",
             opacity: sending || !message.trim() || (target === "classe" && !selectedClasse) ? 0.6 : 1,
           }}
         >
-          <Send size={18} /> {sending ? "Envoi..." : "Envoyer"}
+          {sending ? <Loader size={18} className="animate-spin" /> : <Send size={18} />}
+          {sending ? "Envoi..." : "Envoyer"}
         </button>
       </div>
     </div>

@@ -1,50 +1,74 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
+import { useStyles } from "../../styles/theme";
 import {
-  School, Copy, Users, Plus, Search, X, Trash2,
-  UserCheck, UserX, GraduationCap, BookOpen, AlertTriangle,
-  TrendingUp, Clock, CheckCircle, BarChart3, ListFilter
+  Plus, BarChart3, School, Clock, Loader, RefreshCw, ShieldCheck,
+  TrendingUp, Search, X, ListFilter, Building2, Users, GraduationCap,
+  BookOpen, AlertTriangle, CheckCircle2, XCircle, Copy, Edit2, Trash2,
+  Ban, Power, Save, ArrowRight, ChevronUp, ChevronDown, Menu, Bell,
+  User as UserIcon, LogOut, Sun, Moon,
 } from "lucide-react";
+import { OverviewTab } from "./OverviewTab";
+import { PendingTab } from "./PendingTab";
+import { SchoolTable } from "./SchoolTable";
+import { GestionSuperAdmins } from "./GestionSuperAdmins";
 import toast from "react-hot-toast";
+import {
+  BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, LineChart, Line,
+} from "recharts";
+import { AnimatePresence, motion } from "framer-motion"; // à installer si nécessaire
 
-export function SuperAdminDashboard({ onSelectEcole, user }) {
-  const { S } = useStyles();
-  const [tab, setTab] = useState("overview"); // overview, schools, pending
-  const [nouveauNom, setNouveauNom] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+export function SuperAdminDashboard({ onSelectEcole, user, onLogout }) {
+  const { dark, toggle } = useStyles();
+  const [tab, setTab] = useState("overview");
+  const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [nouveauNom, setNouveauNom] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false); // pour mobile éventuellement
+  const [notifications, setNotifications] = useState([]);
 
-  const ecolesAvecUsers = useQuery(api.ecoles.listWithUserCount) ?? [];
-  const globalStats = useQuery(api.stats.globalStats) ?? {};
-  const pendingUsers = useQuery(api.users.listAllPendingUsers) ?? [];
-  const recentUsers = useQuery(api.users.listRecent) ?? [];
-  const recentEcoles = useQuery(api.ecoles.listRecent) ?? [];
+  // Queries
+  const ecolesAvecUsersQuery = useQuery(api.ecoles.listWithUserCount);
+  const globalStatsQuery = useQuery(api.stats.globalStats);
+  const pendingUsersQuery = useQuery(api.users.listAllPendingUsers);
+  const tauxMatiere = useQuery(api.stats.tauxReussiteParMatiere) ?? [];
+  const tauxClasse = useQuery(api.stats.tauxReussiteParClasse) ?? [];
+  const evolution = useQuery(api.stats.evolutionResultats) ?? [];
 
+  const ecolesAvecUsers = ecolesAvecUsersQuery ?? [];
+  const globalStats = globalStatsQuery ?? {};
+  const pendingUsers = pendingUsersQuery ?? [];
+
+  const isLoading =
+    ecolesAvecUsersQuery === undefined ||
+    globalStatsQuery === undefined ||
+    pendingUsersQuery === undefined;
+
+  // Mutations
   const addEcole = useMutation(api.ecoles.add);
   const removeEcole = useMutation(api.ecoles.remove);
-  const approveUser = useMutation(api.users.approveUser);
-  const rejectUser = useMutation(api.users.rejectUser);
+  const suspendEcole = useMutation(api.ecoles.suspendEcole);
+  const reactiverEcole = useMutation(api.ecoles.reactiverEcole);
+  const updateEcole = useMutation(api.ecoles.update);
 
-  // Top 5 écoles par nombre d'utilisateurs (pour le graphique)
-  const topEcoles = [...ecolesAvecUsers]
-    .sort((a, b) => b.userCount - a.userCount)
-    .slice(0, 5);
-  const maxUsersInTop = Math.max(...topEcoles.map(e => e.userCount), 1);
+  // Handlers
+  const refreshQueries = async () => {
+    setRefreshing(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    setRefreshing(false);
+    toast.success("Données actualisées");
+  };
 
-  const filteredEcoles = ecolesAvecUsers.filter(e =>
-    e.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (e.code && e.code.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const handleAdd = async (e) => {
+  const handleAddEcole = async (e) => {
     e.preventDefault();
     if (!nouveauNom.trim()) return;
     try {
-      await addEcole({ nom: nouveauNom, userId: user._id });
+      await addEcole({ nom: nouveauNom.trim(), userId: user._id });
       setNouveauNom("");
-      setShowCreate(false);
+      setShowCreateModal(false);
       toast.success("École créée avec succès");
     } catch (err) {
       toast.error(err.message);
@@ -52,278 +76,446 @@ export function SuperAdminDashboard({ onSelectEcole, user }) {
   };
 
   const handleDeleteEcole = async (ecoleId, nom) => {
-    if (window.confirm(`Supprimer définitivement "${nom}" et toutes ses données ?`)) {
-      try {
-        await removeEcole({ id: ecoleId, userId: user._id });
-        toast.success("École supprimée");
-      } catch (err) {
-        toast.error(err.message);
-      }
+    const ok = window.confirm(`Supprimer définitivement "${nom}" et toutes ses données ?`);
+    if (!ok) return;
+    try {
+      await removeEcole({ id: ecoleId, userId: user._id });
+      toast.success("École supprimée");
+    } catch (err) {
+      toast.error(err.message);
     }
   };
 
-  const copyCode = (code) => {
-    navigator.clipboard.writeText(code).then(() => toast.success("Code copié !"));
+  const handleToggleStatus = async (ecole) => {
+    const action = ecole.statut === "active" ? "suspendre" : "réactiver";
+    const ok = window.confirm(`Voulez-vous ${action} l'école "${ecole.nom}" ?`);
+    if (!ok) return;
+    try {
+      if (ecole.statut === "active") {
+        await suspendEcole({ ecoleId: ecole._id, userId: user._id });
+      } else {
+        await reactiverEcole({ ecoleId: ecole._id, userId: user._id });
+      }
+      toast.success(`École ${action}`);
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
+  const handleUpdateNom = async (ecoleId, nom) => {
+    try {
+      await updateEcole({ ecoleId, nom, userId: user._id });
+      toast.success("Nom mis à jour");
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  // Onglets
+  const tabs = [
+    { id: "overview", label: "Vue d'ensemble", icon: <BarChart3 size={18} /> },
+    { id: "schools", label: "Écoles", icon: <School size={18} />, badge: ecolesAvecUsers.length },
+    {
+      id: "pending",
+      label: "Demandes",
+      icon: <Clock size={18} />,
+      badge: pendingUsers.length,
+      badgeColor: "#F59E0B",
+    },
+    { id: "superadmins", label: "Super Admins", icon: <ShieldCheck size={18} /> },
+    { id: "stats", label: "Statistiques", icon: <TrendingUp size={18} /> },
+  ];
+
+  // Filtrage écoles
+  const filteredEcoles = useMemo(() => {
+    if (!searchTerm.trim()) return ecolesAvecUsers;
+    const q = searchTerm.toLowerCase();
+    return ecolesAvecUsers.filter(
+      (e) =>
+        e.nom.toLowerCase().includes(q) ||
+        (e.code && e.code.toLowerCase().includes(q))
+    );
+  }, [ecolesAvecUsers, searchTerm]);
+
+  // Couleurs
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#CBD5E1" : "#64748B";
+  const borderColor = dark ? "#334155" : "#E2E8F0";
+  const accentColor = dark ? "#818CF8" : "#4F46E5";
+
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 16px" }}>
-      {/* En-tête */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+
+      {/* En-tête avec animations */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: 32,
+          flexWrap: "wrap",
+          gap: 16,
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: "#1e293b", margin: 0 }}>Administration Générale</h1>
-          <p style={{ color: "#64748b", marginTop: 4 }}>Gestion des établissements et des utilisateurs</p>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+            Administration Générale
+          </h1>
+          <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+            Gérez les établissements, utilisateurs et paramètres globaux
+          </p>
         </div>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          style={{ ...S.btn("#4f46e5"), display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", fontSize: 15 }}
-        >
-          <Plus size={20} /> Nouvelle école
-        </button>
-      </div>
+
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            onClick={refreshQueries}
+            disabled={refreshing || isLoading}
+            title="Actualiser les données"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "10px 16px",
+              background: "transparent",
+              color: textSecondary,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 10,
+              cursor: refreshing ? "not-allowed" : "pointer",
+              opacity: refreshing || isLoading ? 0.7 : 1,
+            }}
+          >
+            <RefreshCw size={18} className={refreshing ? "animate-spin" : ""} />
+          </button>
+
+          <button
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 20px",
+              background: accentColor,
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              fontWeight: 600,
+              fontSize: 14,
+              cursor: "pointer",
+              boxShadow: dark ? "0 4px 12px rgba(129,140,248,0.4)" : "0 4px 12px rgba(79,70,229,0.2)",
+              transition: "background 0.2s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = dark ? "#6366F1" : "#4338CA")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = accentColor)}
+          >
+            <Plus size={20} /> Nouvelle école
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Modale de création d'école */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.5)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: 16,
+            }}
+            onClick={() => setShowCreateModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                background: dark ? "#1E293B" : "#FFFFFF",
+                borderRadius: 16,
+                padding: 24,
+                width: "100%",
+                maxWidth: 400,
+                boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)",
+                border: `1px solid ${borderColor}`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <h3 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: textPrimary }}>
+                  Nouvelle école
+                </h3>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              <form onSubmit={handleAddEcole}>
+                <input
+                  placeholder="Nom de l'école"
+                  value={nouveauNom}
+                  onChange={(e) => setNouveauNom(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    border: `1px solid ${borderColor}`,
+                    borderRadius: 8,
+                    fontSize: 14,
+                    outline: "none",
+                    background: dark ? "#0F172A" : "#F9FAFB",
+                    color: textPrimary,
+                    marginBottom: 16,
+                  }}
+                  autoFocus
+                />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="submit"
+                    style={{
+                      flex: 1,
+                      padding: "10px 16px",
+                      background: accentColor,
+                      color: "white",
+                      border: "none",
+                      borderRadius: 8,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Créer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    style={{
+                      padding: "10px 16px",
+                      background: "transparent",
+                      border: `1px solid ${borderColor}`,
+                      borderRadius: 8,
+                      color: textSecondary,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Onglets */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #e2e8f0", marginBottom: 24 }}>
-        {[
-          { id: "overview", label: "Vue d'ensemble", icon: <BarChart3 size={18} /> },
-          { id: "schools", label: "Écoles", icon: <School size={18} /> },
-          { id: "pending", label: `Demandes (${pendingUsers.length})`, icon: <Clock size={18} /> },
-        ].map(t => (
+      <div style={{
+        display: "flex",
+        gap: 0,
+        borderBottom: `2px solid ${borderColor}`,
+        marginBottom: 24,
+        overflowX: "auto",
+        whiteSpace: "nowrap",
+      }}>
+        {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             style={{
-              display: "flex", alignItems: "center", gap: 6,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               padding: "12px 20px",
               border: "none",
               background: "transparent",
-              color: tab === t.id ? "#4f46e5" : "#64748b",
+              color: tab === t.id ? accentColor : textSecondary,
               fontWeight: tab === t.id ? 600 : 400,
-              borderBottom: tab === t.id ? "3px solid #4f46e5" : "3px solid transparent",
+              borderBottom: tab === t.id ? `3px solid ${accentColor}` : "3px solid transparent",
               cursor: "pointer",
-              transition: "all 0.2s"
+              transition: "all 0.2s",
+              position: "relative",
             }}
           >
             {t.icon}
             {t.label}
+            {t.badge !== undefined && t.badge > 0 && (
+              <span style={{
+                marginLeft: 4,
+                background: t.badgeColor || "#EF4444",
+                color: "white",
+                borderRadius: "50%",
+                minWidth: 18,
+                height: 18,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "0 4px",
+              }}>
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Formulaire de création (modale simple) */}
-      {showCreate && (
-        <div style={{ background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginBottom: 24 }}>
-          <form onSubmit={handleAdd} style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <input
-              placeholder="Nom de l'école"
-              value={nouveauNom}
-              onChange={(e) => setNouveauNom(e.target.value)}
-              style={{ ...S.input, flex: 1, marginBottom: 0 }}
-              autoFocus
-            />
-            <button type="submit" style={S.btn("#4f46e5")}>Créer</button>
-          </form>
-        </div>
-      )}
-
-      {/* Contenu des onglets */}
-      {tab === "overview" && (
-        <div>
-          {/* Cartes statistiques */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 32 }}>
-            <StatCard icon={<School />} value={globalStats.totalEcoles ?? 0} label="Écoles" color="#4f46e5" />
-            <StatCard icon={<Users />} value={globalStats.totalUsers ?? 0} label="Utilisateurs" color="#10b981" />
-            <StatCard icon={<GraduationCap />} value={globalStats.totalEleves ?? 0} label="Élèves" color="#f59e0b" />
-            <StatCard icon={<BookOpen />} value={globalStats.totalClasses ?? 0} label="Classes" color="#3b82f6" />
-            <StatCard icon={<AlertTriangle />} value={globalStats.totalPunitions ?? 0} label="Punitions" color="#ef4444" />
+      {/* Contenu avec animation */}
+      <motion.div
+        key={tab}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+      >
+        {isLoading ? (
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
+            <Loader size={40} className="animate-spin" style={{ color: accentColor }} />
           </div>
-
-          {/* Graphique à barres simple */}
-          <div style={{ ...S.card, marginBottom: 32 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-              <TrendingUp size={20} /> Top 5 écoles par utilisateurs
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {topEcoles.map(ecole => (
-                <div key={ecole._id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 120, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ecole.nom}</div>
-                  <div style={{ flex: 1, background: "#f1f5f9", borderRadius: 8, height: 24, overflow: "hidden" }}>
-                    <div style={{
-                      width: `${(ecole.userCount / maxUsersInTop) * 100}%`,
-                      height: "100%",
-                      background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
-                      borderRadius: 8,
-                      minWidth: 4
-                    }} />
-                  </div>
-                  <div style={{ width: 40, textAlign: "right", fontWeight: 600 }}>{ecole.userCount}</div>
-                </div>
-              ))}
-              {topEcoles.length === 0 && <p style={{ color: "#64748b" }}>Aucune donnée</p>}
-            </div>
-          </div>
-
-          {/* Activité récente */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24 }}>
-            <div style={S.card}>
-              <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-                <Clock size={20} /> Dernières écoles créées
-              </h3>
-              {recentEcoles.map(ecole => (
-                <div key={ecole._id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
-                  <span>{ecole.nom}</span>
-                  <span style={{ color: "#64748b", fontSize: 13 }}>{ecole.code}</span>
-                </div>
-              ))}
-              {recentEcoles.length === 0 && <p style={{ color: "#64748b" }}>Aucune école récente</p>}
-            </div>
-            <div style={S.card}>
-              <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-                <Users size={20} /> Derniers utilisateurs inscrits
-              </h3>
-              {recentUsers.map(u => (
-                <div key={u._id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
-                  <span>{u.nom} ({u.role})</span>
-                  <span style={{ color: "#64748b", fontSize: 13 }}>
-                    {u.status === "pending" ? <Clock size={14} /> : <CheckCircle size={14} color="#10b981" />}
-                  </span>
-                </div>
-              ))}
-              {recentUsers.length === 0 && <p style={{ color: "#64748b" }}>Aucun utilisateur récent</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab === "schools" && (
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", background: "#fff", borderRadius: 10, padding: "8px 12px", border: "1px solid #e2e8f0", flex: 1 }}>
-              <Search size={18} color="#94a3b8" />
-              <input
-                placeholder="Rechercher par nom ou code..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ border: "none", outline: "none", marginLeft: 8, fontSize: 14, width: "100%" }}
+        ) : (
+          <>
+            {tab === "overview" && (
+              <OverviewTab
+                globalStats={globalStats}
+                ecolesAvecUsers={ecolesAvecUsers}
+                onNavigate={setTab}
               />
-              {searchTerm && (
-                <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={16} /></button>
-              )}
-            </div>
-            <ListFilter size={20} color="#64748b" />
-          </div>
-          <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  <th style={{ textAlign: "left", padding: 14, fontSize: 13, fontWeight: 600, color: "#64748b" }}>Nom de l'école</th>
-                  <th style={{ textAlign: "left", padding: 14, fontSize: 13, fontWeight: 600, color: "#64748b" }}>Code</th>
-                  <th style={{ textAlign: "center", padding: 14, fontSize: 13, fontWeight: 600, color: "#64748b" }}>Utilisateurs</th>
-                  <th style={{ textAlign: "center", padding: 14, fontSize: 13, fontWeight: 600, color: "#64748b" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEcoles.map(ecole => (
-                  <tr key={ecole._id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.15s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                    onClick={() => onSelectEcole(ecole._id)}
-                    title="Cliquez pour gérer cette école"
-                  >
-                    <td style={{ padding: 14, fontWeight: 500, cursor: "pointer" }}>{ecole.nom}</td>
-                    <td style={{ padding: 14 }}>
-                      <span style={{ background: "#f1f5f9", padding: "2px 10px", borderRadius: 20, fontFamily: "monospace", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        {ecole.code || "N/A"}
-                        {ecole.code && (
-                          <button onClick={(e) => { e.stopPropagation(); copyCode(ecole.code); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} title="Copier le code">
-                            <Copy size={14} color="#64748b" />
-                          </button>
-                        )}
-                      </span>
-                    </td>
-                    <td style={{ padding: 14, textAlign: "center" }}>{ecole.userCount}</td>
-                    <td style={{ padding: 14, textAlign: "center" }} onClick={e => e.stopPropagation()}>
-                      <button onClick={() => handleDeleteEcole(ecole._id, ecole.nom)} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }} title="Supprimer">
-                        <Trash2 size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredEcoles.length === 0 && (
-                  <tr><td colSpan={4} style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>Aucune école trouvée</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+            )}
 
-      {tab === "pending" && (
-        <div>
-          {pendingUsers.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#64748b" }}>
-              <CheckCircle size={48} color="#10b981" />
-              <p style={{ marginTop: 12 }}>Toutes les demandes ont été traitées.</p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: 12 }}>
-              {pendingUsers.map(u => (
-                <div key={u._id} style={{ background: "#fff", borderRadius: 12, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{u.nom}</div>
-                    <div style={{ fontSize: 13, color: "#64748b" }}>@{u.login} · {u.role}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={() => approveUser({ userId: u._id })}
-                      style={{ ...S.btnSm("#10b981"), display: "flex", alignItems: "center", gap: 4 }}
-                    >
-                      <UserCheck size={16} /> Approuver
-                    </button>
-                    <button
-                      onClick={() => {
-                        const reason = prompt("Motif du rejet (optionnel) :");
-                        rejectUser({ userId: u._id, reason: reason || undefined });
+            {tab === "schools" && (
+              <div>
+                {/* Barre de recherche */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: dark ? "#1E293B" : "#FFFFFF",
+                    borderRadius: 10,
+                    padding: "8px 12px",
+                    border: `1px solid ${borderColor}`,
+                    flex: 1,
+                  }}>
+                    <Search size={18} color={textSecondary} />
+                    <input
+                      placeholder="Rechercher par nom ou code..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      style={{
+                        border: "none",
+                        outline: "none",
+                        marginLeft: 8,
+                        fontSize: 14,
+                        width: "100%",
+                        background: "transparent",
+                        color: textPrimary,
                       }}
-                      style={{ ...S.btnSm("#ef4444"), display: "flex", alignItems: "center", gap: 4 }}
-                    >
-                      <UserX size={16} /> Rejeter
-                    </button>
+                    />
+                    {searchTerm && (
+                      <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                        <X size={16} color={textSecondary} />
+                      </button>
+                    )}
                   </div>
+                  <ListFilter size={20} color={textSecondary} />
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+                <SchoolTable
+                  ecoles={filteredEcoles}
+                  onSelectEcole={onSelectEcole}
+                  onDelete={handleDeleteEcole}
+                  onToggleStatus={handleToggleStatus}
+                  onUpdateNom={handleUpdateNom}
+                  user={user}
+                />
+              </div>
+            )}
 
-// Composant StatCard interne
-function StatCard({ icon, value, label, color }) {
-  return (
-    <div style={{
-      background: "#fff",
-      borderRadius: 16,
-      padding: 20,
-      display: "flex",
-      alignItems: "center",
-      gap: 16,
-      boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-      transition: "transform 0.2s, box-shadow 0.2s",
-      cursor: "default"
-    }}
-      onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px)"}
-      onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
-    >
-      <div style={{ width: 48, height: 48, background: `${color}15`, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: color }}>
-        {icon}
-      </div>
-      <div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: "#1e293b" }}>{value ?? "—"}</div>
-        <div style={{ fontSize: 14, color: "#64748b" }}>{label}</div>
-      </div>
+            {tab === "pending" && <PendingTab pendingUsers={pendingUsers} user={user} />}
+
+            {tab === "superadmins" && <GestionSuperAdmins user={user} />}
+
+            {tab === "stats" && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24 }}>
+                <div style={{
+                  background: dark ? "#1E293B" : "#FFFFFF",
+                  borderRadius: 16,
+                  padding: 20,
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                  border: `1px solid ${borderColor}`,
+                }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
+                    Taux de réussite par matière
+                  </h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <ReBarChart data={tauxMatiere}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#334155" : "#E2E8F0"} />
+                      <XAxis dataKey="matiere" stroke={textSecondary} />
+                      <YAxis stroke={textSecondary} />
+                      <Tooltip contentStyle={{ background: dark ? "#1E293B" : "#FFFFFF", color: textPrimary, border: `1px solid ${borderColor}` }} />
+                      <Bar dataKey="taux" fill={accentColor} />
+                    </ReBarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div style={{
+                  background: dark ? "#1E293B" : "#FFFFFF",
+                  borderRadius: 16,
+                  padding: 20,
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                  border: `1px solid ${borderColor}`,
+                }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
+                    Taux de réussite par classe
+                  </h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <ReBarChart data={tauxClasse}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#334155" : "#E2E8F0"} />
+                      <XAxis dataKey="classe" stroke={textSecondary} />
+                      <YAxis stroke={textSecondary} />
+                      <Tooltip contentStyle={{ background: dark ? "#1E293B" : "#FFFFFF", color: textPrimary, border: `1px solid ${borderColor}` }} />
+                      <Bar dataKey="taux" fill="#10B981" />
+                    </ReBarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div style={{
+                  gridColumn: "span 1",
+                  background: dark ? "#1E293B" : "#FFFFFF",
+                  borderRadius: 16,
+                  padding: 20,
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                  border: `1px solid ${borderColor}`,
+                }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
+                    Évolution des résultats
+                  </h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={evolution}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#334155" : "#E2E8F0"} />
+                      <XAxis dataKey="periode" stroke={textSecondary} />
+                      <YAxis stroke={textSecondary} />
+                      <Tooltip contentStyle={{ background: dark ? "#1E293B" : "#FFFFFF", color: textPrimary, border: `1px solid ${borderColor}` }} />
+                      <Legend />
+                      <Line type="monotone" dataKey="taux" stroke="#F59E0B" strokeWidth={3} dot={{ r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </motion.div>
     </div>
   );
 }
