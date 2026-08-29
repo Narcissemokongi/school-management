@@ -4,7 +4,7 @@ workflows:
     environment:
       vars:
         NODE_VERSION: 20.19
-        JAVA_VERSION: 21   # Changé de 17 à 21
+        JAVA_VERSION: 21   # Codemagic fournit Java 21 directement
       groups:
         - app-env
     scripts:
@@ -16,14 +16,6 @@ workflows:
         script: npx cap sync android
       - name: Build APK
         script: |
-          # S'assurer que Java 21 est disponible (si ce n'est pas déjà le cas)
-          if ! command -v java >/dev/null 2>&1 || ! java -version 2>&1 | grep -q "21\."; then
-            echo "Installation de Java 21..."
-            sudo apt-get update
-            sudo apt-get install -y openjdk-21-jdk
-            export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-            export PATH=$JAVA_HOME/bin:$PATH
-          fi
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
