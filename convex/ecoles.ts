@@ -5,7 +5,10 @@ import { Id } from "../convex/_generated/dataModel";
 // ========== OUTILS ==========
 
 function isSuperAdminPrincipal(user: any): boolean {
-  return user?.role === "superAdmin" && (!user.permissions || user.permissions.length === 0);
+  return (
+    (user?.role === "admin" && !user.ecoleId) ||
+    (user?.role === "superAdmin" && (!user.permissions || user.permissions.length === 0))
+  );
 }
 
 function hasPermission(user: any, permission: string): boolean {

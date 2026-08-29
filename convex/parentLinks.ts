@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
-// Vérifier que l'utilisateur est admin de la même école que l'élève, ou super admin
+// Vérifier que l'utilisateur est admin de la même école que l'élève, ou super admin principal
 async function assertAdminEcole(
   ctx: MutationCtx,
   adminId: Id<"users">,
@@ -11,10 +11,15 @@ async function assertAdminEcole(
   const admin = await ctx.db.get(adminId);
   if (!admin) throw new Error("Admin introuvable");
 
-  const isSuperAdmin = admin.role === "superAdmin" && (!admin.permissions || admin.permissions.length === 0);
-  const isAdminEcole = admin.role === "admin" && admin.ecoleId !== undefined;
+  // Super admin principal : role "admin" sans ecoleId, ou role "superAdmin" sans permissions
+  const isSuperAdminPrincipal =
+    (admin.role === "admin" && !admin.ecoleId) ||
+    (admin.role === "superAdmin" && (!admin.permissions || admin.permissions.length === 0));
 
-  if (!isSuperAdmin && !isAdminEcole) {
+  // Admin d'école : role "admin" ou "directeur" avec ecoleId
+  const isAdminEcole = admin.ecoleId !== undefined && (admin.role === "admin" || admin.role === "directeur");
+
+  if (!isSuperAdminPrincipal && !isAdminEcole) {
     throw new Error("Non autorisé");
   }
 
@@ -194,7 +199,7 @@ export const unlinkParent = mutation({
   },
 });
 
-// convex/parentLinks.ts
+// Lister toutes les demandes (avec filtre statut et école)
 export const listAll = query({
   args: { status: v.optional(v.string()), ecoleId: v.optional(v.id("ecoles")) },
   handler: async (ctx, args) => {
