@@ -34,44 +34,29 @@ export const useAppStore = create(
   persist(
     (set) => ({
       // ========== ÉTATS GÉNÉRAUX ==========
-      activeTab: 'accueil',               // onglet générique
+      activeTab: 'accueil',
       sidebarCollapsed: false,
-      mobileSidebarOpen: false,
-      formData: {},                        // stockage générique de formulaires
-      filters: {},                         // filtres génériques
+      mobileSidebarOpen: false,           // ne sera PAS persisté
+      formData: {},
+      filters: {},
 
       // ========== ÉTATS PAR RÔLE ==========
-      // Admin
       adminTab: 'accueil',
       adminDirty: false,
       adminPendingTab: null,
-
-      // Directeur
       directeurTab: 'accueil',
-
-      // Disciplinaire
       disciplinaireTab: 'accueil',
-
-      // Enseignant
       enseignantTab: 'dashboard',
       enseignantSelectedCours: null,
-
-      // Comptable
       comptableTab: 'dashboard',
       comptableSearchTerm: '',
       comptableFilterStatut: 'all',
       comptableCurrentPage: 1,
-
-      // Parent
       parentTab: 'enfants',
       parentSelectedEnfant: null,
       parentSearchEnfant: '',
       parentShowAddChild: false,
-
-      // Élève
       eleveTab: 'accueil',
-
-      // SuperAdmin
       superadminActiveSection: 'overview',
       superadminSearchTerm: '',
       superadminSchoolFilter: 'all',
@@ -80,18 +65,12 @@ export const useAppStore = create(
       superadminPendingSearch: '',
       superadminCurrentPage: 1,
       superadminSelectedSchoolIds: [],
-
-      // Paramètres (admin école)
       parametresTab: 'profil',
-
-      // Saisir absence
       saisirAbsenceSelectedEleve: null,
       saisirAbsenceType: 'absence',
       saisirAbsenceDate: new Date().toISOString().split("T")[0],
       saisirAbsenceCommentaire: '',
       saisirAbsenceSearch: '',
-
-      // Saisir punition
       saisirPunitionSearch: '',
       saisirPunitionSelectedEleve: null,
       saisirPunitionIdFaute: '',
@@ -99,12 +78,9 @@ export const useAppStore = create(
       saisirPunitionCommentaire: '',
       saisirPunitionSanction: '',
       saisirPunitionGraviteFilter: 'toutes',
-
-      // Contact de messagerie partagé
       messagingContactId: null,
 
       // ========== ACTIONS ==========
-      // Général
       setActiveTab: (tab) => set({ activeTab: tab }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
@@ -112,37 +88,22 @@ export const useAppStore = create(
       setFilters: (filters) => set({ filters }),
       setMessagingContactId: (id) => set({ messagingContactId: id }),
 
-      // Admin
       setAdminTab: (tab) => set({ adminTab: tab }),
       setAdminDirty: (dirty) => set({ adminDirty: dirty }),
       setAdminPendingTab: (tab) => set({ adminPendingTab: tab }),
-
-      // Directeur
       setDirecteurTab: (tab) => set({ directeurTab: tab }),
-
-      // Disciplinaire
       setDisciplinaireTab: (tab) => set({ disciplinaireTab: tab }),
-
-      // Enseignant
       setEnseignantTab: (tab) => set({ enseignantTab: tab }),
       setEnseignantSelectedCours: (cours) => set({ enseignantSelectedCours: cours }),
-
-      // Comptable
       setComptableTab: (tab) => set({ comptableTab: tab }),
       setComptableSearchTerm: (term) => set({ comptableSearchTerm: term }),
       setComptableFilterStatut: (statut) => set({ comptableFilterStatut: statut }),
       setComptableCurrentPage: (page) => set({ comptableCurrentPage: page }),
-
-      // Parent
       setParentTab: (tab) => set({ parentTab: tab }),
       setParentSelectedEnfant: (enfant) => set({ parentSelectedEnfant: enfant }),
       setParentSearchEnfant: (search) => set({ parentSearchEnfant: search }),
       setParentShowAddChild: (show) => set({ parentShowAddChild: show }),
-
-      // Élève
       setEleveTab: (tab) => set({ eleveTab: tab }),
-
-      // SuperAdmin
       setSuperadminActiveSection: (section) => set({ superadminActiveSection: section }),
       setSuperadminSearchTerm: (term) => set({ superadminSearchTerm: term }),
       setSuperadminSchoolFilter: (filter) => set({ superadminSchoolFilter: filter }),
@@ -151,18 +112,12 @@ export const useAppStore = create(
       setSuperadminPendingSearch: (search) => set({ superadminPendingSearch: search }),
       setSuperadminCurrentPage: (page) => set({ superadminCurrentPage: page }),
       setSuperadminSelectedSchoolIds: (ids) => set({ superadminSelectedSchoolIds: ids }),
-
-      // Paramètres
       setParametresTab: (tab) => set({ parametresTab: tab }),
-
-      // Saisir absence
       setSaisirAbsenceSelectedEleve: (eleve) => set({ saisirAbsenceSelectedEleve: eleve }),
       setSaisirAbsenceType: (type) => set({ saisirAbsenceType: type }),
       setSaisirAbsenceDate: (date) => set({ saisirAbsenceDate: date }),
       setSaisirAbsenceCommentaire: (commentaire) => set({ saisirAbsenceCommentaire: commentaire }),
       setSaisirAbsenceSearch: (search) => set({ saisirAbsenceSearch: search }),
-
-      // Saisir punition
       setSaisirPunitionSearch: (search) => set({ saisirPunitionSearch: search }),
       setSaisirPunitionSelectedEleve: (eleve) => set({ saisirPunitionSelectedEleve: eleve }),
       setSaisirPunitionIdFaute: (id) => set({ saisirPunitionIdFaute: id }),
@@ -171,7 +126,6 @@ export const useAppStore = create(
       setSaisirPunitionSanction: (sanction) => set({ saisirPunitionSanction: sanction }),
       setSaisirPunitionGraviteFilter: (filter) => set({ saisirPunitionGraviteFilter: filter }),
 
-      // Reset complet
       resetAll: () => set({
         activeTab: 'accueil',
         sidebarCollapsed: false,
@@ -221,6 +175,11 @@ export const useAppStore = create(
     {
       name: 'app-storage',
       getStorage: () => storage,
+      // ✅ Empêche la persistance de mobileSidebarOpen
+      partialize: (state) => {
+        const { mobileSidebarOpen, ...rest } = state;
+        return rest;
+      },
     }
   )
 );
