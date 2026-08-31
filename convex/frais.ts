@@ -1,22 +1,34 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-async function requireRole(
+// Vérifie que l'utilisateur est admin/comptable de l'école ou superadmin principal
+async function requireEcoleAdmin(
   ctx: MutationCtx,
   userId: string | undefined,
-  allowedRoles: string[]
+  ecoleId: string
 ) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
-    throw new Error("Accès refusé : rôle insuffisant");
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  const isEcoleFinance =
+    (user.role === "admin" || user.role === "comptable") &&
+    user.ecoleId === ecoleId;
+
+  if (!isSuperAdminPrincipal && !isEcoleFinance) {
+    throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer les frais de cette école.");
   }
   return user;
 }
 
-// ========== QUERY ==========
+// ========== QUERIES ==========
 
+// Frais d'un élève
 export const listByEleve = query({
   args: { eleveId: v.id("eleves"), anneeId: v.optional(v.id("anneesScolaires")) },
   handler: async (ctx, args) => {
@@ -34,6 +46,7 @@ export const listByEleve = query({
   },
 });
 
+// Frais de toute une école (éventuellement filtrés par année)
 export const listByEcole = query({
   args: { ecoleId: v.id("ecoles"), anneeId: v.optional(v.id("anneesScolaires")) },
   handler: async (ctx, args) => {
@@ -51,20 +64,26 @@ export const listByEcole = query({
   },
 });
 
-// --- Frais de classe ---
+// Frais de classe pour une école (avec année optionnelle)
 export const listFraisClasses = query({
   args: { ecoleId: v.id("ecoles"), anneeId: v.optional(v.id("anneesScolaires")) },
   handler: async (ctx, args) => {
-    return await ctx.db
+    let q = ctx.db
       .query("fraisClasses")
-      .withIndex("by_ecole_classe", (q) => q.eq("ecoleId", args.ecoleId))
-      .filter((q) => (args.anneeId ? q.eq(q.field("anneeId"), args.anneeId) : true))
-      .collect();
+      .withIndex("by_ecole_classe", (q) => q.eq("ecoleId", args.ecoleId));
+
+    const all = await q.collect();
+
+    if (args.anneeId) {
+      return all.filter((f) => f.anneeId === args.anneeId);
+    }
+    return all;
   },
 });
 
 // ========== MUTATIONS ==========
 
+// Ajouter ou mettre à jour les frais d'un élève
 export const upsert = mutation({
   args: {
     eleveId: v.id("eleves"),
@@ -76,7 +95,7 @@ export const upsert = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "comptable"]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
     const { userId, ...rest } = args;
     const existing = await ctx.db
@@ -84,6 +103,7 @@ export const upsert = mutation({
       .withIndex("by_eleveId", (q) => q.eq("eleveId", rest.eleveId))
       .filter((q) => q.eq(q.field("anneeId"), rest.anneeId))
       .unique();
+
     let docId: string;
     let action: string;
     if (existing) {
@@ -98,6 +118,7 @@ export const upsert = mutation({
       docId = await ctx.db.insert("frais", rest);
       action = "create";
     }
+
     if (userId) {
       await ctx.db.insert("audit", {
         userId,
@@ -113,6 +134,7 @@ export const upsert = mutation({
   },
 });
 
+// Ajouter ou mettre à jour les frais pour plusieurs élèves à la fois
 export const upsertBulk = mutation({
   args: {
     eleveIds: v.array(v.id("eleves")),
@@ -124,16 +146,18 @@ export const upsertBulk = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "comptable"]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
     const { userId, eleveIds, ...rest } = args;
     let firstId: string | null = null;
+
     for (const eleveId of eleveIds) {
       const existing = await ctx.db
         .query("frais")
         .withIndex("by_eleveId", (q) => q.eq("eleveId", eleveId))
         .filter((q) => q.eq(q.field("anneeId"), rest.anneeId))
         .unique();
+
       if (existing) {
         await ctx.db.patch(existing._id, {
           montantTotal: rest.montantTotal,
@@ -146,6 +170,7 @@ export const upsertBulk = mutation({
         if (!firstId) firstId = newId;
       }
     }
+
     if (userId && firstId) {
       await ctx.db.insert("audit", {
         userId,
@@ -161,14 +186,18 @@ export const upsertBulk = mutation({
   },
 });
 
+// Supprimer un frais
 export const remove = mutation({
   args: { id: v.id("frais"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "comptable"]);
-
     const doc = await ctx.db.get(args.id);
+    if (!doc) throw new Error("Frais introuvable");
+
+    await requireEcoleAdmin(ctx, args.userId, doc.ecoleId);
+
     await ctx.db.delete(args.id);
-    if (args.userId && doc) {
+
+    if (args.userId) {
       await ctx.db.insert("audit", {
         userId: args.userId,
         action: "delete",
@@ -182,22 +211,23 @@ export const remove = mutation({
   },
 });
 
-// --- Mutation pour les frais de classe ---
+// Ajouter ou mettre à jour les frais d'une classe
 export const upsertFraisClasse = mutation({
   args: {
     classe: v.string(),
     montantTotal: v.float64(),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    // Pas de requireRole ici si l'appel se fait depuis un contexte authentifié, mais vous pouvez ajouter
-    // await requireRole(ctx, args.userId, ["admin", "comptable"]); // si vous passez userId
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
+
     const existing = await ctx.db
       .query("fraisClasses")
       .withIndex("by_ecole_classe", (q) => q.eq("ecoleId", args.ecoleId).eq("classe", args.classe))
-      .filter((q) => (args.anneeId ? q.eq(q.field("anneeId"), args.anneeId) : true))
       .first();
+
     if (existing) {
       await ctx.db.patch(existing._id, { montantTotal: args.montantTotal });
     } else {

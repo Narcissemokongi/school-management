@@ -1,45 +1,64 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-async function requireRole(
+// Vérifie que l'utilisateur est autorisé à gérer les punitions de l'école
+async function requireEcoleAdmin(
   ctx: MutationCtx,
   userId: string | undefined,
-  allowedRoles: string[]
+  ecoleId: string
 ) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
-    throw new Error("Accès refusé : rôle insuffisant");
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  const allowedRoles = ["admin", "directeur", "disciplinaire", "enseignant"];
+  const isEcoleStaff =
+    allowedRoles.includes(user.role) && user.ecoleId === ecoleId;
+
+  if (!isSuperAdminPrincipal && !isEcoleStaff) {
+    throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer les punitions de cette école.");
   }
   return user;
 }
 
+// ========== QUERIES ==========
+
+// Liste des punitions (filtrée par école et/ou année)
 export const list = query({
   args: {
     ecoleId: v.optional(v.id("ecoles")),
     anneeId: v.optional(v.id("anneesScolaires")),
   },
   handler: async (ctx, args) => {
-    if (args.anneeId) {
+    const { ecoleId, anneeId } = args;
+
+    if (anneeId) {
       let q = ctx.db
         .query("punitions")
-        .withIndex("by_anneeId", (q) => q.eq("anneeId", args.anneeId!));
-      if (args.ecoleId) {
-        q = q.filter((q) => q.eq(q.field("ecoleId"), args.ecoleId!));
+        .withIndex("by_anneeId", (q) => q.eq("anneeId", anneeId));
+      if (ecoleId) {
+        q = q.filter((q) => q.eq(q.field("ecoleId"), ecoleId));
       }
       return await q.collect();
     }
-    if (args.ecoleId) {
+
+    if (ecoleId) {
       return await ctx.db
         .query("punitions")
-        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId!))
+        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", ecoleId))
         .collect();
     }
+
     return await ctx.db.query("punitions").collect();
   },
 });
 
+// Liste des punitions pour un ensemble d'élèves
 export const listByEleves = query({
   args: {
     eleveIds: v.array(v.id("eleves")),
@@ -47,20 +66,25 @@ export const listByEleves = query({
   },
   handler: async (ctx, args) => {
     if (args.eleveIds.length === 0) return [];
+
     const promises = args.eleveIds.map((eleveId) => {
       let q = ctx.db
         .query("punitions")
         .withIndex("by_eleveId", (q) => q.eq("idEleve", eleveId));
       if (args.anneeId) {
-        q = q.filter((q) => q.eq(q.field("anneeId"), args.anneeId!));
+        q = q.filter((q) => q.eq(q.field("anneeId"), args.anneeId));
       }
       return q.collect();
     });
+
     const results = await Promise.all(promises);
     return results.flat();
   },
 });
 
+// ========== MUTATIONS ==========
+
+// Ajouter une punition
 export const add = mutation({
   args: {
     ecoleId: v.id("ecoles"),
@@ -74,12 +98,7 @@ export const add = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, [
-      "admin",
-      "directeur",
-      "disciplinaire",
-      "enseignant",
-    ]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
     const punitionId = await ctx.db.insert("punitions", {
       ecoleId: args.ecoleId,
@@ -92,7 +111,7 @@ export const add = mutation({
       anneeId: args.anneeId,
     });
 
-    // Envoyer une push si la faute est grave et que l'élève a un parent avec un token FCM
+    // Envoyer une notification push si la faute est grave et que le parent a un token FCM
     const faute = await ctx.db.get(args.idFaute);
     if (faute?.gravite === "Grave") {
       const eleve = await ctx.db.get(args.idEleve);
@@ -124,4 +143,40 @@ export const add = mutation({
   },
 });
 
-// Ajoutez ici vos éventuelles autres mutations (remove, update) si elles existent
+// Mettre à jour une punition (utile pour corriger une erreur)
+export const update = mutation({
+  args: {
+    id: v.id("punitions"),
+    date: v.optional(v.string()),
+    sanction: v.optional(v.string()),
+    commentaire: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const punition = await ctx.db.get(args.id);
+    if (!punition) throw new Error("Punition introuvable");
+
+    await requireEcoleAdmin(ctx, args.userId, punition.ecoleId);
+
+    const { id, userId, ...fields } = args;
+    await ctx.db.patch(id, fields);
+    return { success: true };
+  },
+});
+
+// Supprimer une punition
+export const remove = mutation({
+  args: {
+    id: v.id("punitions"),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const punition = await ctx.db.get(args.id);
+    if (!punition) throw new Error("Punition introuvable");
+
+    await requireEcoleAdmin(ctx, args.userId, punition.ecoleId);
+
+    await ctx.db.delete(args.id);
+    return { success: true };
+  },
+});

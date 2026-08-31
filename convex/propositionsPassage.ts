@@ -1,13 +1,40 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-async function requireRole(ctx: MutationCtx, userId: string | undefined, allowedRoles: string[]) {
+// Vérifie que l'utilisateur est autorisé à gérer les propositions de l'école.
+// - Superadmin principal : tout voir
+// - Enseignant : limité à sa classe
+// - Admin/directeur : limité à leur école
+async function requireEcolePermission(
+  ctx: MutationCtx,
+  userId: string | undefined,
+  ecoleId: string,
+  allowedRoles: string[],
+  classe?: string
+) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  if (isSuperAdminPrincipal) return user;
+
+  if (!allowedRoles.includes(user.role)) {
     throw new Error("Accès refusé : rôle insuffisant");
   }
+
+  if (user.ecoleId !== ecoleId) {
+    throw new Error("Vous n'êtes pas autorisé à gérer cette école.");
+  }
+
+  if (classe && user.role === "enseignant" && user.classe !== classe) {
+    throw new Error("Vous n'êtes pas assigné à cette classe.");
+  }
+
   return user;
 }
 
@@ -41,7 +68,7 @@ export const listPropositions = query({
   },
 });
 
-// ✅ NOUVELLE QUERY : propositions d'un enseignant pour une année
+// ----- QUERY : propositions d'un enseignant pour une année -----
 export const listByEnseignantAndAnnee = query({
   args: {
     ecoleId: v.id("ecoles"),
@@ -49,15 +76,13 @@ export const listByEnseignantAndAnnee = query({
     enseignantId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const propositions = await ctx.db
+    return await ctx.db
       .query("propositionsPassage")
       .withIndex("by_ecole_annee", (q) =>
         q.eq("ecoleId", args.ecoleId).eq("anneeId", args.anneeId)
       )
       .filter((q) => q.eq(q.field("enseignantId"), args.enseignantId))
       .collect();
-
-    return propositions;
   },
 });
 
@@ -82,9 +107,16 @@ export const soumettrePropositions = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["enseignant"]);
+    // Récupérer l'utilisateur et vérifier son rôle / école
     const user = await ctx.db.get(args.userId as Id<"users">);
-    if (!user?.classe) throw new Error("Aucune classe assignée à cet enseignant.");
+    if (!user) throw new Error("Utilisateur introuvable");
+
+    // Vérifier l'école
+    await requireEcolePermission(ctx, args.userId, args.ecoleId, ["enseignant"]);
+
+    if (!user.classe) {
+      throw new Error("Aucune classe assignée à cet enseignant.");
+    }
 
     // Vérifier que tous les élèves appartiennent à la classe de l'enseignant
     for (const decision of args.decisions) {
@@ -99,7 +131,7 @@ export const soumettrePropositions = mutation({
       }
     }
 
-    // Insérer ou mettre à jour chaque proposition (soumission partielle possible)
+    // Insérer ou mettre à jour chaque proposition
     for (const decision of args.decisions) {
       const existing = await ctx.db
         .query("propositionsPassage")
@@ -119,7 +151,7 @@ export const soumettrePropositions = mutation({
           eleveId: decision.eleveId,
           ecoleId: args.ecoleId,
           anneeId: args.anneeId,
-          enseignantId: args.userId!,
+          enseignantId: args.userId as Id<"users">,
           statutPropose: decision.statut,
           classeDestinationPropose: decision.classeDestination,
           dateSoumission: new Date().toISOString(),
@@ -140,7 +172,7 @@ export const supprimerPropositions = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    await requireEcolePermission(ctx, args.userId, args.ecoleId, ["admin", "directeur"]);
 
     for (const eleveId of args.eleveIds) {
       const props = await ctx.db

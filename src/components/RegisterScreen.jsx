@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
-import { hashPassword } from "../utils/crypto";
 import {
   Loader2, User, Lock, Eye, EyeOff, School, UserCheck, BadgeCheck,
   CheckCircle2, XCircle, AlertCircle, Check,
@@ -70,11 +69,11 @@ export function RegisterScreen({ onSwitchToLogin }) {
 
     setLoading(true);
     try {
-      const hashedPassword = await hashPassword(password);
+      // ✅ Envoyer le mot de passe brut, le serveur le hachera
       await register({
         nom: nom.trim(),
         login: login.trim(),
-        password: hashedPassword,
+        password: password,
         codeEcole: codeEcole.trim().toUpperCase(),
         role,
         matricule: role === "eleve" ? matricule.trim().toUpperCase() : undefined,

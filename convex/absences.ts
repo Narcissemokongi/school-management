@@ -1,22 +1,37 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-// Utilitaire de vérification de rôle
-async function requireRole(
+// Vérifie que l'utilisateur est admin/directeur/disciplinaire/enseignant de l'école concernée
+async function requireEcoleStaff(
   ctx: MutationCtx,
   userId: string | undefined,
-  allowedRoles: string[],
+  ecoleId: string,
   classe?: string
 ) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  if (isSuperAdminPrincipal) return user;
+
+  const allowedRoles = ["admin", "directeur", "disciplinaire", "enseignant"];
+  if (!allowedRoles.includes(user.role)) {
     throw new Error("Accès refusé : rôle insuffisant");
   }
+
+  if (user.ecoleId !== ecoleId) {
+    throw new Error("Vous n'appartenez pas à cette école.");
+  }
+
   if (classe && user.role === "enseignant" && user.classe !== classe) {
     throw new Error("Vous n'êtes pas assigné à cette classe");
   }
+
   return user;
 }
 
@@ -64,18 +79,26 @@ export const listByEcole = query({
 export const listByClasse = query({
   args: { ecoleId: v.id("ecoles"), anneeId: v.id("anneesScolaires"), classe: v.string() },
   handler: async (ctx, args) => {
-    const eleves = await ctx.db
-      .query("eleves")
-      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
-      .filter((q) => q.and(q.eq(q.field("anneeId"), args.anneeId), q.eq(q.field("classe"), args.classe)))
+    // Utilise les inscriptions pour obtenir les élèves de la classe/année
+    const inscriptions = await ctx.db
+      .query("inscriptions")
+      .withIndex("by_classe_annee", (q) =>
+        q.eq("classe", args.classe).eq("anneeId", args.anneeId)
+      )
+      .filter((q) => q.eq(q.field("ecoleId"), args.ecoleId))
       .collect();
-    const eleveIds = eleves.map(e => e._id);
+
+    const eleveIds = inscriptions.map((i) => i.eleveId);
     if (eleveIds.length === 0) return [];
-    return await ctx.db
+
+    // Récupérer toutes les absences de l'école et filtrer en mémoire
+    const absences = await ctx.db
       .query("absences")
       .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
-      .filter((q) => q.or(...eleveIds.map(id => q.eq(q.field("eleveId"), id))))
       .collect();
+
+    const eleveIdSet = new Set(eleveIds);
+    return absences.filter((a) => eleveIdSet.has(a.eleveId));
   },
 });
 
@@ -92,12 +115,15 @@ export const add = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    // Récupérer l'élève pour vérifier l'école et la classe
     const eleve = await ctx.db.get(args.eleveId);
-    const classe = eleve?.classe;
-    await requireRole(ctx, args.userId, ["admin", "directeur", "disciplinaire", "enseignant"], classe);
+    if (!eleve) throw new Error("Élève introuvable");
+
+    await requireEcoleStaff(ctx, args.userId, args.ecoleId, eleve.classe);
 
     const { userId, ...rest } = args;
     const newId = await ctx.db.insert("absences", rest);
+
     if (userId) {
       await ctx.db.insert("audit", {
         userId,
@@ -121,12 +147,13 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const doc = await ctx.db.get(args.id);
     if (!doc) throw new Error("Absence introuvable");
+
     const eleve = await ctx.db.get(doc.eleveId);
-    const classe = eleve?.classe;
-    await requireRole(ctx, args.userId, ["admin", "directeur", "disciplinaire", "enseignant"], classe);
+    await requireEcoleStaff(ctx, args.userId, doc.ecoleId, eleve?.classe);
 
     await ctx.db.delete(args.id);
-    if (args.userId && doc) {
+
+    if (args.userId) {
       await ctx.db.insert("audit", {
         userId: args.userId,
         action: "delete",
@@ -182,11 +209,8 @@ export const statuerJustificatif = mutation({
       throw new Error("Cette absence n'a pas de demande en attente.");
     }
 
-    // Vérifier les droits
-    const user = await ctx.db.get(args.userId);
-    if (!user || !["enseignant", "disciplinaire", "admin", "directeur"].includes(user.role)) {
-      throw new Error("Action non autorisée.");
-    }
+    // Vérifier l'école et le rôle de l'utilisateur
+    await requireEcoleStaff(ctx, args.userId, absence.ecoleId);
 
     await ctx.db.patch(args.absenceId, {
       statutJustification: args.statut,

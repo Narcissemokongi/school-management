@@ -1,17 +1,27 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-// ========== OUTILS ==========
-async function requireRole(
+// Vérifie que l'utilisateur est admin/directeur de l'école concernée ou superadmin principal
+async function requireEcoleAdmin(
   ctx: MutationCtx,
   userId: string | undefined,
-  allowedRoles: string[]
+  ecoleId: string
 ) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
-    throw new Error("Accès refusé : rôle insuffisant");
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  const isEcoleAdmin =
+    (user.role === "admin" || user.role === "directeur") &&
+    user.ecoleId === ecoleId;
+
+  if (!isSuperAdminPrincipal && !isEcoleAdmin) {
+    throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer cette école.");
   }
   return user;
 }
@@ -26,16 +36,17 @@ export const getByClasse = query({
     anneeId: v.optional(v.id("anneesScolaires")),
   },
   handler: async (ctx, args) => {
-    // Si anneeId fourni, on utilise l'index complet
-    if (args.anneeId) {
-      const anneeId = args.anneeId as Id<"anneesScolaires">; // ✅ assertion de type
+    const { classe, ecoleId, anneeId } = args;
+
+    if (anneeId) {
+      // anneeId est déjà typé Id<"anneesScolaires"> ici, pas besoin d'assertion
       const emploi = await ctx.db
         .query("emploiDuTemps")
         .withIndex("by_classe_ecole_annee", (q) =>
           q
-            .eq("classe", args.classe)
-            .eq("ecoleId", args.ecoleId)
-            .eq("anneeId", anneeId) // ✅ utilise la variable typée
+            .eq("classe", classe)
+            .eq("ecoleId", ecoleId)
+            .eq("anneeId", anneeId)
         )
         .first();
       return emploi ?? null;
@@ -44,8 +55,8 @@ export const getByClasse = query({
     // Sinon, on recherche par classe et école sans contrainte d'année
     const result = await ctx.db
       .query("emploiDuTemps")
-      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
-      .filter((q) => q.eq(q.field("classe"), args.classe))
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", ecoleId))
+      .filter((q) => q.eq(q.field("classe"), classe))
       .collect();
 
     return result.length > 0 ? result[0] : null;
@@ -64,7 +75,7 @@ export const upsert = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
     const { userId, ...rest } = args;
     const existing = await ctx.db
@@ -88,7 +99,6 @@ export const upsert = mutation({
       action = "create";
     }
 
-    // Audit
     if (userId) {
       await ctx.db.insert("audit", {
         userId,
@@ -111,10 +121,10 @@ export const remove = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
-
     const doc = await ctx.db.get(args.id);
     if (!doc) return;
+
+    await requireEcoleAdmin(ctx, args.userId, doc.ecoleId);
 
     await ctx.db.delete(args.id);
 
@@ -141,7 +151,7 @@ export const removeByClasse = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
     const existing = await ctx.db
       .query("emploiDuTemps")

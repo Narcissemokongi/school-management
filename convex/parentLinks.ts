@@ -201,7 +201,15 @@ export const unlinkParent = mutation({
 
 // Lister toutes les demandes (avec filtre statut et école)
 export const listAll = query({
-  args: { status: v.optional(v.string()), ecoleId: v.optional(v.id("ecoles")) },
+  args: {
+    status: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("all")
+    )),
+    ecoleId: v.optional(v.id("ecoles")),
+  },
   handler: async (ctx, args) => {
     let requests;
     if (args.status && args.status !== "all") {

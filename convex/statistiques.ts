@@ -1,6 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import { Doc, Id } from "../convex/_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 
 // Helper typé pour récupérer les élèves inscrits pour une école/année donnée, enrichis avec leur classe
 async function getElevesParAnnee(

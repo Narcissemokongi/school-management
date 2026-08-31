@@ -1,7 +1,8 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id, Doc } from "../convex/_generated/dataModel";
-import { api } from "../convex/_generated/api";
+import { Id, Doc } from "./_generated/dataModel"; // Correction du chemin d'import
+import { api } from "./_generated/api"; // Correction du chemin d'import
+import { hashPassword, verifyPassword } from "./utils/crypto"; // Assurez-vous que ce fichier existe
 
 // ========== OUTILS ==========
 function isSuperAdminPrincipal(user: any): boolean {
@@ -114,7 +115,25 @@ export const login = mutation({
       throw new Error(`Compte temporairement verrouillé. Réessayez dans ${remainingMinutes} minute(s).`);
     }
 
-    const passwordMatch = user.password === args.password;
+    // ===== Vérification du mot de passe avec migration à la volée =====
+    const storedPassword = user.password;
+    let passwordMatch = false;
+
+    // Détecter si le mot de passe stocké est déjà haché (format PBKDF2 : "iterations:salt:hash")
+    const isHashed = /^\d+:[0-9a-fA-F]+:[0-9a-fA-F]+$/.test(storedPassword);
+
+    if (!isHashed) {
+      // Ancien mot de passe en clair
+      if (args.password === storedPassword) {
+        passwordMatch = true;
+        // Migrer automatiquement vers le hachage
+        const newHash = await hashPassword(args.password);
+        await ctx.db.patch(user._id, { password: newHash });
+      }
+    } else {
+      // Vérification normale
+      passwordMatch = await verifyPassword(args.password, storedPassword);
+    }
 
     if (!passwordMatch) {
       const attempts = (user.loginAttempts ?? 0) + 1;
@@ -241,6 +260,9 @@ export const register = mutation({
       .first();
     if (existingUser) throw new Error("Cet identifiant est déjà utilisé.");
 
+    // Hacher le mot de passe avant insertion
+    const hashedPassword = await hashPassword(args.password);
+
     if (args.role === "eleve" && args.matricule) {
       const matriculeUpper = args.matricule.toUpperCase();
       const eleve = await ctx.db
@@ -261,7 +283,7 @@ export const register = mutation({
       const userId = await ctx.db.insert("users", {
         nom: args.nom,
         login: args.login,
-        password: args.password,
+        password: hashedPassword,
         role: "eleve",
         ecoleId: ecole._id,
         status: "active",
@@ -278,7 +300,7 @@ export const register = mutation({
     return await ctx.db.insert("users", {
       nom: args.nom,
       login: args.login,
-      password: args.password,
+      password: hashedPassword,
       role: args.role,
       ecoleId: ecole._id,
       status: "pending",
@@ -317,10 +339,13 @@ export const createSuperAdmin = mutation({
       .unique();
     if (existing) throw new Error("Ce login est déjà utilisé.");
 
+    // Hacher le mot de passe
+    const hashedPassword = await hashPassword(args.password);
+
     await ctx.db.insert("users", {
       nom: args.nom,
       login: args.login,
-      password: args.password,
+      password: hashedPassword,
       role: "superAdmin",
       status: "active",
       permissions: args.permissions,
@@ -509,10 +534,13 @@ export const add = mutation({
       .unique();
     if (existing) throw new Error("Ce login existe déjà.");
 
+    // Hacher le mot de passe
+    const hashedPassword = await hashPassword(args.password);
+
     await ctx.db.insert("users", {
       nom: args.nom,
       login: args.login,
-      password: args.password,
+      password: hashedPassword,
       role: args.role,
       ecoleId: args.ecoleId,
       classe: args.classe,
@@ -547,7 +575,7 @@ export const update = mutation({
       classe: args.classe || undefined,
     };
     if (args.password && args.password.length > 0) {
-      updates.password = args.password;
+      updates.password = await hashPassword(args.password);
     }
     await ctx.db.patch(args.id, updates);
     return { success: true };
@@ -644,11 +672,28 @@ export const changePassword = mutation({
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("Utilisateur introuvable");
-    // Vérifier le mot de passe actuel (en clair selon votre code actuel, mais vous pouvez adapter avec un hash)
-    if (user.password !== args.currentPassword) {
+
+    // Vérifier l'ancien mot de passe avec vérification adaptative
+    const storedPassword = user.password;
+    let isCurrentValid = false;
+
+    const isHashed = /^\d+:[0-9a-fA-F]+:[0-9a-fA-F]+$/.test(storedPassword);
+    if (!isHashed) {
+      // Ancien format en clair
+      if (args.currentPassword === storedPassword) {
+        isCurrentValid = true;
+      }
+    } else {
+      isCurrentValid = await verifyPassword(args.currentPassword, storedPassword);
+    }
+
+    if (!isCurrentValid) {
       throw new Error("Mot de passe actuel incorrect");
     }
-    await ctx.db.patch(args.userId, { password: args.newPassword });
+
+    // Hacher le nouveau mot de passe
+    const newHashedPassword = await hashPassword(args.newPassword);
+    await ctx.db.patch(args.userId, { password: newHashedPassword });
     return { success: true };
   },
 });

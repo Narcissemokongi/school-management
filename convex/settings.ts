@@ -22,15 +22,24 @@ export const updateGlobalSettings = mutation({
     adminId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    // Vérifier que l'utilisateur est bien admin (optionnel)
-    // const admin = await ctx.db.get(args.adminId);
-    // if (!admin || admin.role !== "admin" || admin.ecoleId) throw new Error("Non autorisé");
+    const { adminId, ...settingsData } = args;
+
+    // Vérifier que l'utilisateur est le superadmin principal
+    const admin = await ctx.db.get(adminId);
+    const isSuperAdminPrincipal =
+      (admin?.role === "admin" && !admin.ecoleId) ||
+      (admin?.role === "superAdmin" &&
+        (!admin.permissions || admin.permissions.length === 0));
+
+    if (!isSuperAdminPrincipal) {
+      throw new Error("Seul le super admin principal peut modifier les paramètres globaux.");
+    }
 
     const existing = await ctx.db.query("settings").first();
     if (existing) {
-      await ctx.db.patch(existing._id, args);
+      await ctx.db.patch(existing._id, settingsData);
     } else {
-      await ctx.db.insert("settings", args);
+      await ctx.db.insert("settings", settingsData);
     }
   },
 });

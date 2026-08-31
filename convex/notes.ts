@@ -1,24 +1,46 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-// Utilitaire de vérification de rôle
-async function requireRole(
+// Vérifie les permissions pour les notes.
+// - Superadmin principal : autorisé partout
+// - Admin/directeur : autorisé dans son école
+// - Enseignant : autorisé dans son école et sa classe (si classe fournie)
+async function requireNotePermission(
   ctx: MutationCtx,
   userId: string | undefined,
-  allowedRoles: string[],
+  ecoleId: string,
   classe?: string
 ) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
-    throw new Error("Accès refusé : rôle insuffisant");
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  if (isSuperAdminPrincipal) return user;
+
+  // Vérifier l'école
+  const isEcoleAdmin =
+    (user.role === "admin" || user.role === "directeur") &&
+    user.ecoleId === ecoleId;
+  const isEnseignant = user.role === "enseignant" && user.ecoleId === ecoleId;
+
+  if (!isEcoleAdmin && !isEnseignant) {
+    throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer les notes de cette école.");
   }
-  if (classe && user.role === "enseignant" && user.classe !== classe) {
-    throw new Error("Vous n'êtes pas assigné à cette classe");
+
+  // Pour un enseignant, vérifier la classe si fournie
+  if (isEnseignant && classe && user.classe !== classe) {
+    throw new Error("Vous n'êtes pas assigné à cette classe.");
   }
+
   return user;
 }
+
+// ========== QUERIES ==========
 
 export const listByEleve = query({
   args: {
@@ -30,7 +52,7 @@ export const listByEleve = query({
       return await ctx.db
         .query("notes")
         .withIndex("by_eleveId", (q) => q.eq("eleveId", args.eleveId))
-        .filter((q) => q.eq(q.field("anneeId"), args.anneeId!))
+        .filter((q) => q.eq(q.field("anneeId"), args.anneeId))
         .collect();
     }
     return await ctx.db
@@ -49,7 +71,7 @@ export const listByEcole = query({
     if (args.anneeId) {
       return await ctx.db
         .query("notes")
-        .withIndex("by_anneeId", (q) => q.eq("anneeId", args.anneeId!))
+        .withIndex("by_anneeId", (q) => q.eq("anneeId", args.anneeId))
         .filter((q) => q.eq(q.field("ecoleId"), args.ecoleId))
         .collect();
     }
@@ -59,6 +81,41 @@ export const listByEcole = query({
       .collect();
   },
 });
+
+// Liste des notes d'une classe pour une année donnée (jointure avec les inscriptions)
+export const listByClasse = query({
+  args: {
+    ecoleId: v.id("ecoles"),
+    anneeId: v.id("anneesScolaires"),
+    classe: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // 1. Récupérer les inscriptions de cette classe/année/école
+    const inscriptions = await ctx.db
+      .query("inscriptions")
+      .withIndex("by_classe_annee", (q) =>
+        q.eq("classe", args.classe).eq("anneeId", args.anneeId)
+      )
+      .filter((q) => q.eq(q.field("ecoleId"), args.ecoleId))
+      .collect();
+
+    if (inscriptions.length === 0) return [];
+
+    const eleveIds = inscriptions.map((i) => i.eleveId);
+
+    // 2. Récupérer les notes de ces élèves
+    const notes = await ctx.db
+      .query("notes")
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
+      .collect();
+
+    // Filtrer en mémoire par liste d'IDs
+    const eleveIdSet = new Set(eleveIds);
+    return notes.filter((n) => eleveIdSet.has(n.eleveId));
+  },
+});
+
+// ========== MUTATIONS ==========
 
 export const upsert = mutation({
   args: {
@@ -70,13 +127,15 @@ export const upsert = mutation({
     periode: v.string(),
     appreciation: v.optional(v.string()),
     anneeId: v.id("anneesScolaires"),
-    userId: v.optional(v.id("users")), // celui qui fait l'action
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    // Pour vérifier la classe, il faut récupérer l'élève
+    // Récupérer l'élève pour obtenir sa classe
     const eleve = await ctx.db.get(args.eleveId);
-    const classe = eleve?.classe; // peut être undefined si l'élève n'existe pas, mais normalement il existe
-    await requireRole(ctx, args.userId, ["admin", "enseignant"], classe);
+    if (!eleve) throw new Error("Élève introuvable");
+
+    // Vérifier l'école et la classe (pour enseignant)
+    await requireNotePermission(ctx, args.userId, args.ecoleId, eleve.classe);
 
     const { userId, ...rest } = args;
     const existing = await ctx.db
@@ -90,6 +149,7 @@ export const upsert = mutation({
         )
       )
       .unique();
+
     let docId: string;
     let action: string;
     if (existing) {
@@ -104,6 +164,7 @@ export const upsert = mutation({
       docId = await ctx.db.insert("notes", rest);
       action = "create";
     }
+
     if (userId) {
       await ctx.db.insert("audit", {
         userId,
@@ -132,8 +193,11 @@ export const upsertBulk = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    // Pour le bulk, on peut vérifier le rôle global sans vérifier chaque classe individuellement
-    await requireRole(ctx, args.userId, ["admin", "enseignant"]);
+    // Pour le bulk, on vérifie le rôle et l'école, mais pas la classe pour chaque élève.
+    // On récupère la classe d'un élève pour la vérification enseignant (optionnel).
+    const firstEleve = await ctx.db.get(args.eleveIds[0]);
+    const classe = firstEleve?.classe;
+    await requireNotePermission(ctx, args.userId, args.ecoleId, classe);
 
     const { userId, eleveIds, ...rest } = args;
     let firstId: string | null = null;
@@ -161,6 +225,7 @@ export const upsertBulk = mutation({
         if (!firstId) firstId = newId;
       }
     }
+
     if (userId && firstId) {
       await ctx.db.insert("audit", {
         userId,
@@ -182,14 +247,15 @@ export const remove = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    // Récupérer la note pour obtenir l'élève et sa classe
     const doc = await ctx.db.get(args.id);
     if (!doc) throw new Error("Note introuvable");
+
     const eleve = await ctx.db.get(doc.eleveId);
-    await requireRole(ctx, args.userId, ["admin", "enseignant"], eleve?.classe);
+    await requireNotePermission(ctx, args.userId, doc.ecoleId, eleve?.classe);
 
     await ctx.db.delete(args.id);
-    if (args.userId && doc) {
+
+    if (args.userId) {
       await ctx.db.insert("audit", {
         userId: args.userId,
         action: "delete",
@@ -200,23 +266,5 @@ export const remove = mutation({
         ecoleId: doc.ecoleId,
       });
     }
-  },
-});
-
-export const listByClasse = query({
-  args: { ecoleId: v.id("ecoles"), anneeId: v.id("anneesScolaires"), classe: v.string() },
-  handler: async (ctx, args) => {
-    const eleves = await ctx.db
-      .query("eleves")
-      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
-      .filter((q) => q.and(q.eq(q.field("anneeId"), args.anneeId), q.eq(q.field("classe"), args.classe)))
-      .collect();
-    const eleveIds = eleves.map(e => e._id);
-    if (eleveIds.length === 0) return [];
-    return await ctx.db
-      .query("notes")
-      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
-      .filter((q) => q.or(...eleveIds.map(id => q.eq(q.field("eleveId"), id))))
-      .collect();
   },
 });

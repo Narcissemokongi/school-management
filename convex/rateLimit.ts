@@ -15,7 +15,7 @@ export const checkRateLimit = mutation({
     const window = args.windowMs ?? WINDOW_MS;
     const now = Date.now();
 
-    // Récupérer ou créer l'entrée
+    // Récupérer l'entrée existante
     const existing = await ctx.db
       .query("rateLimits")
       .withIndex("by_key", (q) => q.eq("key", args.key))
@@ -33,7 +33,6 @@ export const checkRateLimit = mutation({
 
     // Vérifier si la fenêtre est dépassée
     if (now - existing.timestamp > window) {
-      // Nouvelle fenêtre
       await ctx.db.patch(existing._id, {
         timestamp: now,
         count: 1,

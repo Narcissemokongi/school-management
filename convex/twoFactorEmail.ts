@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "../convex/_generated/api";
+import { api } from "./_generated/api";
 
 const CODE_EXPIRATION_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_ATTEMPTS = 5;

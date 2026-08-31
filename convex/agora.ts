@@ -2,7 +2,7 @@
 
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "../convex/_generated/api";
+import { api } from "./_generated/api"; // Correction de l'import
 
 export const generateToken = action({
   args: {
@@ -19,14 +19,24 @@ export const generateToken = action({
       throw new Error("Nom de canal invalide");
     }
 
-    // 3. Générer le token
-    const appId = process.env.AGORA_APP_ID!;
-    const appCertificate = process.env.AGORA_APP_CERTIFICATE!;
+    // 3. Vérifier que l'utilisateur a le droit de générer un token (optionnel mais recommandé)
+    // Ici, on peut ajouter une vérification de rôle ou d'école si nécessaire.
+    // Par exemple : si l'utilisateur est un élève, il doit appartenir à une école, etc.
+    // Pour l'instant, on accepte tous les utilisateurs authentifiés.
+
+    // 4. Générer le token
+    const appId = process.env.AGORA_APP_ID;
+    const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+
+    if (!appId || !appCertificate) {
+      throw new Error("Variables d'environnement Agora manquantes.");
+    }
+
     const expirationTimeInSeconds = 3600;
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
-    // 4. Import dynamique robuste du module Agora
+    // 5. Import dynamique robuste du module Agora
     let RtcTokenBuilder: any, RtcRole: any;
     try {
       const agoraModule: any = await import("agora-token");
@@ -34,16 +44,20 @@ export const generateToken = action({
       RtcRole = agoraModule.RtcRole ?? agoraModule.default?.RtcRole;
     } catch (e) {
       // Fallback au cas où le package serait "agora-access-token"
-      const agoraModule: any = await import("agora-access-token");
-      RtcTokenBuilder = agoraModule.RtcTokenBuilder ?? agoraModule.default?.RtcTokenBuilder;
-      RtcRole = agoraModule.RtcRole ?? agoraModule.default?.RtcRole;
+      try {
+        const agoraModule: any = await import("agora-access-token");
+        RtcTokenBuilder = agoraModule.RtcTokenBuilder ?? agoraModule.default?.RtcTokenBuilder;
+        RtcRole = agoraModule.RtcRole ?? agoraModule.default?.RtcRole;
+      } catch (e2) {
+        throw new Error("Impossible de charger le module Agora (ni agora-token ni agora-access-token)");
+      }
     }
 
     if (!RtcTokenBuilder || !RtcRole) {
       throw new Error("Impossible de charger le module Agora (RtcTokenBuilder/RtcRole manquants)");
     }
 
-    // 5. Génération du token (signature standard : 6 arguments)
+    // 6. Génération du token
     const token = RtcTokenBuilder.buildTokenWithUid(
       appId,
       appCertificate,

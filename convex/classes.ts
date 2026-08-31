@@ -1,16 +1,27 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-async function requireRole(
+// Vérifie que l'utilisateur est admin/directeur de l'école concernée ou superadmin principal
+async function requireEcoleAdmin(
   ctx: MutationCtx,
   userId: string | undefined,
-  allowedRoles: string[]
+  ecoleId: string
 ) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
-    throw new Error("Accès refusé : rôle insuffisant");
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  const isEcoleAdmin =
+    (user.role === "admin" || user.role === "directeur") &&
+    user.ecoleId === ecoleId;
+
+  if (!isSuperAdminPrincipal && !isEcoleAdmin) {
+    throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer cette école.");
   }
   return user;
 }
@@ -23,24 +34,28 @@ export const list = query({
     anneeId: v.optional(v.id("anneesScolaires")),
   },
   handler: async (ctx, args) => {
-    const db: any = ctx.db;
     const { ecoleId, anneeId } = args;
 
-    let classesQuery: any = db.query("classes");
-    if (ecoleId) {
-      classesQuery = classesQuery.withIndex("by_ecoleId", (q: any) =>
-        q.eq("ecoleId", ecoleId)
-      );
-    }
+    let classes: any[] = [];
 
-    let classes = await classesQuery.collect();
+    if (ecoleId) {
+      classes = await ctx.db
+        .query("classes")
+        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", ecoleId))
+        .collect();
+    } else {
+      classes = await ctx.db.query("classes").collect();
+    }
 
     if (anneeId) {
-      classes = classes.filter((c: any) => c.anneeId === anneeId);
+      classes = classes.filter((c) => c.anneeId === anneeId);
     }
 
-    return (classes as any[]).sort((a, b) =>
-      a.nom.localeCompare(b.nom, undefined, { numeric: true, sensitivity: "base" })
+    return classes.sort((a, b) =>
+      a.nom.localeCompare(b.nom, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
     );
   },
 });
@@ -55,25 +70,24 @@ export const add = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
-    const db: any = ctx.db;
     const nom = args.nom.trim();
     if (!nom) throw new Error("Le nom de la classe est requis.");
 
-    const existingClasses: any[] = await db
+    const existingClasses = await ctx.db
       .query("classes")
-      .withIndex("by_ecoleId", (q: any) => q.eq("ecoleId", args.ecoleId))
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
       .collect();
 
     const doublon = existingClasses.some(
-      (c: any) =>
+      (c) =>
         c.nom === nom &&
         (args.anneeId ? c.anneeId === args.anneeId : !c.anneeId)
     );
     if (doublon) throw new Error("Cette classe existe déjà pour cette année.");
 
-    await db.insert("classes", {
+    await ctx.db.insert("classes", {
       nom,
       ecoleId: args.ecoleId,
       anneeId: args.anneeId,
@@ -87,35 +101,36 @@ export const remove = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    const classe = await ctx.db.get(args.id);
+    if (!classe) throw new Error("Classe introuvable");
+    await requireEcoleAdmin(ctx, args.userId, classe.ecoleId);
 
-    const db: any = ctx.db;
-    const classe: any = await db.get(args.id);
-    if (!classe) return;
+    // Stocker l'anneeId dans une constante locale typée pour éviter le problème de type
+    const anneeId: Id<"anneesScolaires"> | undefined = classe.anneeId;
 
     let inscriptions: any[] = [];
 
-    if (classe.anneeId) {
-      inscriptions = await db
+    if (anneeId) {
+      inscriptions = await ctx.db
         .query("inscriptions")
-        .withIndex("by_ecole_annee", (q: any) =>
-          q.eq("ecoleId", classe.ecoleId).eq("anneeId", classe.anneeId)
+        .withIndex("by_ecole_annee", (q) =>
+          q.eq("ecoleId", classe.ecoleId).eq("anneeId", anneeId)
         )
         .collect();
     } else {
-      const all: any[] = await db.query("inscriptions").collect();
-      inscriptions = all.filter((i: any) => i.ecoleId === classe.ecoleId);
+      const all = await ctx.db.query("inscriptions").collect();
+      inscriptions = all.filter((i) => i.ecoleId === classe.ecoleId);
     }
 
     const inscriptionsDansClasse = inscriptions.filter(
-      (i: any) => i.classe === classe.nom
+      (i) => i.classe === classe.nom
     );
 
     if (inscriptionsDansClasse.length > 0) {
       throw new Error("Des élèves sont encore inscrits dans cette classe.");
     }
 
-    await db.delete(args.id);
+    await ctx.db.delete(args.id);
   },
 });
 
@@ -123,24 +138,23 @@ export const remove = mutation({
 export const updateEleveClasse = mutation({
   args: {
     eleveId: v.id("eleves"),
-    newClasseNom: v.string(), // chaîne vide pour retirer
+    newClasseNom: v.string(),
     anneeId: v.id("anneesScolaires"),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
-
-    const db: any = ctx.db;
     const { eleveId, newClasseNom, anneeId } = args;
 
-    const eleve = await db.get(eleveId);
+    const eleve = await ctx.db.get(eleveId);
     if (!eleve) throw new Error("Élève introuvable.");
 
+    await requireEcoleAdmin(ctx, args.userId, eleve.ecoleId);
+
     if (newClasseNom !== "") {
-      const classe = await db
+      const classe = await ctx.db
         .query("classes")
-        .withIndex("by_ecoleId", (q: any) => q.eq("ecoleId", eleve.ecoleId))
-        .filter((q: any) => q.eq(q.field("nom"), newClasseNom))
+        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", eleve.ecoleId))
+        .filter((q) => q.eq(q.field("nom"), newClasseNom))
         .first();
       if (!classe) {
         throw new Error("La classe spécifiée n'existe pas.");
@@ -150,9 +164,9 @@ export const updateEleveClasse = mutation({
       }
     }
 
-    const inscription = await db
+    const inscription = await ctx.db
       .query("inscriptions")
-      .withIndex("by_eleve_annee", (q: any) =>
+      .withIndex("by_eleve_annee", (q) =>
         q.eq("eleveId", eleveId).eq("anneeId", anneeId)
       )
       .first();
@@ -161,7 +175,7 @@ export const updateEleveClasse = mutation({
       throw new Error("Cet élève n'a pas d'inscription pour l'année sélectionnée.");
     }
 
-    await db.patch(inscription._id, { classe: newClasseNom });
+    await ctx.db.patch(inscription._id, { classe: newClasseNom });
   },
 });
 
@@ -172,9 +186,26 @@ export const rename = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    const classe = await ctx.db.get(args.id);
+    if (!classe) throw new Error("Classe introuvable");
+    await requireEcoleAdmin(ctx, args.userId, classe.ecoleId);
+
     const trimmed = args.nom.trim();
     if (!trimmed) throw new Error("Le nom est requis.");
+
+    // Vérifier les doublons avant de renommer
+    const existing = await ctx.db
+      .query("classes")
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", classe.ecoleId))
+      .collect();
+    const conflit = existing.some(
+      (c) =>
+        c._id !== args.id &&
+        c.nom === trimmed &&
+        (classe.anneeId ? c.anneeId === classe.anneeId : !c.anneeId)
+    );
+    if (conflit) throw new Error("Une classe avec ce nom existe déjà pour cette année.");
+
     await ctx.db.patch(args.id, { nom: trimmed });
   },
 });
@@ -187,13 +218,13 @@ export const importClasses = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
-    const db: any = ctx.db;
-    const existingClasses: any[] = await db
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
+
+    const existingClasses = await ctx.db
       .query("classes")
-      .withIndex("by_ecoleId", (q: any) => q.eq("ecoleId", args.ecoleId))
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
       .collect();
-    const existingNames = new Set(existingClasses.map((c: any) => c.nom));
+    const existingNames = new Set(existingClasses.map((c) => c.nom));
     let inserted = 0;
     const duplicates: string[] = [];
 
@@ -204,7 +235,7 @@ export const importClasses = mutation({
         duplicates.push(trimmed);
         continue;
       }
-      await db.insert("classes", {
+      await ctx.db.insert("classes", {
         nom: trimmed,
         ecoleId: args.ecoleId,
         anneeId: args.anneeId,

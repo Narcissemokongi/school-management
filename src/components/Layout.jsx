@@ -5,12 +5,12 @@ import { ScrollToTop } from "./ScrollToTop";
 import { Menu } from "lucide-react";
 import { OfflineBanner } from "./OfflineBanner";
 import { useStyles } from "../styles/theme";
-import { useAppStore } from "../store/appStore"; // <-- import du store
+import { useAppStore } from "../store/appStore";
 
 export function Layout({
   children,
   menu,
-  activeTab,           // on laisse venir de l'extérieur, mais on synchronise avec le store
+  activeTab,
   onTabChange,
   user,
   dark,
@@ -20,20 +20,21 @@ export function Layout({
   const isMobile = useIsMobile();
   const { S } = useStyles();
 
-  // Récupération depuis le store
   const sidebarCollapsed = useAppStore((state) => state.sidebarCollapsed);
   const setSidebarCollapsed = useAppStore((state) => state.setSidebarCollapsed);
   const mobileSidebarOpen = useAppStore((state) => state.mobileSidebarOpen);
   const setMobileSidebarOpen = useAppStore((state) => state.setMobileSidebarOpen);
 
   const mainRef = useRef(null);
+  const prevActiveTabRef = useRef(activeTab);
 
-  // Ferme la sidebar mobile lors d'un changement d'onglet
+  // Ferme la sidebar mobile lors d'un changement d'onglet, pas à l'ouverture
   useEffect(() => {
-    if (isMobile && mobileSidebarOpen) {
+    if (isMobile && prevActiveTabRef.current !== activeTab) {
       setMobileSidebarOpen(false);
     }
-  }, [activeTab, isMobile, mobileSidebarOpen, setMobileSidebarOpen]);
+    prevActiveTabRef.current = activeTab;
+  }, [activeTab, isMobile, setMobileSidebarOpen]);
 
   // Ferme la sidebar mobile si on clique en dehors
   const handleMainClick = useCallback(() => {

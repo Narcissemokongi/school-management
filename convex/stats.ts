@@ -25,17 +25,30 @@ export const tauxReussiteParMatiere = query({
     const notes = await ctx.db.query("notes").collect();
     const cours = await ctx.db.query("cours").collect();
 
-    const matieres = [...new Set(notes.map(n => n.matiere))].sort();
+    // Matières uniques (en ignorant les valeurs undefined)
+    const matieres = [
+      ...new Set(notes.map((n) => n.matiere).filter((m) => m !== undefined)),
+    ].sort();
+
     const result = [];
     for (const matiere of matieres) {
-      const notesMatiere = notes.filter(n => n.matiere === matiere);
+      const notesMatiere = notes.filter((n) => n.matiere === matiere);
       if (notesMatiere.length === 0) continue;
-      const coursMatiere = cours.find(c => c.nom === matiere);
+
+      const coursMatiere = cours.find((c) => c.nom === matiere);
       const bareme = coursMatiere?.bareme ?? 20;
-      const sommePonderee = notesMatiere.reduce((sum, n) => sum + n.note * (n.coefficient || 1), 0);
-      const totalCoeff = notesMatiere.reduce((sum, n) => sum + (n.coefficient || 1), 0);
+
+      const sommePonderee = notesMatiere.reduce(
+        (sum, n) => sum + n.note * (n.coefficient || 1),
+        0
+      );
+      const totalCoeff = notesMatiere.reduce(
+        (sum, n) => sum + (n.coefficient || 1),
+        0
+      );
       const moyenneBrute = totalCoeff > 0 ? sommePonderee / totalCoeff : 0;
       const taux = (moyenneBrute / bareme) * 100;
+
       result.push({ matiere, taux: Number(taux.toFixed(1)) });
     }
     return result.sort((a, b) => b.taux - a.taux);
@@ -49,23 +62,39 @@ export const tauxReussiteParClasse = query({
     const eleves = await ctx.db.query("eleves").collect();
     const cours = await ctx.db.query("cours").collect();
 
-    const classes = [...new Set(eleves.map(e => e.classe))].sort();
+    // Classes uniques (en ignorant les valeurs undefined)
+    const classes = [
+      ...new Set(eleves.map((e) => e.classe).filter((c) => c !== undefined)),
+    ].sort();
+
     const result = [];
     for (const classe of classes) {
-      const elevesClasse = eleves.filter(e => e.classe === classe);
-      const eleveIds = elevesClasse.map(e => e._id);
-      const notesClasse = notes.filter(n => eleveIds.includes(n.eleveId));
+      const elevesClasse = eleves.filter((e) => e.classe === classe);
+      const eleveIds = elevesClasse.map((e) => e._id);
+      const notesClasse = notes.filter((n) => eleveIds.includes(n.eleveId));
       if (notesClasse.length === 0) continue;
 
-      const matieresClasse = [...new Set(notesClasse.map(n => n.matiere))];
+      const matieresClasse = [
+        ...new Set(notesClasse.map((n) => n.matiere).filter((m) => m !== undefined)),
+      ];
       let sommeTaux = 0;
       let nbMatieres = 0;
+
       for (const matiere of matieresClasse) {
-        const notesMatiere = notesClasse.filter(n => n.matiere === matiere);
-        const coursMatiere = cours.find(c => c.nom === matiere && c.classe === classe);
+        const notesMatiere = notesClasse.filter((n) => n.matiere === matiere);
+        const coursMatiere = cours.find(
+          (c) => c.nom === matiere && c.classe === classe
+        );
         const bareme = coursMatiere?.bareme ?? 20;
-        const sommePonderee = notesMatiere.reduce((sum, n) => sum + n.note * (n.coefficient || 1), 0);
-        const totalCoeff = notesMatiere.reduce((sum, n) => sum + (n.coefficient || 1), 0);
+
+        const sommePonderee = notesMatiere.reduce(
+          (sum, n) => sum + n.note * (n.coefficient || 1),
+          0
+        );
+        const totalCoeff = notesMatiere.reduce(
+          (sum, n) => sum + (n.coefficient || 1),
+          0
+        );
         const moyenneBrute = totalCoeff > 0 ? sommePonderee / totalCoeff : 0;
         const taux = (moyenneBrute / bareme) * 100;
         sommeTaux += taux;
@@ -84,19 +113,32 @@ export const evolutionResultats = query({
     const notes = await ctx.db.query("notes").collect();
     const cours = await ctx.db.query("cours").collect();
 
-    const periodes = [...new Set(notes.map(n => n.periode))].sort();
+    const periodes = [
+      ...new Set(notes.map((n) => n.periode).filter((p) => p !== undefined)),
+    ].sort();
+
     const result = [];
     for (const periode of periodes) {
-      const notesPeriode = notes.filter(n => n.periode === periode);
-      const matieres = [...new Set(notesPeriode.map(n => n.matiere))];
+      const notesPeriode = notes.filter((n) => n.periode === periode);
+      const matieres = [
+        ...new Set(notesPeriode.map((n) => n.matiere).filter((m) => m !== undefined)),
+      ];
       let sommeTaux = 0;
       let nbMatieres = 0;
+
       for (const matiere of matieres) {
-        const notesMatiere = notesPeriode.filter(n => n.matiere === matiere);
-        const coursMatiere = cours.find(c => c.nom === matiere);
+        const notesMatiere = notesPeriode.filter((n) => n.matiere === matiere);
+        const coursMatiere = cours.find((c) => c.nom === matiere);
         const bareme = coursMatiere?.bareme ?? 20;
-        const sommePonderee = notesMatiere.reduce((sum, n) => sum + n.note * (n.coefficient || 1), 0);
-        const totalCoeff = notesMatiere.reduce((sum, n) => sum + (n.coefficient || 1), 0);
+
+        const sommePonderee = notesMatiere.reduce(
+          (sum, n) => sum + n.note * (n.coefficient || 1),
+          0
+        );
+        const totalCoeff = notesMatiere.reduce(
+          (sum, n) => sum + (n.coefficient || 1),
+          0
+        );
         const moyenneBrute = totalCoeff > 0 ? sommePonderee / totalCoeff : 0;
         const taux = (moyenneBrute / bareme) * 100;
         sommeTaux += taux;

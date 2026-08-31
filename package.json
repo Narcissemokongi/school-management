@@ -21,6 +21,7 @@
     "agora-rtc-react": "^2.5.1",
     "agora-rtc-sdk-ng": "^4.24.4",
     "agora-token": "^2.0.5",
+    "bcryptjs": "^3.0.3",
     "convex": "^1.39.1",
     "firebase": "^12.12.1",
     "html2canvas": "^1.4.1",
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@capacitor-community/electron": "^5.0.1",
     "@eslint/js": "^10.0.1",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

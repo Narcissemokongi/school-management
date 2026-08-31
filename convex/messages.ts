@@ -1,16 +1,40 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-async function requireRole(ctx: MutationCtx, userId: string | undefined, allowedRoles: string[]) {
+// Vérifie que l'utilisateur a le droit d'utiliser la messagerie pour l'école spécifiée.
+// Le superadmin principal est autorisé partout, sinon le rôle doit être dans la liste
+// et l'utilisateur doit appartenir à la même école.
+async function requireEcoleRole(
+  ctx: MutationCtx,
+  userId: string | undefined,
+  ecoleId: string,
+  allowedRoles: string[]
+) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  if (isSuperAdminPrincipal) return user;
+
+  if (!allowedRoles.includes(user.role)) {
     throw new Error("Accès refusé : rôle insuffisant");
   }
+
+  if (user.ecoleId !== ecoleId) {
+    throw new Error("Accès refusé : vous n'appartenez pas à cette école.");
+  }
+
   return user;
 }
 
+// ========== QUERIES ==========
+
+// Messages reçus par un utilisateur
 export const listRecus = query({
   args: { destinataireId: v.id("users") },
   handler: async (ctx, args) => {
@@ -22,6 +46,7 @@ export const listRecus = query({
   },
 });
 
+// Messages envoyés par un utilisateur
 export const listEnvoyes = query({
   args: { expediteurId: v.id("users") },
   handler: async (ctx, args) => {
@@ -33,6 +58,9 @@ export const listEnvoyes = query({
   },
 });
 
+// ========== MUTATIONS ==========
+
+// Envoyer un message direct
 export const send = mutation({
   args: {
     ecoleId: v.id("ecoles"),
@@ -46,7 +74,16 @@ export const send = mutation({
     }))),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.expediteurId, ["admin", "directeur", "disciplinaire", "enseignant", "parent", "eleve"]);
+    // Vérifier l'expéditeur et l'école
+    await requireEcoleRole(ctx, args.expediteurId, args.ecoleId, [
+      "admin", "directeur", "disciplinaire", "enseignant", "parent", "eleve",
+    ]);
+
+    // Vérifier que le destinataire appartient à la même école
+    const destinataire = await ctx.db.get(args.destinataireId);
+    if (!destinataire || destinataire.ecoleId !== args.ecoleId) {
+      throw new Error("Le destinataire n'appartient pas à cette école.");
+    }
 
     const message = {
       ...args,
@@ -55,9 +92,8 @@ export const send = mutation({
     };
     const messageId = await ctx.db.insert("messages", message);
 
-    // Envoyer une push au destinataire
-    const destinataire = await ctx.db.get(args.destinataireId);
-    if (destinataire && "fcmToken" in destinataire && destinataire.fcmToken) {
+    // Envoyer une notification push si le destinataire a un token FCM
+    if (destinataire.fcmToken) {
       const expediteur = await ctx.db.get(args.expediteurId);
       const serverKey = process.env.FCM_SERVER_KEY;
       if (serverKey) {
@@ -82,13 +118,32 @@ export const send = mutation({
   },
 });
 
+// Marquer un message comme lu
 export const markAsRead = mutation({
-  args: { messageId: v.id("messages") },
+  args: {
+    messageId: v.id("messages"),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
+    // Seul le destinataire (ou un admin de l'école) peut marquer comme lu
+    const message = await ctx.db.get(args.messageId);
+    if (!message) throw new Error("Message introuvable");
+
+    if (args.userId && message.destinataireId !== args.userId) {
+      const user = await ctx.db.get(args.userId as Id<"users">);
+      const isAdmin =
+        (user?.role === "admin" || user?.role === "directeur" || user?.role === "disciplinaire") &&
+        user.ecoleId === message.ecoleId;
+      if (!isAdmin) {
+        throw new Error("Vous ne pouvez pas marquer ce message comme lu.");
+      }
+    }
+
     await ctx.db.patch(args.messageId, { lu: true });
   },
 });
 
+// Envoyer un message à tous les parents de l'école
 export const sendToAllParents = mutation({
   args: {
     ecoleId: v.id("ecoles"),
@@ -96,7 +151,9 @@ export const sendToAllParents = mutation({
     contenu: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.expediteurId, ["admin", "directeur", "disciplinaire"]);
+    await requireEcoleRole(ctx, args.expediteurId, args.ecoleId, [
+      "admin", "directeur", "disciplinaire",
+    ]);
 
     const parents = await ctx.db
       .query("users")
@@ -122,6 +179,7 @@ export const sendToAllParents = mutation({
   },
 });
 
+// Générer une URL d'upload
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
@@ -130,7 +188,6 @@ export const generateUploadUrl = mutation({
 });
 
 // Envoyer un message à un groupe
-// Envoyer un message de groupe
 export const sendToGroupe = mutation({
   args: {
     ecoleId: v.id("ecoles"),
@@ -144,7 +201,10 @@ export const sendToGroupe = mutation({
     }))),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.expediteurId, ["admin", "directeur", "disciplinaire", "enseignant", "eleve"]);
+    await requireEcoleRole(ctx, args.expediteurId, args.ecoleId, [
+      "admin", "directeur", "disciplinaire", "enseignant", "eleve",
+    ]);
+
     return await ctx.db.insert("messages", {
       ecoleId: args.ecoleId,
       expediteurId: args.expediteurId,
@@ -157,7 +217,7 @@ export const sendToGroupe = mutation({
   },
 });
 
-// Lister les messages d’un groupe
+// Lister les messages d'un groupe (ordre chronologique)
 export const listByGroupe = query({
   args: {
     ecoleId: v.id("ecoles"),
@@ -171,6 +231,6 @@ export const listByGroupe = query({
       .filter((q) => q.eq(q.field("ecoleId"), args.ecoleId))
       .order("desc")
       .take(args.limit ?? 100);
-    return messages.reverse(); // ordre chronologique
+    return messages.reverse();
   },
 });

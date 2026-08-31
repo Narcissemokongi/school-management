@@ -1,8 +1,32 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
-// ========== OUTILS ==========
+// Vérifie que l'utilisateur est admin/directeur de l'école concernée ou superadmin principal
+async function requireEcoleAdmin(
+  ctx: MutationCtx,
+  userId: string | undefined,
+  ecoleId: string
+) {
+  if (!userId) throw new Error("Authentification requise");
+  const user = await ctx.db.get(userId as Id<"users">);
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  const isEcoleAdmin =
+    (user.role === "admin" || user.role === "directeur") &&
+    user.ecoleId === ecoleId;
+
+  if (!isSuperAdminPrincipal && !isEcoleAdmin) {
+    throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer cette école.");
+  }
+  return user;
+}
+
+// Vérifie le rôle et éventuellement l'appartenance à une classe (pour les enseignants)
 async function requireRole(
   ctx: MutationCtx,
   userId: string | undefined,
@@ -31,10 +55,10 @@ export const list = query({
     if (args.anneeId) {
       let q = ctx.db
         .query("cours")
-        .withIndex("by_anneeId", (q) => q.eq("anneeId", args.anneeId!))
+        .withIndex("by_anneeId", (q) => q.eq("anneeId", args.anneeId))
         .filter((q) => q.eq(q.field("ecoleId"), args.ecoleId));
       if (args.classe) {
-        q = q.filter((q) => q.eq(q.field("classe"), args.classe!));
+        q = q.filter((q) => q.eq(q.field("classe"), args.classe));
       }
       return await q.collect();
     }
@@ -42,7 +66,7 @@ export const list = query({
       .query("cours")
       .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId));
     if (args.classe) {
-      q = q.filter((q) => q.eq(q.field("classe"), args.classe!));
+      q = q.filter((q) => q.eq(q.field("classe"), args.classe));
     }
     return await q.collect();
   },
@@ -62,9 +86,8 @@ export const add = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
-    // Vérification d'unicité (même nom, même classe, même école, et même année si fournie)
     let duplicateQuery = ctx.db
       .query("cours")
       .withIndex("by_classe", (q) =>
@@ -104,7 +127,7 @@ export const addBulk = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
     for (const classe of args.classes) {
       let duplicateQuery = ctx.db
@@ -146,10 +169,10 @@ export const update = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
-
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Cours introuvable.");
+
+    await requireEcoleAdmin(ctx, args.userId, existing.ecoleId);
 
     // Vérifier l'unicité si le nom ou la classe change
     if (args.nom || args.classe) {
@@ -186,15 +209,12 @@ export const remove = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
-
     const doc = await ctx.db.get(args.id);
     if (!doc) return;
 
-    // NB : on ne vérifie plus les notes associées pour éviter l'erreur TypeScript.
-    // Si vous souhaitez empêcher la suppression lorsqu'il y a des notes,
-    // il faudra d'abord récupérer les élèves de la classe, puis les notes de ces élèves.
+    await requireEcoleAdmin(ctx, args.userId, doc.ecoleId);
 
+    // Pas de vérification des notes pour l'instant (le champ classe n'existe pas dans la table notes)
     await ctx.db.delete(args.id);
 
     if (args.userId) {

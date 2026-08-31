@@ -1,6 +1,6 @@
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id, Doc } from "../convex/_generated/dataModel";
+import { Id, Doc } from "./_generated/dataModel"; // Correction de l'import
 
 // ========== OUTILS ==========
 async function requireAuth(ctx: MutationCtx, userId: string | undefined) {
@@ -51,8 +51,19 @@ export const createCall = mutation({
   },
   handler: async (ctx, args) => {
     const caller = await requireAuth(ctx, args.userId);
+
+    // Vérifier que l'appelant appartient à l'école spécifiée
+    if (caller.ecoleId !== args.ecoleId) {
+      throw new Error("Vous n'appartenez pas à cette école.");
+    }
+
     const callee = await ctx.db.get(args.calleeId);
     if (!callee) throw new Error("Destinataire introuvable");
+
+    // Vérifier que le destinataire est dans la même école
+    if (callee.ecoleId !== args.ecoleId) {
+      throw new Error("Le destinataire n'appartient pas à cette école.");
+    }
 
     // Terminer les anciens appels ringing entre ces deux utilisateurs
     const oldCalls = await ctx.db
@@ -104,6 +115,11 @@ export const createGroupCall = mutation({
     const caller = await requireAuth(ctx, args.userId);
     if (!["admin", "directeur", "disciplinaire", "enseignant"].includes(caller.role)) {
       throw new Error("Vous n'êtes pas autorisé à créer un appel de groupe");
+    }
+
+    // Vérifier que l'appelant appartient à l'école
+    if (caller.ecoleId !== args.ecoleId) {
+      throw new Error("Vous n'appartenez pas à cette école.");
     }
 
     // Vérifier que les participants sont dans la même école
@@ -169,7 +185,7 @@ export const rejectCall = mutation({
     const call = await ctx.db.get(args.callId);
     if (!call || call.status !== "ringing") throw new Error("Appel introuvable ou déjà terminé");
     if (call.isGroup) {
-      // Le refus d'un participant ne termine pas l'appel de groupe, on ignore simplement.
+      // Le refus d'un participant ne termine pas l'appel de groupe
       return { success: true };
     } else {
       if (call.calleeId !== args.userId) throw new Error("Vous n'êtes pas le destinataire");
@@ -203,8 +219,21 @@ export const markCallMissed = mutation({
   },
 });
 
+// Nettoyer les appels expirés (réservé aux admins/superadmin)
 export const cleanupExpiredCalls = mutation({
-  handler: async (ctx) => {
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    // Optionnel : restreindre l'accès
+    if (args.userId) {
+      const user = await requireAuth(ctx, args.userId);
+      const isSuperAdminPrincipal =
+        (user.role === "admin" && !user.ecoleId) ||
+        (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+      if (!isSuperAdminPrincipal && !["admin", "directeur"].includes(user.role)) {
+        throw new Error("Non autorisé");
+      }
+    }
+
     const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
     const expired = await ctx.db
       .query("appels")
@@ -226,7 +255,6 @@ export const cleanupExpiredCalls = mutation({
 export const getPendingCall = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    // Pour les appels individuels
     const direct = await ctx.db
       .query("appels")
       .withIndex("by_callee", (q) => q.eq("calleeId", args.userId))
@@ -234,14 +262,14 @@ export const getPendingCall = query({
       .order("desc")
       .first();
     if (direct) return direct;
-    // Pour les appels de groupe (on filtre en mémoire car Convex ne supporte pas includes)
+
     const allRinging = await ctx.db
       .query("appels")
       .filter((q) => q.eq(q.field("status"), "ringing"))
       .collect();
     return (
       allRinging.find(
-        (c: any) => c.isGroup && c.participants?.includes(args.userId)
+        (c) => c.isGroup && c.participants?.includes(args.userId)
       ) || null
     );
   },
@@ -256,7 +284,7 @@ export const getActiveCall = query({
       .collect();
 
     return (
-      allAccepted.find((c: any) =>
+      allAccepted.find((c) =>
         c.isGroup
           ? c.participants?.includes(args.userId) || c.callerId === args.userId
           : c.callerId === args.userId || c.calleeId === args.userId
@@ -307,13 +335,13 @@ export const listHistory = query({
       .filter((q) => q.eq(q.field("isGroup"), true))
       .collect();
 
-    const userGroupCalls = groupCalls.filter((c: any) =>
+    const userGroupCalls = groupCalls.filter((c) =>
       c.participants?.includes(args.userId)
     );
 
     return [...directCalls, ...userGroupCalls]
       .sort(
-        (a: any, b: any) =>
+        (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       )
       .slice(0, 100);

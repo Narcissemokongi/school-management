@@ -1,6 +1,6 @@
 import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "../convex/_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 
 function generateMatricule(length = 6): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -11,6 +11,31 @@ function generateMatricule(length = 6): string {
   return code;
 }
 
+// Vérifie que l'utilisateur est autorisé à gérer l'école donnée
+async function requireEcoleAdmin(
+  ctx: MutationCtx,
+  userId: string | undefined,
+  ecoleId: string
+) {
+  if (!userId) throw new Error("Authentification requise");
+  const user = await ctx.db.get(userId as Id<"users">);
+  if (!user) throw new Error("Utilisateur introuvable");
+
+  const isSuperAdminPrincipal =
+    (user.role === "admin" && !user.ecoleId) ||
+    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
+
+  const isEcoleAdmin =
+    (user.role === "admin" || user.role === "directeur") &&
+    user.ecoleId === ecoleId;
+
+  if (!isSuperAdminPrincipal && !isEcoleAdmin) {
+    throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer cette école.");
+  }
+  return user;
+}
+
+// Vérifie le rôle et éventuellement l'appartenance à une classe (pour les enseignants)
 async function requireRole(
   ctx: MutationCtx,
   userId: string | undefined,
@@ -57,13 +82,12 @@ export const list = query({
           const inscByEleve = new Map(inscriptions.map((i) => [i.eleveId, i]));
           return eleves
             .filter((e) => inscByEleve.has(e._id))
-            .map((e) => ({ ...inscByEleve.get(e._id), ...e, _id: e._id })); // ✅ _id élève
+            .map((e) => ({ ...inscByEleve.get(e._id), ...e, _id: e._id }));
         }
         return eleves;
       }
     }
 
-    // Si une année est fournie, on joint les inscriptions et les élèves
     if (anneeId) {
       let q = ctx.db
         .query("inscriptions")
@@ -75,7 +99,6 @@ export const list = query({
       return await enrichInscriptionsWithEleves(ctx, inscriptions);
     }
 
-    // Sinon, on retourne tous les élèves (sans inscription)
     if (ecoleId) {
       return await ctx.db
         .query("eleves")
@@ -108,7 +131,7 @@ export const listByParent = query({
       const inscByEleve = new Map(inscriptions.map((i) => [i.eleveId, i]));
       return eleves
         .filter((e) => inscByEleve.has(e._id))
-        .map((e) => ({ ...inscByEleve.get(e._id), ...e, _id: e._id })); // ✅ _id élève
+        .map((e) => ({ ...inscByEleve.get(e._id), ...e, _id: e._id }));
     }
     return eleves;
   },
@@ -136,7 +159,7 @@ export const getByUserId = query({
           q.eq("eleveId", eleve._id).eq("anneeId", anneeId)
         )
         .first();
-      return inscription ? { ...inscription, ...eleve, _id: eleve._id } : eleve; // ✅ _id élève
+      return inscription ? { ...inscription, ...eleve, _id: eleve._id } : eleve;
     }
     return eleve;
   },
@@ -197,10 +220,9 @@ export const add = mutation({
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    // Vérification du rôle
-    await requireRole(ctx, args.userId, ["admin", "directeur"]);
-    
-    // On insère l'élève dans la table eleves
+    // Vérification du rôle et de l'école
+    await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
+
     await ctx.db.insert("eleves", {
       nom: args.nom,
       postnom: args.postnom,
@@ -225,6 +247,7 @@ export const add = mutation({
   },
 });
 
+// Mettre à jour un élève
 export const update = mutation({
   args: {
     id: v.id("eleves"),
@@ -247,9 +270,14 @@ export const update = mutation({
     tuteurTelephone: v.optional(v.string()),
     userId: v.optional(v.id("users")),
     parentId: v.optional(v.id("users")),
+    actionUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const { id, ...fields } = args;
+    const { id, actionUserId, ...fields } = args;
+    // Récupérer l'élève pour connaître son école
+    const eleve = await ctx.db.get(id);
+    if (!eleve) throw new Error("Élève introuvable");
+    await requireEcoleAdmin(ctx, actionUserId, eleve.ecoleId);
     await ctx.db.patch(id, fields);
   },
 });
@@ -258,11 +286,13 @@ export const update = mutation({
 export const associerParent = mutation({
   args: {
     eleveId: v.id("eleves"),
-    parentId: v.optional(v.id("users")), // undefined pour dissocier
+    parentId: v.optional(v.id("users")),
     actionUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.actionUserId, ["admin", "directeur"]);
+    const eleve = await ctx.db.get(args.eleveId);
+    if (!eleve) throw new Error("Élève introuvable");
+    await requireEcoleAdmin(ctx, args.actionUserId, eleve.ecoleId);
     await ctx.db.patch(args.eleveId, { parentId: args.parentId });
   },
 });
@@ -271,11 +301,13 @@ export const associerParent = mutation({
 export const associerCompteEleve = mutation({
   args: {
     eleveId: v.id("eleves"),
-    userId: v.optional(v.id("users")), // undefined pour dissocier
+    userId: v.optional(v.id("users")),
     actionUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.actionUserId, ["admin", "directeur"]);
+    const eleve = await ctx.db.get(args.eleveId);
+    if (!eleve) throw new Error("Élève introuvable");
+    await requireEcoleAdmin(ctx, args.actionUserId, eleve.ecoleId);
     await ctx.db.patch(args.eleveId, { userId: args.userId });
   },
 });
@@ -296,10 +328,9 @@ export const importEleves = mutation({
     actionUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.actionUserId, ["admin", "directeur"]);
+    await requireEcoleAdmin(ctx, args.actionUserId, args.ecoleId);
 
     for (const el of args.eleves) {
-      // Générer le matricule
       let code = "";
       let codeUnique = false;
       while (!codeUnique) {
@@ -337,8 +368,12 @@ export const updateDecision = mutation({
   args: {
     inscriptionId: v.id("inscriptions"),
     decision: v.string(),
+    actionUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const inscription = await ctx.db.get(args.inscriptionId);
+    if (!inscription) throw new Error("Inscription introuvable");
+    await requireEcoleAdmin(ctx, args.actionUserId, inscription.ecoleId);
     await ctx.db.patch(args.inscriptionId, { decisionConseil: args.decision });
     return { success: true };
   },
@@ -351,7 +386,9 @@ export const remove = mutation({
     actionUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.actionUserId, ["admin", "directeur"]);
+    const eleve = await ctx.db.get(args.id);
+    if (!eleve) throw new Error("Élève introuvable");
+    await requireEcoleAdmin(ctx, args.actionUserId, eleve.ecoleId);
 
     // Supprimer les inscriptions
     const inscriptions = await ctx.db

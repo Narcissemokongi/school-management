@@ -1,14 +1,13 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
-import { hashPassword } from "../utils/crypto";
 import {
-  Loader2, User, Lock, Eye, EyeOff, LogIn, Clock, Mail, ShieldCheck,
+  Loader2, User, Lock, Eye, EyeOff, LogIn, Clock, ShieldCheck,
 } from "lucide-react";
 
 export function LoginScreen({ onLogin, onSwitchToRegister }) {
-  const { S, dark } = useStyles();
+  const { dark } = useStyles();
   const [step, setStep] = useState("credentials"); // "credentials" | "twoFactor"
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -16,17 +15,14 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const [error, setError] = useState("");
   const [errorType, setErrorType] = useState("normal");
   const [loading, setLoading] = useState(false);
-  const [userId, setUserId] = useState(null); // ID utilisateur temporaire pour la 2FA
+  const [userId, setUserId] = useState(null);
   const [code, setCode] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
+  const [pendingUser, setPendingUser] = useState(null);
 
   const authenticate = useMutation(api.users.login);
   const sendLoginCode = useMutation(api.twoFactorEmail.sendLoginCode);
   const verifyLoginCode = useMutation(api.twoFactorEmail.verifyLoginCode);
-  const passwordFormat = useQuery(
-    api.users.getPasswordFormat,
-    login.trim() ? { login: login.trim() } : "skip"
-  );
 
   // Soumission des identifiants
   const handleCredentialsSubmit = async (e) => {
@@ -38,24 +34,19 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
       setError("Veuillez remplir tous les champs.");
       return;
     }
-    if (passwordFormat === undefined) {
-      setError("Vérification du compte en cours, veuillez patienter...");
-      return;
-    }
 
     setLoading(true);
     try {
-      let passwordToSend = password;
-      if (passwordFormat === "hash") {
-        passwordToSend = await hashPassword(password);
-      }
-      const user = await authenticate({ login: login.trim(), password: passwordToSend });
+      // Envoyer le mot de passe brut, le serveur le vérifie
+      const user = await authenticate({ login: login.trim(), password });
+
       if (!user) {
         setError("Identifiants incorrects");
         return;
       }
 
       if (user.requiresTwoFactor) {
+        setPendingUser(user);
         setUserId(user._id);
         setStep("twoFactor");
       } else {
@@ -75,14 +66,14 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const handleTwoFactorSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    if (code.length !== 6) {
+      setError("Veuillez saisir les 6 chiffres.");
+      return;
+    }
     setLoading(true);
     try {
       await verifyLoginCode({ userId, code });
-      // Après vérification, on peut appeler onLogin avec les données de l'utilisateur.
-      // Nous les avons déjà dans l'objet user retourné par authenticate (stocké plus tôt).
-      // Ici, nous pourrions stocker l'objet user complet dans un état, ou le reconstruire.
-      // Pour simplifier, nous supposons que nous avons stocké l'objet user dans un state `userData`.
-      // Je vais ajouter un state `pendingUser`.
+      // La vérification réussie, on connecte l'utilisateur stocké
       onLogin(pendingUser);
     } catch (err) {
       setError(err.message || "Code invalide.");
@@ -91,13 +82,12 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
     }
   };
 
-  // Renvoyer le code par email
+  // Renvoyer le code
   const handleResendCode = async () => {
     setSendingCode(true);
     setError("");
     try {
       await sendLoginCode({ userId });
-      // Message de succès (optionnel)
     } catch (err) {
       setError(err.message || "Impossible de renvoyer le code.");
     } finally {
@@ -116,72 +106,10 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const inputText = dark ? "#F1F5F9" : "#111827";
   const inputBorder = dark ? "#334155" : "#E2E8F0";
   const buttonBg = dark ? "#818CF8" : "#4F46E5";
-  const buttonHoverBg = dark ? "#6366F1" : "#4338CA";
   const errorBg = errorType === "locked" ? (dark ? "#78350F" : "#FEF3C7") : (dark ? "#7F1D1D" : "#FEE2E2");
   const errorText = errorType === "locked" ? (dark ? "#FBBF24" : "#92400E") : (dark ? "#F87171" : "#B91C1C");
   const linkColor = dark ? "#818CF8" : "#4F46E5";
   const iconColor = dark ? "#94A3B8" : "#9CA3AF";
-
-  // État pour stocker les données utilisateur avant la vérification 2FA
-  const [pendingUser, setPendingUser] = useState(null);
-
-  // Adaptation lors de la réception de requiresTwoFactor
-  const handleCredentialsResponse = (user) => {
-    if (user.requiresTwoFactor) {
-      setPendingUser(user);
-      setUserId(user._id);
-      setStep("twoFactor");
-    } else {
-      onLogin(user);
-    }
-  };
-
-  // Soumission des identifiants (version modifiée)
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (step === "credentials") {
-      await handleCredentialsSubmitInternal(e);
-    } else {
-      await handleTwoFactorSubmit(e);
-    }
-  };
-
-  // Fonction interne pour garder le code propre
-  const handleCredentialsSubmitInternal = async (e) => {
-    e.preventDefault();
-    setError("");
-    setErrorType("normal");
-
-    if (!login.trim() || !password.trim()) {
-      setError("Veuillez remplir tous les champs.");
-      return;
-    }
-    if (passwordFormat === undefined) {
-      setError("Vérification du compte en cours, veuillez patienter...");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      let passwordToSend = password;
-      if (passwordFormat === "hash") {
-        passwordToSend = await hashPassword(password);
-      }
-      const user = await authenticate({ login: login.trim(), password: passwordToSend });
-      if (!user) {
-        setError("Identifiants incorrects");
-        return;
-      }
-      handleCredentialsResponse(user);
-    } catch (err) {
-      if (err.message.includes("verrouillé")) {
-        setErrorType("locked");
-      }
-      setError(err.message || "Erreur de connexion.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div style={{
@@ -217,7 +145,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
         </div>
 
         {step === "credentials" ? (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleCredentialsSubmit}>
             {/* Champ identifiant */}
             <div style={{ marginBottom: 20 }}>
               <label htmlFor="login-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: labelColor }}>
@@ -308,7 +236,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
 
             <button
               type="submit"
-              disabled={loading || passwordFormat === undefined}
+              disabled={loading}
               style={{
                 width: "100%",
                 padding: "12px 0",
@@ -318,7 +246,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                 borderRadius: 10,
                 fontSize: 16,
                 fontWeight: 600,
-                cursor: loading || passwordFormat === undefined ? "not-allowed" : "pointer",
+                cursor: loading ? "not-allowed" : "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -331,7 +259,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleTwoFactorSubmit}>
             {/* Champ code 2FA */}
             <div style={{ marginBottom: 20 }}>
               <label htmlFor="code-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: labelColor }}>

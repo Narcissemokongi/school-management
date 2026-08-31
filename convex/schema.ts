@@ -63,7 +63,7 @@ export default defineSchema({
     nom: v.string(),
     postnom: v.string(),
     prenom: v.optional(v.string()),
-    classe: v.optional(v.string()),   // <-- AJOUTÉ ICI
+    classe: v.optional(v.string()),
     code: v.optional(v.string()),
     codeUtilise: v.optional(v.boolean()),
     ecoleId: v.id("ecoles"),
@@ -353,7 +353,11 @@ export default defineSchema({
   parentLinkRequests: defineTable({
     parentId: v.id("users"),
     eleveId: v.id("eleves"),
-    status: v.string(), // "pending", "approved", "rejected"
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected")
+    ),
     createdAt: v.string(),
     reviewedBy: v.optional(v.id("users")),
   })
