@@ -5,8 +5,8 @@ import {
   ChevronLeft, ChevronRight, CheckSquare, Square, Download,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 export function SchoolTable({
   ecoles,

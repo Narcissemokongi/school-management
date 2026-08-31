@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
-import { useAppStore } from "../store/appStore";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useAppStore } from "@/store/appStore";
 import {
   User, Building, Shield, Save, Upload, Eye, EyeOff,
   Calendar, Loader, AlertCircle, ShieldCheck, Mail,
@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Skeleton } from "./Skeleton";
-import { hashPassword, verifyPassword } from "../utils/crypto";
+import { hashPassword, verifyPassword } from "@/utils/crypto";
 import { GestionAnnees } from "./GestionAnnees";
-import { useConfirm } from "../hooks/useConfirm";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 // ===== Sous-composant pour la gestion de la 2FA par email =====

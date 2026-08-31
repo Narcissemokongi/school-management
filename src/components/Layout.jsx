@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./Sidebar";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { ScrollToTop } from "./ScrollToTop";
 import { Menu } from "lucide-react";
 import { OfflineBanner } from "./OfflineBanner";
-import { useStyles } from "../styles/theme";
-import { useAppStore } from "../store/appStore";
+import { useStyles } from "@/styles/theme";
+import { useAppStore } from "@/store/appStore";
 
 export function Layout({
   children,

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Loader } from "lucide-react";
 import toast from "react-hot-toast";
-import { trierClasses } from "../../utils/sort";
-import { provincesRDC } from "../../utils/rdcData";
+import { trierClasses } from "@/utils/sort";
+import { provincesRDC } from "@/utils/rdcData";
 
 export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEleve }) {
   const { S, dark } = useStyles();

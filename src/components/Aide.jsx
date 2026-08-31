@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   HelpCircle, Users, AlertTriangle, MessageCircle, Phone,
   Settings, User, ChevronDown, ChevronRight, BookOpen, DollarSign,

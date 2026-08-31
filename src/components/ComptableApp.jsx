@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Layout } from "./Layout";
 import { DashboardComptable } from "./DashboardComptable";
 import { GestionFrais } from "./GestionFrais";
@@ -12,7 +12,7 @@ import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { useAppStore } from "../store/appStore";
+import { useAppStore } from "@/store/appStore";
 import {
   DollarSign, BarChart3, MessageCircle, Phone, HelpCircle,
   FileText, Shield, User, Calendar, TrendingUp, AlertCircle,

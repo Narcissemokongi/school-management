@@ -1,5 +1,5 @@
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { ClipboardList, Calendar, Users, TrendingUp } from "lucide-react";
 
 export function AccueilDisciplinaire({ user, punitions, eleves }) {

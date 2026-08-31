@@ -1,5 +1,5 @@
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Users, Building, Zap, Scale, Shield, DollarSign,
   GraduationCap, AlertTriangle, BookOpen, Settings,

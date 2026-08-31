@@ -1,10 +1,10 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import * as XLSX from "xlsx";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
-import { useConfirm } from "../hooks/useConfirm";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
 import { DataTable } from "./DataTable";
@@ -13,7 +13,7 @@ import {
   Download, FileSpreadsheet, CheckCircle, Clock, Search,
   Settings, Users, ChevronDown, ChevronUp, FileWarning,
 } from "lucide-react";
-import { trierEleves } from "../utils/tri";
+import { trierEleves } from "@/utils/tri";
 
 export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
   const { dark } = useStyles();

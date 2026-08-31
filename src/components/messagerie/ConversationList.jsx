@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook (si non passé en prop)
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook (si non passé en prop)
 import { MessageSquarePlus, Megaphone, Search, X, ArrowLeft } from "lucide-react";
 import { VIEW } from "./MessagerieApp";
 

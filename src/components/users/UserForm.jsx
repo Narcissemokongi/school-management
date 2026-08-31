@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader, User, Lock, Eye, EyeOff } from "lucide-react";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 export function UserForm({ initialValues, onSubmit, onCancel }) {
   const { S, dark } = useStyles();

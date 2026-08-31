@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
-import { useDebounce } from "../hooks/useDebounce";
+import { useDebounce } from "@/hooks/useDebounce";
 import { Skeleton } from "./Skeleton";
 import { EmptyState } from "./EmptyState";
 import { ChevronUp, ChevronDown, Search, ChevronLeft, ChevronRight } from "lucide-react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 export function DataTable({
   columns = [],

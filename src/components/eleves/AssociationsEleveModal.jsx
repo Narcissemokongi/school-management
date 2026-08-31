@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Loader, Search, Check, X, User, Users, Link2, Unlink } from "lucide-react";
 import toast from "react-hot-toast";
 

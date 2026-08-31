@@ -1,6 +1,6 @@
 import { Loader, Upload, Download } from "lucide-react";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import * as XLSX from "xlsx";
 
 export function ImportExcel({ fileInputRef, importing, onImport }) {

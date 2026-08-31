@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronUp } from "lucide-react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 export function ScrollToTop({
   bottom = 24,

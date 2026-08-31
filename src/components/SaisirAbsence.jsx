@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Search, Calendar, Check, X, Loader, RotateCcw, CalendarDays } from "lucide-react";
 import toast from "react-hot-toast";
-import { useConfirm } from "../hooks/useConfirm";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { trierEleves } from "../utils/tri";
-import { useAppStore } from "../store/appStore";
+import { trierEleves } from "@/utils/tri";
+import { useAppStore } from "@/store/appStore";
 
 export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
   const { S, dark } = useStyles();

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   ClipboardList, AlertTriangle, Users, Building, Loader,
   BarChart3, GraduationCap, UserCheck, Activity,

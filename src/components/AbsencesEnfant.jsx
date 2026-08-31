@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Skeleton } from "./Skeleton";
 import { Calendar, AlertTriangle, CheckCircle, XCircle, Loader, FileText } from "lucide-react";
 

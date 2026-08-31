@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import {
   AlertCircle, CheckCircle2, Clock, UserPlus, XCircle, Loader,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 function DemandeAssociation({ user, dark }) {
   const isMobile = useIsMobile(); // Détection mobile

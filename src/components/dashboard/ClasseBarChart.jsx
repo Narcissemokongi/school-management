@@ -1,4 +1,4 @@
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export function ClasseBarChart({ punitions, eleves }) {

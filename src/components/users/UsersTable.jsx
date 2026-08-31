@@ -1,7 +1,7 @@
 import { DataTable } from "../DataTable";
 import { Pencil, Trash2 } from "lucide-react";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 // Badge de rôle avec couleurs
 function RoleBadge({ role, dark }) {

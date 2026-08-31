@@ -1,5 +1,5 @@
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
-import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
 import { ArrowLeft, Phone, Video, MoreVertical, Loader } from "lucide-react";
 import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";

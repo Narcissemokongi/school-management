@@ -1,9 +1,9 @@
 import { DataTable } from "../DataTable";
 import { Pencil, UserCheck, Trash2, Copy, Eye, Calendar, MapPin, Phone, User } from "lucide-react";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import toast from "react-hot-toast";
-import { trierClasses } from "../../utils/sort";
+import { trierClasses } from "@/utils/sort";
 
 export function ElevesTable({ data, onEditParent, onEditUser, onDelete, onViewDetails }) {
   const { dark } = useStyles();

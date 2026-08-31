@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
-import { useStyles } from "../styles/theme";
+import { useStyles } from "@/styles/theme";
 import { NotifBanner } from "./NotifBanner";
 import { SuperAdminDashboard } from "./superadmin/SuperAdminDashboard";
 import { DisciplinaireApp } from "./DisciplinaireApp";
@@ -17,10 +17,10 @@ import AppelVideo from "./AppelVideo";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { OutgoingCallModal } from "./OutgoingCallModal";
 import { getFaute } from "../utils";
-import { useNotifications } from "../hooks/useNotifications";
+import { useNotifications } from "@/hooks/useNotifications";
 import { NotificationsManager } from "./NotificationsManager";
 import toast from "react-hot-toast";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 function useHistoryNavigation(onBack) {
   useEffect(() => {

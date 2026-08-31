@@ -1,11 +1,22 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path'; // <-- Ajout pour l'alias
 
 export default defineConfig({
+  // Alias pour importer depuis "src" avec "@"
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      // Alias pour importer depuis le dossier "convex" à la racine
+      '@convex': path.resolve(__dirname, 'convex'),
+    },
+  },
+
   server: {
     allowedHosts: ["localhost", ".trycloudflare.com"],
   },
+
   plugins: [
     react(),
     VitePWA({
@@ -16,8 +27,8 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       manifest: {
-        name: 'EduSphere',
-        short_name: 'EduSphere',
+        name: 'School Management',
+        short_name: 'SM',
         description: 'Gestion de la discipline scolaire',
         theme_color: '#4f46e5',
         background_color: '#f5f7fb',
@@ -45,4 +56,4 @@ export default defineConfig({
       }
     })
   ],
-})
+});

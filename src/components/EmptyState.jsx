@@ -1,7 +1,7 @@
 import { FileText, Loader } from "lucide-react";
-import { useStyles } from "../styles/theme";
+import { useStyles } from "@/styles/theme";
 import { useEffect, useState } from "react";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 export function EmptyState({
   icon: Icon = FileText,

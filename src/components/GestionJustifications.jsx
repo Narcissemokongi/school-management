@@ -1,9 +1,9 @@
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import toast from "react-hot-toast";
 import { useState } from "react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { CheckCircle2, XCircle, Loader, MessageSquare, Calendar, User } from "lucide-react";
 
 export function GestionJustifications({ ecoleId, userId }) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 export function Skeleton({
   width = "100%",

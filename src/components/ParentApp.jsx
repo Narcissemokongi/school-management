@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Layout } from "./Layout";
 import { MessagerieApp } from "./messagerie/MessagerieApp";
 import { Appels } from "./Appels";
@@ -14,7 +14,7 @@ import { AbsencesEnfant } from "./AbsencesEnfant";
 import { MentionsLegales } from "./MentionsLegales";
 import { Aide } from "./Aide";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { useAppStore } from "../store/appStore";
+import { useAppStore } from "@/store/appStore";
 import {
   Users, MessageCircle, Calendar, Phone, HelpCircle,
   FileText, Shield, ArrowLeft, BookOpen, DollarSign,

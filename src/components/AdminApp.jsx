@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
 import { Layout } from "./Layout";
 import { DashboardAdmin } from "./DashboardAdmin";
 import { GestionElevesEtClasses } from "./GestionElevesEtClasses";
@@ -19,8 +19,8 @@ import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AnneeSelector } from "./AnneeSelector";
 import { ParentLinkRequests } from "./ParentLinkRequests";
-import { useAppStore } from "../store/appStore";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useAppStore } from "@/store/appStore";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Home,
   Users,

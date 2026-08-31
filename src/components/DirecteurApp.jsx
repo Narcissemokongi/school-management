@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
 import { Layout } from "./Layout";
 import { DashboardDirecteur } from "./DashboardDirecteur";
 import { RechercheEleve } from "./RechercheEleve";
@@ -14,8 +14,8 @@ import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { StatistiquesAvancees } from "./StatistiquesAvancees";
 import { AssistantPassage } from "./AssistantPassage";
-import { useAppStore } from "../store/appStore";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useAppStore } from "@/store/appStore";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import {
   Home, User, Building, MessageCircle, Phone, HelpCircle,
   FileText, Shield, Calendar, BarChart, ArrowRight,

@@ -1,11 +1,11 @@
 import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
-import { useConfirm } from "../../hooks/useConfirm";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { hashPassword } from "../../utils/crypto";
+import { hashPassword } from "@/utils/crypto";
 import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
 import {

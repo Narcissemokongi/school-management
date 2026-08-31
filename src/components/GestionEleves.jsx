@@ -1,16 +1,16 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import * as XLSX from "xlsx";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
-import { useConfirm } from "../hooks/useConfirm";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
 import { Skeleton } from "./Skeleton";
 import { AddEleveForm } from "./eleves/AddEleveForm";
 import { ImportExcel } from "./eleves/ImportExcel";
-import { trierClasses } from "../utils/sort";
+import { trierClasses } from "@/utils/sort";
 import {
   X, User, MapPin, Phone, Users, Calendar, GraduationCap,
   Search, Download, Trash2, CheckSquare, Square, List, Grid,

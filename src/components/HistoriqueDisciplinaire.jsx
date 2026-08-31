@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { getEleve, getFaute } from "../utils";
 import { Search, AlertTriangle, Scale } from "lucide-react";
 

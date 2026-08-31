@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import { GestionEleves } from "./GestionEleves";
 import { GestionClassesAdmin } from "./GestionClassesAdmin";
 import { Breadcrumb } from "./Breadcrumb";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Loader, GraduationCap, BookOpen } from "lucide-react";
 
 export function GestionElevesEtClasses({

@@ -1,5 +1,5 @@
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Users, ClipboardList, ArrowRight, AlertTriangle } from "lucide-react";
 
 export function AccueilParent({ user, eleves, punitions }) {

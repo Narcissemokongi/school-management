@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Home, Search, ArrowLeft } from "lucide-react";
 
 export function NotFound() {

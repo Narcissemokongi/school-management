@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
-import { useConfirm } from "../hooks/useConfirm";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Skeleton } from "./Skeleton";
 import { EmptyState } from "./EmptyState";

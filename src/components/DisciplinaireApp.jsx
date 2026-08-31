@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useStyles } from "../styles/theme";
+import { useStyles } from "@/styles/theme";
 import { Layout } from "./Layout";
 import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { AccueilDisciplinaire } from "./AccueilDisciplinaire";
@@ -12,8 +12,8 @@ import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { Skeleton } from "./Skeleton";
-import { useAppStore } from "../store/appStore";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useAppStore } from "@/store/appStore";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import {
   Home, Pen, ClipboardList, AlertTriangle, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, Calendar, CheckCircle,

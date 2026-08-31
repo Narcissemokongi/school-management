@@ -1,7 +1,7 @@
 // src/components/PolitiqueConfidentialite.jsx
 import { useState, useRef, useMemo, useEffect } from "react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Shield, Search, ArrowUp, List, X } from "lucide-react";
 
 export function PolitiqueConfidentialite() {

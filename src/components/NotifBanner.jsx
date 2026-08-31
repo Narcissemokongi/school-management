@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, AlertTriangle, CheckCircle, Info, Bell } from "lucide-react";
-import { useStyles } from "../styles/theme";
+import { useStyles } from "@/styles/theme";
 
 export function NotifBanner({ notifs, onDismiss }) {
   const { dark } = useStyles();

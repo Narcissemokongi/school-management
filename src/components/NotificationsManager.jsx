@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useNotifications } from "../hooks/useNotifications";
+import { api } from "@convex/_generated/api";
+import { useNotifications } from "@/hooks/useNotifications";
 import { getFaute } from "../utils";
 
 export function NotificationsManager({ user, ecoleId, enfants, punitionsEnfants, fautes }) {

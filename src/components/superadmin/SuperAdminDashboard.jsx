@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useDeferredValue } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import * as XLSX from "xlsx";
 import {
   Plus, BarChart3, School, Clock, Loader, RefreshCw, ShieldCheck,
@@ -20,8 +20,8 @@ import { SchoolTable } from "./SchoolTable";
 import { GestionSuperAdmins } from "./GestionSuperAdmins";
 import { SettingsTab } from "./SettingsTab";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { useConfirm } from "../../hooks/useConfirm";
-import { useAppStore } from "../store/appStore";
+import { useConfirm } from "@/hooks/useConfirm";
+import { useAppStore } from "@/store/appStore";
 import toast from "react-hot-toast";
 
 // Hook pour détecter les breakpoints (inchangé)

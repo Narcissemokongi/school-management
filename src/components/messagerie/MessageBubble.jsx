@@ -1,5 +1,5 @@
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
-import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
 import { Check, CheckCheck, Paperclip } from "lucide-react";
 
 export function MessageBubble({ msg, user, getUserName }) {

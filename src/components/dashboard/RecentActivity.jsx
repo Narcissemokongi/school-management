@@ -1,5 +1,5 @@
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
-import { useStyles } from "../styles/theme"; // <-- Pour le mode sombre
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme"; // <-- Pour le mode sombre
 import { Clock, AlertTriangle } from "lucide-react";
 
 export function RecentActivity({ dernierEleve, dernierePunition, fautes, eleves }) {

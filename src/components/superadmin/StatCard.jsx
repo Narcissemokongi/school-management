@@ -6,8 +6,8 @@ import {
   Loader,
   AlertCircle,
 } from "lucide-react";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 function hexToRgba(hex, alpha) {
   if (!/^#([0-9A-F]{6})$/i.test(hex)) return `rgba(0, 0, 0, ${alpha})`;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { WifiOff, Wifi, RefreshCw } from "lucide-react";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import toast from "react-hot-toast";
 
 export function OfflineBanner({ dark }) {

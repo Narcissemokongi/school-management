@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useStyles } from "../../styles/theme";
-import { useConfirm } from "../../hooks/useConfirm";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { Loader, UserPlus, X, Check } from "lucide-react";
 import toast from "react-hot-toast";

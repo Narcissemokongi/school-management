@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, GraduationCap, Users, Loader } from "lucide-react";
 import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";
-import { useStyles } from "../../styles/theme";
+import { useStyles } from "@/styles/theme";
 
 export function GroupChatView({
   groupId,

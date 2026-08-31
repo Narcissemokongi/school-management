@@ -1,6 +1,6 @@
 // src/styles/theme.js
 
-import { useTheme } from "../components/ThemeProvider";
+import { useTheme } from "@/components/ThemeProvider";
 
 // Couleurs de base
 export const theme = {

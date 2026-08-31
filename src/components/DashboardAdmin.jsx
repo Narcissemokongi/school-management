@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { StatsCards } from "./dashboard/StatsCards";
 import { PunitionsChart } from "./dashboard/PunitionsChart";
 import { GravitePieChart } from "./dashboard/GravitePieChart";

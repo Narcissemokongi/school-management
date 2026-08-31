@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../../styles/theme";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
 import {
   Plus, BarChart3, School, Clock, Loader, RefreshCw, ShieldCheck,
   TrendingUp, Search, X, ListFilter, Building2, Users, GraduationCap,

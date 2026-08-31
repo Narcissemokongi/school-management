@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useAction } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import AgoraRTC from "agora-rtc-sdk-ng";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import {
   PhoneOff, Mic, MicOff, Video, VideoOff, Users, Loader2,
   Wifi, WifiOff, Clock, SwitchCamera, Volume2, VolumeX, Pause, Play,

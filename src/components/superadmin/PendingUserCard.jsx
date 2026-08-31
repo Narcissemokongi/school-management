@@ -4,8 +4,8 @@ import {
   Mail, Phone, ChevronDown, ChevronUp, Clock, Info, School,
   Send, X,
 } from "lucide-react";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 const ROLE_LABELS = {
   parent: "Parent",

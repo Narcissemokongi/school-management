@@ -1,7 +1,7 @@
 import { ChevronRight, Home, MoreHorizontal } from "lucide-react";
-import { useStyles } from "../styles/theme";
+import { useStyles } from "@/styles/theme";
 import { useState, useEffect } from "react";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 export function Breadcrumb({
   items = [],

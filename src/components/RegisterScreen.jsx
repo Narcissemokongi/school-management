@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import {
   Loader2, User, Lock, Eye, EyeOff, School, UserCheck, BadgeCheck,
   CheckCircle2, XCircle, AlertCircle, Check,

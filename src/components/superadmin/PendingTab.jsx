@@ -7,11 +7,11 @@ import {
 } from "lucide-react";
 import { PendingUserCard } from "./PendingUserCard";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { useConfirm } from "../../hooks/useConfirm";
+import { useConfirm } from "@/hooks/useConfirm";
 import toast from "react-hot-toast";
-import { api } from "../../../convex/_generated/api";
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 // Sous-composant : Barre de recherche
 const SearchInput = ({ value, onChange, dark, isMobile }) => (

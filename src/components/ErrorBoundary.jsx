@@ -1,6 +1,6 @@
 import { Component, useState } from "react";
 import { useTheme } from "./ThemeProvider";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { AlertTriangle, RefreshCw, Home, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 
 // Composant d'affichage avec thème et animations

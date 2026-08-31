@@ -1,16 +1,16 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { getFaute } from "../utils";
-import { trierEleves } from "../utils/tri";
+import { trierEleves } from "@/utils/tri";
 import toast from "react-hot-toast";
 import { Loader, Search, Check, AlertTriangle, Info } from "lucide-react";
-import { userFriendlyError } from "../utils/errorMessages";
-import { useConfirm } from "../hooks/useConfirm";
+import { userFriendlyError } from "@/utils/errorMessages";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { useAppStore } from "../store/appStore";
+import { useAppStore } from "@/store/appStore";
 
 export function SaisirPunition({ user, ecoleId, eleves, fautes, sanctions, addPunition, onNotif, anneeId, anneeActive }) {
   const { S, dark } = useStyles();

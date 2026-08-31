@@ -1,4 +1,4 @@
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const COLORS = { Grave: "#EF4444", Moyenne: "#F59E0B", Légère: "#10B981" };

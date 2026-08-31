@@ -1,8 +1,8 @@
 import { useState, useRef } from "react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { getFaute, getTopDerangeurs, getPunitionsParClasse } from "../utils";
 import { FileDown, BarChart3, TrendingUp, PieChart, Download, Loader } from "lucide-react";
 

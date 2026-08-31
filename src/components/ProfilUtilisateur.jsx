@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
-import { useConfirm } from "../hooks/useConfirm";
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
   User, Save, Eye, EyeOff, Loader, GraduationCap,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { hashPassword } from "../utils/crypto";
-import { provincesRDC } from "../utils/rdcData";
+import { hashPassword } from "@/utils/crypto";
+import { provincesRDC } from "@/utils/rdcData";
 
 export function ProfilUtilisateur({ user }) {
   const { dark } = useStyles();

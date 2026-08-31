@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useAction } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import AgoraRTC from "agora-rtc-sdk-ng";
 import {
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff,

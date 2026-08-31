@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import { useTheme } from "./ThemeProvider";
 import { useInstallPrompt, InstallBanner } from "./InstallBanner";
 import { LoginScreen } from "./LoginScreen";
 import { RegisterScreen } from "./RegisterScreen";
 import { AuthenticatedApp } from "./AuthenticatedApp";
 import { Toaster } from "react-hot-toast";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import "../fonts.css";
 
 export function AppContent() {

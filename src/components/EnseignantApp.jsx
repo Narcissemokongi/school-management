@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { api } from "@convex/_generated/api";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Layout } from "./Layout";
 import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { MessagerieApp } from "./messagerie/MessagerieApp";
@@ -14,7 +14,7 @@ import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { AssistantPassageEnseignant } from "./AssistantPassageEnseignant";
-import { useAppStore } from "../store/appStore";
+import { useAppStore } from "@/store/appStore";
 import {
   BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, ArrowLeft, BarChart3, GraduationCap,

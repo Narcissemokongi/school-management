@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from "react";
-import { useExportPDF } from "../hooks/useExportPDF";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useExportPDF } from "@/hooks/useExportPDF";
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { getFaute } from "../utils";
 import {
   Search, FileText, Download, AlertTriangle,

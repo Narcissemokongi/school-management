@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Share, Plus, MonitorSmartphone } from "lucide-react";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 
 // Hook personnalisé pour gérer l'invite d'installation PWA
 export function useInstallPrompt() {

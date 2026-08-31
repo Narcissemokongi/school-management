@@ -1,5 +1,5 @@
-import { useStyles } from "../../styles/theme";
-import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { Paperclip, Send, Link as LinkIcon, X, Smile } from "lucide-react";
 
 export function ChatInput({ message, setMessage, onSend, fileInputRef, piecesJointes, setPiecesJointes, handleFileChange, lien, setLien, handleAddLink, placeholder = "Écrivez un message..." }) {

@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@convex/_generated/api";
 import {
   Phone, PhoneOutgoing, MessageCircle, Clock, Video, Users, Search, X,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { useStyles } from "../styles/theme";
-import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
 import { HistoriqueAppels } from "./HistoriqueAppels";
 
 export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
