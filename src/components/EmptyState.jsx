@@ -1,6 +1,7 @@
 import { FileText, Loader } from "lucide-react";
 import { useStyles } from "../styles/theme";
 import { useEffect, useState } from "react";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 
 export function EmptyState({
   icon: Icon = FileText,
@@ -12,15 +13,20 @@ export function EmptyState({
   onSecondaryAction,
   secondaryMessage,
   compact = false,
-  illustration,          // URL d'image ou composant personnalisé
-  loading = false,        // Affiche un spinner
+  illustration,
+  loading = false,
   style,
-  inline = false,         // Variante intégrée, sans fond ni ombre
-  fullWidth = false,      // Force la largeur à 100%
-  align = "center",       // "left" | "center" | "right"
-  animated = true,        // Active l'animation d'entrée
+  inline = false,
+  fullWidth = false,
+  align = "center",
+  animated = true,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
+  // `compact` prioritaire si explicitement passé, sinon on utilise isMobile
+  const effectiveCompact = compact || isMobile;
+
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -33,8 +39,8 @@ export function EmptyState({
 
   const shouldAnimate = animated && !reduceMotion;
 
-  const iconSize = compact ? 28 : 36;
-  const circleSize = compact ? 60 : 80;
+  const iconSize = effectiveCompact ? 28 : 36;
+  const circleSize = effectiveCompact ? 60 : 80;
 
   const backgroundColor = inline ? "transparent" : dark ? "transparent" : "#FFFFFF";
   const borderColor = inline ? "transparent" : dark ? "#334155" : "transparent";
@@ -57,7 +63,7 @@ export function EmptyState({
       aria-live="polite"
       style={{
         textAlign: align,
-        padding: compact ? "24px 16px" : "48px 24px",
+        padding: effectiveCompact ? "24px 16px" : "48px 24px",
         background: backgroundColor,
         borderRadius: inline ? 0 : 16,
         boxShadow: inline ? "none" : dark ? "none" : "0 1px 3px rgba(0,0,0,0.05)",
@@ -78,15 +84,15 @@ export function EmptyState({
             src={illustration}
             alt=""
             style={{
-              width: compact ? 80 : 120,
+              width: effectiveCompact ? 80 : 120,
               height: "auto",
-              marginBottom: compact ? 16 : 20,
+              marginBottom: effectiveCompact ? 16 : 20,
               borderRadius: 12,
               objectFit: "contain",
             }}
           />
         ) : (
-          <div style={{ marginBottom: compact ? 16 : 20 }}>{illustration}</div>
+          <div style={{ marginBottom: effectiveCompact ? 16 : 20 }}>{illustration}</div>
         )
       ) : loading ? (
         <div
@@ -98,7 +104,7 @@ export function EmptyState({
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: compact ? 16 : 20,
+            marginBottom: effectiveCompact ? 16 : 20,
           }}
         >
           <Loader size={iconSize} color={iconColor} className="animate-spin" />
@@ -113,7 +119,7 @@ export function EmptyState({
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: compact ? 16 : 20,
+            marginBottom: effectiveCompact ? 16 : 20,
           }}
         >
           <Icon size={iconSize} color={iconColor} strokeWidth={1.5} />
@@ -122,7 +128,7 @@ export function EmptyState({
 
       <h3
         style={{
-          fontSize: compact ? 16 : 18,
+          fontSize: effectiveCompact ? 16 : 18,
           fontWeight: 600,
           color: titleColor,
           margin: "0 0 8px",
@@ -133,7 +139,7 @@ export function EmptyState({
 
       <p
         style={{
-          fontSize: compact ? 13 : 14,
+          fontSize: effectiveCompact ? 13 : 14,
           color: textColor,
           maxWidth: 360,
           margin: "0 auto",
@@ -174,14 +180,14 @@ export function EmptyState({
             <button
               onClick={onAction}
               style={{
-                padding: "8px 20px",
+                padding: effectiveCompact ? "8px 16px" : "8px 20px",
                 background: dark ? "#818CF8" : "#4F46E5",
                 color: "white",
                 border: "none",
                 borderRadius: 8,
                 cursor: "pointer",
                 fontWeight: 500,
-                fontSize: 14,
+                fontSize: effectiveCompact ? 13 : 14,
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
@@ -203,14 +209,14 @@ export function EmptyState({
             <button
               onClick={onSecondaryAction}
               style={{
-                padding: "8px 20px",
+                padding: effectiveCompact ? "8px 16px" : "8px 20px",
                 background: dark ? "#1E293B" : "#FFFFFF",
                 color: dark ? "#F1F5F9" : "#1E293B",
                 border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                 borderRadius: 8,
                 cursor: "pointer",
                 fontWeight: 500,
-                fontSize: 14,
+                fontSize: effectiveCompact ? 13 : 14,
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,

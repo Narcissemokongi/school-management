@@ -7,6 +7,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 
 function hexToRgba(hex, alpha) {
   if (!/^#([0-9A-F]{6})$/i.test(hex)) return `rgba(0, 0, 0, ${alpha})`;
@@ -22,7 +23,7 @@ export function StatCard({
   label,
   color = "#4F46E5",
   onClick,
-  onIconClick, // Nouveau : gestionnaire de clic sur l'icône séparé
+  onIconClick,
   subValue,
   subValueColor,
   showArrow = false,
@@ -31,19 +32,23 @@ export function StatCard({
   valueSuffix,
   valuePrefix,
   loading = false,
-  error = false,          // Nouveau : état d'erreur
-  errorMessage = "Erreur", // Message d'erreur (affiché dans le tooltip)
+  error = false,
+  errorMessage = "Erreur",
   trend,
   variant = "default",
   tooltip,
   active = false,
   disabled = false,
-  renderValue, // Nouveau : fonction de rendu personnalisé de la valeur
+  renderValue,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [isHovered, setIsHovered] = useState(false);
   const isClickable = Boolean(onClick) && !disabled;
   const isIconClickable = Boolean(onIconClick) && !disabled;
+
+  // Ajustement automatique de la taille sur mobile si size = "normal"
+  const effectiveSize = isMobile && size === "normal" ? "small" : size;
 
   const handleKeyDown = (e) => {
     if (isClickable && (e.key === "Enter" || e.key === " ")) {
@@ -59,12 +64,16 @@ export function StatCard({
     }
   };
 
+  // Dimensions selon la taille effective
   const dimensions = {
-    small: { padding: 12, fontSize: 18, iconBox: 36 },
+    small: { padding: isMobile ? 10 : 12, fontSize: isMobile ? 16 : 18, iconBox: isMobile ? 32 : 36 },
     normal: { padding: 20, fontSize: 24, iconBox: 48 },
     large: { padding: 28, fontSize: 32, iconBox: 64 },
   };
-  const dim = dimensions[size] || dimensions.normal;
+  const dim = dimensions[effectiveSize] || dimensions.normal;
+
+  // Ajuster iconSize si non spécifié et qu'on est en mobile
+  const effectiveIconSize = isMobile && effectiveSize === "small" ? Math.min(iconSize, 20) : iconSize;
 
   const variantStyles = {
     default: {
@@ -191,7 +200,7 @@ export function StatCard({
         padding: dim.padding,
         display: "flex",
         alignItems: "center",
-        gap: 16,
+        gap: isMobile ? 10 : 16,
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         transition: "transform 0.2s, box-shadow 0.2s, background-color 0.3s, border-color 0.3s",
         cursor: isClickable ? "pointer" : disabled && !loading ? "not-allowed" : "default",
@@ -201,6 +210,7 @@ export function StatCard({
         opacity: disabled && !loading ? 0.6 : 1,
         border: active ? `2px solid ${color}` : styleVariant.border,
         transform: active ? "scale(1.02)" : isHovered && isClickable ? "translateY(-2px)" : "translateY(0)",
+        flexWrap: "nowrap",
       }}
       onMouseEnter={(e) => {
         if (isClickable) {
@@ -269,9 +279,9 @@ export function StatCard({
         onBlur={(e) => (e.currentTarget.style.outline = "none")}
       >
         {loading ? (
-          <Loader size={iconSize} className="animate-spin" />
+          <Loader size={effectiveIconSize} className="animate-spin" />
         ) : error ? (
-          <AlertCircle size={iconSize} color="#EF4444" />
+          <AlertCircle size={effectiveIconSize} color="#EF4444" />
         ) : (
           icon
         )}
@@ -293,7 +303,7 @@ export function StatCard({
           {renderValueContent()}
         </div>
         <div style={{
-          fontSize: 14,
+          fontSize: isMobile ? 12 : 14,
           color: dark ? "#94A3B8" : "#64748B",
           whiteSpace: "nowrap",
           overflow: "hidden",
@@ -301,10 +311,9 @@ export function StatCard({
         }}>
           {renderLabel()}
         </div>
-        {/* Sous-valeur (affichée même si trend est présent) */}
         {subValue && (
           <div style={{
-            fontSize: 12,
+            fontSize: isMobile ? 11 : 12,
             color: subValueColor || (dark ? "#A5B4FC" : "#4F46E5"),
             marginTop: 2,
             fontWeight: 500,
@@ -315,14 +324,12 @@ export function StatCard({
             {subValue}
           </div>
         )}
-        {/* Tendance (affichée en plus de subValue si présent) */}
         {renderTrend()}
       </div>
 
-      {/* Flèche */}
       {isClickable && showArrow && (
         <ChevronRight
-          size={18}
+          size={isMobile ? 16 : 18}
           style={{ color: dark ? "#94A3B8" : "#64748B", flexShrink: 0, marginLeft: 4 }}
         />
       )}

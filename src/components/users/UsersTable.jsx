@@ -1,6 +1,7 @@
 import { DataTable } from "../DataTable";
 import { Pencil, Trash2 } from "lucide-react";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 
 // Badge de rôle avec couleurs
 function RoleBadge({ role, dark }) {
@@ -32,32 +33,42 @@ function RoleBadge({ role, dark }) {
 
 export function UsersTable({ users, onEdit, onDelete }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const columns = [
     {
       header: "Nom",
       accessor: "nom",
       sortable: true,
+      hideOnMobile: false, // toujours visible
       render: (u) => <strong style={{ color: dark ? "#F1F5F9" : "#1E293B" }}>{u.nom}</strong>,
     },
-    { header: "Login", accessor: "login", sortable: true },
+    {
+      header: "Login",
+      accessor: "login",
+      sortable: true,
+      hideOnMobile: true, // masqué sur mobile
+    },
     {
       header: "Rôle",
       accessor: "role",
       sortable: true,
+      hideOnMobile: false, // toujours visible
       render: (u) => <RoleBadge role={u.role} dark={dark} />,
     },
     {
       header: "Classe",
       accessor: "classe",
       sortable: true,
+      hideOnMobile: true, // masqué sur mobile
       render: (u) => u.classe || "—",
     },
     {
       header: "Actions",
       sortable: false,
+      hideOnMobile: false, // toujours visible
       render: (u) => (
-        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: isMobile ? 4 : 6, justifyContent: "center" }}>
           <button
             onClick={() => onEdit(u)}
             title="Modifier"
@@ -66,17 +77,19 @@ export function UsersTable({ users, onEdit, onDelete }) {
               color: "white",
               border: "none",
               borderRadius: 6,
-              padding: "6px 10px",
+              padding: isMobile ? "8px 10px" : "6px 10px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 4,
               transition: "background 0.2s, transform 0.1s",
+              minWidth: isMobile ? 40 : "auto",
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = dark ? "#6366F1" : "#4338CA")}
             onMouseLeave={(e) => (e.currentTarget.style.background = dark ? "#818CF8" : "#4F46E5")}
           >
-            <Pencil size={16} />
+            <Pencil size={isMobile ? 18 : 16} />
           </button>
           <button
             onClick={() => onDelete(u._id)}
@@ -86,17 +99,19 @@ export function UsersTable({ users, onEdit, onDelete }) {
               color: "#EF4444",
               border: `1px solid ${dark ? "#7F1D1D" : "#FECACA"}`,
               borderRadius: 6,
-              padding: "6px 10px",
+              padding: isMobile ? "8px 10px" : "6px 10px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 4,
               transition: "background 0.2s, transform 0.1s",
+              minWidth: isMobile ? 40 : "auto",
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = dark ? "#7F1D1D" : "#FEE2E2")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <Trash2 size={16} />
+            <Trash2 size={isMobile ? 18 : 16} />
           </button>
         </div>
       ),

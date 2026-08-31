@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
@@ -13,6 +14,7 @@ import {
 
 export function GestionAnnees({ ecoleId }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
   // États
@@ -20,7 +22,7 @@ export function GestionAnnees({ ecoleId }) {
   const [adding, setAdding] = useState(false);
   const [activating, setActivating] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("nom"); // "nom" | "statut"
+  const [sortBy, setSortBy] = useState("nom");
   const [sortDir, setSortDir] = useState("asc");
   const [editingId, setEditingId] = useState(null);
   const [editingNom, setEditingNom] = useState("");
@@ -182,6 +184,26 @@ export function GestionAnnees({ ecoleId }) {
     );
   }
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? 16 : 24;
+  const titleSize = isMobile ? 18 : 20;
+  const titleIconSize = isMobile ? 18 : 20;
+  const formFlexDirection = isMobile ? "column" : "row";
+  const inputPadding = isMobile ? "12px 14px" : "10px 14px";
+  const inputFontSize = isMobile ? 16 : 14;
+  const addButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const addButtonFontSize = isMobile ? 16 : 14;
+  const searchBarFlexDirection = isMobile ? "column" : "row";
+  const searchBarGap = isMobile ? 8 : 8;
+  const searchButtonPadding = isMobile ? "10px 12px" : "8px 12px";
+  const searchButtonFontSize = isMobile ? 14 : 13;
+  const listItemPadding = isMobile ? "12px 14px" : "12px 16px";
+  const listItemFlexDirection = isMobile ? "column" : "row";
+  const listItemAlignItems = isMobile ? "stretch" : "center";
+  const listItemGap = isMobile ? 8 : 0;
+  const actionButtonPadding = isMobile ? "8px 10px" : "4px";
+  const actionButtonFontSize = isMobile ? 14 : 14;
+
   return (
     <div style={{
       ...S.card,
@@ -189,25 +211,25 @@ export function GestionAnnees({ ecoleId }) {
       border: `1px solid ${cardBorder}`,
       boxShadow: shadow,
       transition: "background-color 0.3s",
-      padding: 24,
+      padding: containerPadding,
     }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête avec statistiques */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 20, flexDirection: isMobile ? "column" : "row" }}>
         <h3 style={{
           color: textPrimary,
           display: "flex",
           alignItems: "center",
           gap: 8,
-          fontSize: 20,
+          fontSize: titleSize,
           fontWeight: 700,
           margin: 0,
         }}>
-          <Calendar size={20} color={dark ? "#818CF8" : "#4F46E5"} />
+          <Calendar size={titleIconSize} color={dark ? "#818CF8" : "#4F46E5"} />
           Années scolaires
         </h3>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: isMobile ? "center" : "flex-start" }}>
           <span style={{ background: activeBadgeBg, color: activeBadgeText, padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 600 }}>
             {stats.active} active(s)
           </span>
@@ -218,22 +240,23 @@ export function GestionAnnees({ ecoleId }) {
       </div>
 
       {/* Formulaire d'ajout */}
-      <form onSubmit={handleAdd} style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+      <form onSubmit={handleAdd} style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", flexDirection: formFlexDirection }}>
         <input
           placeholder="ex: 2025-2026"
           value={nouveauNom}
           onChange={(e) => setNouveauNom(e.target.value)}
           style={{
             flex: 1,
-            minWidth: 150,
-            padding: "10px 14px",
+            minWidth: isMobile ? "100%" : 150,
+            padding: inputPadding,
             border: `1px solid ${cardBorder}`,
             borderRadius: 8,
-            fontSize: 14,
+            fontSize: inputFontSize,
             outline: "none",
             background: inputBg,
             color: inputText,
             transition: "border-color 0.2s, background-color 0.3s",
+            boxSizing: "border-box",
           }}
         />
         <button
@@ -242,8 +265,9 @@ export function GestionAnnees({ ecoleId }) {
           style={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 6,
-            padding: "10px 20px",
+            padding: addButtonPadding,
             background: buttonAddBg,
             color: "white",
             border: "none",
@@ -252,6 +276,8 @@ export function GestionAnnees({ ecoleId }) {
             cursor: adding ? "not-allowed" : "pointer",
             opacity: adding ? 0.7 : 1,
             transition: "background 0.2s",
+            fontSize: addButtonFontSize,
+            width: isMobile ? "100%" : "auto",
           }}
         >
           {adding ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
@@ -260,8 +286,8 @@ export function GestionAnnees({ ecoleId }) {
       </form>
 
       {/* Barre de recherche et tri */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: 1, minWidth: 150 }}>
+      <div style={{ display: "flex", gap: searchBarGap, marginBottom: 16, alignItems: "stretch", flexWrap: "wrap", flexDirection: searchBarFlexDirection }}>
+        <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 150 }}>
           <Search size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
           <input
             type="text"
@@ -270,46 +296,52 @@ export function GestionAnnees({ ecoleId }) {
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
               width: "100%",
-              padding: "8px 12px 8px 32px",
+              padding: inputPadding,
               border: `1px solid ${cardBorder}`,
               borderRadius: 8,
-              fontSize: 14,
+              fontSize: inputFontSize,
               background: inputBg,
               color: inputText,
               outline: "none",
+              paddingLeft: 32,
+              boxSizing: "border-box",
             }}
           />
         </div>
-        <button
-          onClick={() => toggleSort("nom")}
-          style={{
-            display: "flex", alignItems: "center", gap: 4,
-            padding: "8px 12px",
-            background: "transparent",
-            border: `1px solid ${cardBorder}`,
-            borderRadius: 8,
-            color: textPrimary,
-            cursor: "pointer",
-            fontSize: 13,
-          }}
-        >
-          Nom {sortBy === "nom" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-        </button>
-        <button
-          onClick={() => toggleSort("statut")}
-          style={{
-            display: "flex", alignItems: "center", gap: 4,
-            padding: "8px 12px",
-            background: "transparent",
-            border: `1px solid ${cardBorder}`,
-            borderRadius: 8,
-            color: textPrimary,
-            cursor: "pointer",
-            fontSize: 13,
-          }}
-        >
-          Statut {sortBy === "statut" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-        </button>
+        <div style={{ display: "flex", gap: 8, width: isMobile ? "100%" : "auto" }}>
+          <button
+            onClick={() => toggleSort("nom")}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+              padding: searchButtonPadding,
+              background: "transparent",
+              border: `1px solid ${cardBorder}`,
+              borderRadius: 8,
+              color: textPrimary,
+              cursor: "pointer",
+              fontSize: searchButtonFontSize,
+              flex: isMobile ? 1 : "none",
+            }}
+          >
+            Nom {sortBy === "nom" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+          </button>
+          <button
+            onClick={() => toggleSort("statut")}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+              padding: searchButtonPadding,
+              background: "transparent",
+              border: `1px solid ${cardBorder}`,
+              borderRadius: 8,
+              color: textPrimary,
+              cursor: "pointer",
+              fontSize: searchButtonFontSize,
+              flex: isMobile ? 1 : "none",
+            }}
+          >
+            Statut {sortBy === "statut" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+          </button>
+        </div>
       </div>
 
       {/* Liste des années */}
@@ -324,20 +356,22 @@ export function GestionAnnees({ ecoleId }) {
             key={annee._id}
             style={{
               display: "flex",
-              alignItems: "center",
+              flexDirection: listItemFlexDirection,
+              alignItems: listItemAlignItems,
               justifyContent: "space-between",
-              padding: "12px 16px",
+              padding: listItemPadding,
               borderRadius: 8,
               border: `1px solid ${annee.estActive ? activeBadgeText : cardBorder}`,
               background: annee.estActive ? activeBadgeBg : "transparent",
               transition: "background-color 0.3s, transform 0.1s",
               cursor: "default",
+              gap: listItemGap,
             }}
             onMouseEnter={(e) => { if (!annee.estActive) e.currentTarget.style.background = dark ? "#2D3748" : "#F1F5F9"; }}
             onMouseLeave={(e) => { if (!annee.estActive) e.currentTarget.style.background = "transparent"; }}
           >
             {/* Partie gauche : nom et badges */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" }}>
               {editingId === annee._id ? (
                 <>
                   <input
@@ -365,6 +399,7 @@ export function GestionAnnees({ ecoleId }) {
                   <span style={{
                     fontWeight: annee.estActive ? 700 : 400,
                     color: annee.estActive ? activeBadgeText : textPrimary,
+                    fontSize: isMobile ? 15 : 14,
                   }}>
                     {annee.nom}
                   </span>
@@ -389,13 +424,13 @@ export function GestionAnnees({ ecoleId }) {
             </div>
 
             {/* Partie droite : actions */}
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: isMobile ? "flex-end" : "flex-start", width: isMobile ? "100%" : "auto" }}>
               {!annee.estActive && (
                 <>
                   <button
                     onClick={() => startRename(annee)}
                     title="Renommer"
-                    style={{ background: "none", border: "none", color: "#3B82F6", cursor: "pointer", padding: 4 }}
+                    style={{ background: "none", border: "none", color: "#3B82F6", cursor: "pointer", padding: actionButtonPadding }}
                   >
                     <Edit2 size={16} />
                   </button>
@@ -405,8 +440,9 @@ export function GestionAnnees({ ecoleId }) {
                     style={{
                       display: "flex",
                       alignItems: "center",
+                      justifyContent: "center",
                       gap: 4,
-                      padding: "6px 12px",
+                      padding: isMobile ? "8px 12px" : "6px 12px",
                       background: buttonActivateBg,
                       color: "white",
                       border: "none",
@@ -414,6 +450,7 @@ export function GestionAnnees({ ecoleId }) {
                       fontWeight: 500,
                       cursor: activating === annee._id ? "not-allowed" : "pointer",
                       opacity: activating === annee._id ? 0.7 : 1,
+                      fontSize: actionButtonFontSize,
                     }}
                   >
                     {activating === annee._id ? <Loader size={14} className="animate-spin" /> : <Clock size={14} />}
@@ -426,7 +463,7 @@ export function GestionAnnees({ ecoleId }) {
                   onClick={() => handleDelete(annee._id, annee.nom)}
                   disabled={deletingId === annee._id}
                   title="Supprimer"
-                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 4 }}
+                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: actionButtonPadding }}
                 >
                   {deletingId === annee._id ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
                 </button>

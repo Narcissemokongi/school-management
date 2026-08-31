@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Skeleton } from "./Skeleton";
 import {
   Clock, AlertTriangle, Download, Award, CheckCircle,
@@ -12,9 +13,11 @@ import toast from "react-hot-toast";
 
 export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
   const bulletinRef = useRef(null);
   const [generating, setGenerating] = useState(false);
-  const [forceClair, setForceClair] = useState(false); // ✅ pour l'export PDF
+  const [forceClair, setForceClair] = useState(false);
 
   // ========== REQUÊTES ==========
   const ecole = useQuery(api.ecoles.get, ecoleId ? { ecoleId } : "skip");
@@ -65,7 +68,6 @@ export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
     decisionText: "#92400E",
   };
 
-  // Couleurs effectives : si on force le clair pour l'export, on utilise exportBulletinColors
   const bulletinColors = forceClair ? exportBulletinColors : displayBulletinColors;
 
   // ========== TRAITEMENT DES DONNÉES ==========
@@ -168,17 +170,16 @@ export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
     day: "numeric", month: "long", year: "numeric",
   });
 
-  // ========== EXPORT PDF (une seule page garantie) ==========
+  // ========== EXPORT PDF ==========
   const handleExportPDF = async () => {
     if (!bulletinRef.current) return;
     setGenerating(true);
-    setForceClair(true); // ✅ force le mode clair pour la capture
-    // Attendre que le DOM se mette à jour avec les couleurs claires
+    setForceClair(true);
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
       const canvas = await html2canvas(bulletinRef.current, {
-        scale: 4, // haute résolution pour une meilleure lisibilité
+        scale: 4,
         useCORS: true,
         backgroundColor: "#FFFFFF",
       });
@@ -187,23 +188,20 @@ export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5; // marge en mm
+      const margin = 5;
 
       const pageContentWidth = pageWidth - margin * 2;
       const pageContentHeight = pageHeight - margin * 2;
 
-      // Ratio largeur/hauteur du canvas
       const ratio = canvas.width / canvas.height;
       let imgWidth = pageContentWidth;
       let imgHeight = imgWidth / ratio;
 
-      // Si l'image dépasse la hauteur, on réduit la largeur pour que la hauteur tienne
       if (imgHeight > pageContentHeight) {
         imgWidth = pageContentHeight * ratio;
         imgHeight = pageContentHeight;
       }
 
-      // Centrer horizontalement
       const xPos = margin + (pageContentWidth - imgWidth) / 2;
       const yPos = margin;
 
@@ -215,44 +213,57 @@ export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
       console.error(err);
       toast.error("Erreur lors de la génération du PDF");
     } finally {
-      setForceClair(false); // ✅ restaure le mode d'affichage
+      setForceClair(false);
       setGenerating(false);
     }
   };
 
   const top3Colors = ["#FFD700", "#C0C0C0", "#CD7F32"];
 
+  // Styles adaptatifs
+  const containerMargin = isMobile ? "16px auto" : "24px auto";
+  const containerPadding = isMobile ? "0 8px" : "0 16px";
+  const exportButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const exportButtonFontSize = isMobile ? 16 : 14;
+  const exportButtonWidth = isMobile ? "100%" : "auto";
+  const bulletinPadding = isMobile ? "8px" : "12px";
+  const bulletinFontSize = isMobile ? 10 : 11;
+  const headerTitleSize = isMobile ? 14 : 16;
+  const sectionTitleSize = isMobile ? 12 : 13;
+  const tableFontSize = isMobile ? 9 : 10;
+
   return (
-    <div style={{ maxWidth: 900, margin: "24px auto", padding: "0 16px", fontFamily: "'Segoe UI', Roboto, sans-serif", color: uiColors.textPrimary }}>
+    <div style={{ maxWidth: 900, margin: containerMargin, padding: containerPadding, fontFamily: "'Segoe UI', Roboto, sans-serif", color: uiColors.textPrimary }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
-      {/* Bouton d'export (interface adaptative) */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+      {/* Bouton d'export */}
+      <div style={{ display: "flex", justifyContent: isMobile ? "center" : "flex-end", marginBottom: 16 }}>
         <button
           onClick={handleExportPDF}
           disabled={generating}
           style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            padding: "10px 20px", background: generating ? "#A5B4FC" : uiColors.accent,
+            display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+            padding: exportButtonPadding, background: generating ? "#A5B4FC" : uiColors.accent,
             color: "white", border: "none", borderRadius: 10, fontWeight: 600,
-            cursor: generating ? "not-allowed" : "pointer", fontSize: 14,
+            cursor: generating ? "not-allowed" : "pointer", fontSize: exportButtonFontSize,
+            width: exportButtonWidth,
           }}
         >
-          <Download size={18} />
+          <Download size={isMobile ? 20 : 18} />
           {generating ? "Génération..." : "Exporter PDF"}
         </button>
       </div>
 
-      {/* ================== BULLETIN (affichage adaptatif, export clair) ================== */}
+      {/* ================== BULLETIN ================== */}
       <div
         ref={bulletinRef}
         style={{
           background: bulletinColors.cardBg,
-          padding: 12,
+          padding: bulletinPadding,
           borderRadius: 8,
           color: bulletinColors.textPrimary,
           border: `1px solid ${bulletinColors.tableRowBorder}`,
-          fontSize: 11,
+          fontSize: bulletinFontSize,
           boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
         }}
       >
@@ -261,7 +272,7 @@ export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {ecole.logo && <img src={ecole.logo} alt="Logo" style={{ height: 45 }} />}
             <div>
-              <h1 style={{ fontSize: 16, fontWeight: 700, color: bulletinColors.textPrimary, margin: 0 }}>{ecole.nom}</h1>
+              <h1 style={{ fontSize: headerTitleSize, fontWeight: 700, color: bulletinColors.textPrimary, margin: 0 }}>{ecole.nom}</h1>
               {ecole.adresse && <p style={{ color: bulletinColors.textSecondary, fontSize: 10, margin: "1px 0 0" }}>{ecole.adresse}</p>}
               <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginTop: 2 }}>
                 {ecole.telephone && <span style={{ color: bulletinColors.textSecondary, fontSize: 10 }}>📞 {ecole.telephone}</span>}
@@ -298,7 +309,7 @@ export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
 
         {/* Tableau des notes */}
         <div style={{ overflowX: "auto", marginBottom: 10 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, color: bulletinColors.textPrimary }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: tableFontSize, color: bulletinColors.textPrimary, minWidth: isMobile ? 500 : "auto" }}>
             <thead>
               <tr style={{ background: bulletinColors.tableHeaderBg, color: "white" }}>
                 <th style={{ padding: 4, textAlign: "left" }}>Matière</th>
@@ -353,7 +364,7 @@ export function BulletinEnfant({ eleveId, ecoleId, nom, postnom, classe }) {
 
         {/* Absences */}
         <div style={{ marginBottom: 10 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center", gap: 6, color: bulletinColors.textPrimary }}>
+          <h3 style={{ fontSize: sectionTitleSize, fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center", gap: 6, color: bulletinColors.textPrimary }}>
             <Clock size={16} /> Absences & Retards
           </h3>
           <div style={{ background: bulletinColors.mutedBg, borderRadius: 6, padding: "6px 10px" }}>

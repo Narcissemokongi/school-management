@@ -10,9 +10,12 @@ import {
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 
 export function ParentLinkRequests({ user, ecoleId }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [sortBy, setSortBy] = useState("date");
@@ -177,14 +180,36 @@ export function ParentLinkRequests({ user, ecoleId }) {
     );
   }
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 20 : 24;
+  const headerMarginBottom = isMobile ? 16 : 24;
+  const searchBarFlexDirection = isMobile ? "column" : "row";
+  const searchBarGap = isMobile ? 8 : 12;
+  const searchInputPadding = isMobile ? "12px 12px 12px 40px" : "8px 12px 8px 40px";
+  const searchInputFontSize = isMobile ? 16 : 14;
+  const selectPadding = isMobile ? "12px 14px" : "8px 12px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const sortButtonsFlexDirection = isMobile ? "column" : "row";
+  const sortButtonsGap = isMobile ? 4 : 8;
+  const cardPadding = isMobile ? 12 : 16;
+  const cardFlexDirection = isMobile ? "column" : "row";
+  const cardAlignItems = isMobile ? "stretch" : "center";
+  const cardGap = isMobile ? 8 : 12;
+  const actionButtonPadding = isMobile ? "10px 12px" : "8px 16px";
+  const actionButtonFontSize = isMobile ? 14 : 14;
+  const bulkActionsFlexDirection = isMobile ? "column" : "row";
+  const paginationButtonPadding = isMobile ? "10px 12px" : "6px 10px";
+  const paginationFontSize = isMobile ? 14 : 13;
+
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 16px" }}>
-      <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24 }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: containerPadding }}>
+      <h2 style={{ fontSize: titleSize, fontWeight: 700, marginBottom: headerMarginBottom, color: dark ? "#F1F5F9" : "#1E293B" }}>
         Demandes d'association parent-enfant
       </h2>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-        <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: searchBarGap, marginBottom: 16, flexDirection: searchBarFlexDirection }}>
+        <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200, position: "relative" }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#9CA3AF" }} />
           <input
             type="search"
@@ -193,13 +218,14 @@ export function ParentLinkRequests({ user, ecoleId }) {
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             style={{
               width: "100%",
-              padding: "8px 12px 8px 40px",
+              padding: searchInputPadding,
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 8,
               background: dark ? "#0F172A" : "#F9FAFB",
               color: dark ? "#F1F5F9" : "#1E293B",
-              fontSize: 14,
+              fontSize: searchInputFontSize,
               outline: "none",
+              boxSizing: "border-box",
             }}
           />
           {searchTerm && (
@@ -216,13 +242,14 @@ export function ParentLinkRequests({ user, ecoleId }) {
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
           style={{
-            padding: "8px 12px",
+            padding: selectPadding,
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 8,
             background: dark ? "#0F172A" : "#F9FAFB",
             color: dark ? "#F1F5F9" : "#1E293B",
-            fontSize: 14,
+            fontSize: selectFontSize,
             cursor: "pointer",
+            width: isMobile ? "100%" : "auto",
           }}
         >
           <option value="pending">En attente</option>
@@ -231,29 +258,32 @@ export function ParentLinkRequests({ user, ecoleId }) {
           <option value="all">Toutes</option>
         </select>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} />
-          <SortButton label="Parent" field="parent" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} />
-          <SortButton label="Élève" field="eleve" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} />
+        <div style={{ display: "flex", gap: sortButtonsGap, flexDirection: sortButtonsFlexDirection, width: isMobile ? "100%" : "auto" }}>
+          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} />
+          <SortButton label="Parent" field="parent" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} />
+          <SortButton label="Élève" field="eleve" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} />
         </div>
       </div>
 
       {statusFilter === "pending" && paginated.length > 0 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexDirection: bulkActionsFlexDirection, width: isMobile ? "100%" : "auto" }}>
           <button
             onClick={handleApproveAll}
             disabled={bulkProcessing}
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
-              padding: "8px 16px",
+              padding: isMobile ? "12px 16px" : "8px 16px",
               background: "#10B981",
               color: "white",
               border: "none",
               borderRadius: 8,
               cursor: bulkProcessing ? "not-allowed" : "pointer",
               fontWeight: 600,
+              fontSize: actionButtonFontSize,
+              width: isMobile ? "100%" : "auto",
             }}
           >
             {bulkProcessing ? <Loader size={18} className="animate-spin" /> : <CheckSquare size={18} />}
@@ -265,14 +295,17 @@ export function ParentLinkRequests({ user, ecoleId }) {
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
-              padding: "8px 16px",
+              padding: isMobile ? "12px 16px" : "8px 16px",
               background: "#EF4444",
               color: "white",
               border: "none",
               borderRadius: 8,
               cursor: bulkProcessing ? "not-allowed" : "pointer",
               fontWeight: 600,
+              fontSize: actionButtonFontSize,
+              width: isMobile ? "100%" : "auto",
             }}
           >
             {bulkProcessing ? <Loader size={18} className="animate-spin" /> : <Square size={18} />}
@@ -281,26 +314,27 @@ export function ParentLinkRequests({ user, ecoleId }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
         {paginated.map((req) => (
           <div
             key={req._id}
             style={{
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 12,
-              padding: 16,
+              padding: cardPadding,
               background: dark ? "#1E293B" : "#FFFFFF",
               display: "flex",
+              flexDirection: cardFlexDirection,
               justifyContent: "space-between",
-              alignItems: "center",
+              alignItems: cardAlignItems,
               flexWrap: "wrap",
-              gap: 12,
+              gap: cardGap,
             }}
           >
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <User size={16} style={{ color: dark ? "#94A3B8" : "#64748B" }} />
-                <span style={{ fontWeight: 500, color: dark ? "#F1F5F9" : "#1E293B" }}>
+                <span style={{ fontWeight: 500, color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 15 : 14 }}>
                   {req.parent ? `${req.parent.nom} ${req.parent.postnom || ""}` : "Parent inconnu"}
                 </span>
                 {req.parent?.email && (
@@ -309,9 +343,9 @@ export function ParentLinkRequests({ user, ecoleId }) {
                   </span>
                 )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <GraduationCap size={16} style={{ color: dark ? "#94A3B8" : "#64748B" }} />
-                <span style={{ color: dark ? "#F1F5F9" : "#1E293B" }}>
+                <span style={{ color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 15 : 14 }}>
                   {req.eleve ? `${req.eleve.nom} ${req.eleve.postnom || ""}` : "Élève inconnu"}
                   {req.eleve?.classe && ` (${req.eleve.classe})`}
                 </span>
@@ -323,7 +357,7 @@ export function ParentLinkRequests({ user, ecoleId }) {
                 </span>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
               {req.status === "pending" && (
                 <>
                   <button
@@ -332,13 +366,16 @@ export function ParentLinkRequests({ user, ecoleId }) {
                     style={{
                       display: "flex",
                       alignItems: "center",
+                      justifyContent: "center",
                       gap: 6,
-                      padding: "8px 16px",
+                      padding: actionButtonPadding,
                       background: processingIds.has(req._id) ? "#94A3B8" : "#10B981",
                       color: "white",
                       border: "none",
                       borderRadius: 8,
                       cursor: processingIds.has(req._id) ? "not-allowed" : "pointer",
+                      fontSize: actionButtonFontSize,
+                      width: isMobile ? "100%" : "auto",
                     }}
                   >
                     {processingIds.has(req._id) ? <Loader size={16} className="animate-spin" /> : <CheckCircle2 size={18} />}
@@ -350,13 +387,16 @@ export function ParentLinkRequests({ user, ecoleId }) {
                     style={{
                       display: "flex",
                       alignItems: "center",
+                      justifyContent: "center",
                       gap: 6,
-                      padding: "8px 16px",
+                      padding: actionButtonPadding,
                       background: processingIds.has(req._id) ? "#94A3B8" : "#EF4444",
                       color: "white",
                       border: "none",
                       borderRadius: 8,
                       cursor: processingIds.has(req._id) ? "not-allowed" : "pointer",
+                      fontSize: actionButtonFontSize,
+                      width: isMobile ? "100%" : "auto",
                     }}
                   >
                     {processingIds.has(req._id) ? <Loader size={16} className="animate-spin" /> : <XCircle size={18} />}
@@ -365,12 +405,12 @@ export function ParentLinkRequests({ user, ecoleId }) {
                 </>
               )}
               {req.status === "approved" && (
-                <span style={{ color: "#10B981", display: "flex", alignItems: "center", gap: 4, fontWeight: 500 }}>
+                <span style={{ color: "#10B981", display: "flex", alignItems: "center", gap: 4, fontWeight: 500, fontSize: actionButtonFontSize }}>
                   <CheckCircle2 size={16} /> Approuvée
                 </span>
               )}
               {req.status === "rejected" && (
-                <span style={{ color: "#EF4444", display: "flex", alignItems: "center", gap: 4, fontWeight: 500 }}>
+                <span style={{ color: "#EF4444", display: "flex", alignItems: "center", gap: 4, fontWeight: 500, fontSize: actionButtonFontSize }}>
                   <XCircle size={16} /> Rejetée
                 </span>
               )}
@@ -384,17 +424,17 @@ export function ParentLinkRequests({ user, ecoleId }) {
           <button
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={safeCurrentPage === 1}
-            style={{ padding: "6px 10px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer", color: dark ? "#F1F5F9" : "#1E293B" }}
+            style={{ padding: paginationButtonPadding, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: paginationFontSize }}
           >
             <ChevronLeft size={16} />
           </button>
-          <span style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>
+          <span style={{ fontSize: paginationFontSize, color: dark ? "#94A3B8" : "#64748B" }}>
             Page {safeCurrentPage} / {totalPages}
           </span>
           <button
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={safeCurrentPage === totalPages}
-            style={{ padding: "6px 10px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer", color: dark ? "#F1F5F9" : "#1E293B" }}
+            style={{ padding: paginationButtonPadding, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: paginationFontSize }}
           >
             <ChevronRight size={16} />
           </button>
@@ -406,8 +446,8 @@ export function ParentLinkRequests({ user, ecoleId }) {
   );
 }
 
-// Composant pour les boutons de tri (corrigé)
-function SortButton({ label, field, currentSort, currentOrder, onClick }) {
+// Composant pour les boutons de tri (corrigé avec isMobile)
+function SortButton({ label, field, currentSort, currentOrder, onClick, isMobile }) {
   const isActive = currentSort === field;
   let IconComponent = ChevronDown;
   if (isActive) {
@@ -420,15 +460,17 @@ function SortButton({ label, field, currentSort, currentOrder, onClick }) {
       style={{
         display: "flex",
         alignItems: "center",
+        justifyContent: "center",
         gap: 4,
-        padding: "8px 12px",
+        padding: isMobile ? "10px 12px" : "8px 12px",
         border: `1px solid ${isActive ? "#4F46E5" : "#E2E8F0"}`,
         borderRadius: 8,
         background: isActive ? "#EEF2FF" : "transparent",
         color: isActive ? "#4F46E5" : "#64748B",
         fontWeight: isActive ? 600 : 400,
         cursor: "pointer",
-        fontSize: 13,
+        fontSize: isMobile ? 14 : 13,
+        flex: isMobile ? 1 : "none",
       }}
     >
       {label}

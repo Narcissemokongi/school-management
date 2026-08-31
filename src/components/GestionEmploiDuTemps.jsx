@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
@@ -15,6 +16,7 @@ const HEURES_DEFAUT = ["07:30", "08:30", "09:30", "10:30", "11:30", "12:30", "13
 // Composant cellule avec autocomplétion et thème
 function CelluleEmploi({ value, onChange, suggestions }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [inputValue, setInputValue] = useState(value);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filtered, setFiltered] = useState([]);
@@ -51,15 +53,16 @@ function CelluleEmploi({ value, onChange, suggestions }) {
         onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
         style={{
           width: "100%",
-          padding: "6px 4px",
+          padding: isMobile ? "8px 6px" : "6px 4px",
           border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
           borderRadius: 4,
-          fontSize: 12,
+          fontSize: isMobile ? 14 : 12,
           textAlign: "center",
           outline: "none",
           background: dark ? "#0F172A" : "#FFFFFF",
           color: dark ? "#F1F5F9" : "#1E293B",
           transition: "border-color 0.2s, background-color 0.3s, color 0.3s",
+          boxSizing: "border-box",
         }}
         placeholder="..."
       />
@@ -85,7 +88,7 @@ function CelluleEmploi({ value, onChange, suggestions }) {
                 padding: "8px 10px",
                 cursor: "pointer",
                 borderBottom: `1px solid ${dark ? "#334155" : "#F1F5F9"}`,
-                fontSize: 12,
+                fontSize: isMobile ? 13 : 12,
                 color: dark ? "#F1F5F9" : "#1E293B",
                 transition: "background 0.1s",
               }}
@@ -102,7 +105,7 @@ function CelluleEmploi({ value, onChange, suggestions }) {
 }
 
 // Modale d'ajout d'heure avec thème
-function AddHeureModal({ open, onClose, onConfirm }) {
+function AddHeureModal({ open, onClose, onConfirm, isMobile }) {
   const { dark } = useStyles();
   const [heure, setHeure] = useState("");
   if (!open) return null;
@@ -113,17 +116,18 @@ function AddHeureModal({ open, onClose, onConfirm }) {
       background: "rgba(0,0,0,0.4)",
       display: "flex", alignItems: "center", justifyContent: "center",
       zIndex: 1000,
+      padding: isMobile ? 12 : 16,
     }} onClick={onClose}>
       <div style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 16,
-        padding: 24,
+        padding: isMobile ? 20 : 24,
         width: "90%",
-        maxWidth: 360,
+        maxWidth: isMobile ? "95%" : 360,
         boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
       }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: dark ? "#F1F5F9" : "#1E293B" }}>
+        <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: 16, color: dark ? "#F1F5F9" : "#1E293B" }}>
           Ajouter une heure
         </h3>
         <input
@@ -132,10 +136,10 @@ function AddHeureModal({ open, onClose, onConfirm }) {
           onChange={e => setHeure(e.target.value)}
           style={{
             width: "100%",
-            padding: "10px 14px",
+            padding: isMobile ? "12px 14px" : "10px 14px",
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 8,
-            fontSize: 14,
+            fontSize: isMobile ? 16 : 14,
             marginBottom: 16,
             background: dark ? "#0F172A" : "#F9FAFB",
             color: dark ? "#F1F5F9" : "#1E293B",
@@ -143,7 +147,7 @@ function AddHeureModal({ open, onClose, onConfirm }) {
           }}
           autoFocus
         />
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
           <button
             onClick={() => { if (heure) { onConfirm(heure); setHeure(""); } }}
             style={{
@@ -151,9 +155,10 @@ function AddHeureModal({ open, onClose, onConfirm }) {
               color: "white",
               border: "none",
               borderRadius: 8,
-              padding: "10px 20px",
+              padding: isMobile ? "12px 20px" : "10px 20px",
               fontWeight: 500,
               cursor: "pointer",
+              fontSize: isMobile ? 16 : 14,
             }}
           >
             Ajouter
@@ -164,10 +169,11 @@ function AddHeureModal({ open, onClose, onConfirm }) {
               background: dark ? "#334155" : "#F1F5F9",
               border: "none",
               borderRadius: 8,
-              padding: "10px 20px",
+              padding: isMobile ? "12px 20px" : "10px 20px",
               fontWeight: 500,
               cursor: "pointer",
               color: dark ? "#F1F5F9" : "#1E293B",
+              fontSize: isMobile ? 16 : 14,
             }}
           >
             Annuler
@@ -180,6 +186,7 @@ function AddHeureModal({ open, onClose, onConfirm }) {
 
 export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeActive }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
   const [classeSelectionnee, setClasseSelectionnee] = useState("");
@@ -331,20 +338,20 @@ export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeAct
 
   if (!anneeId) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px" }}>
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 16,
-          padding: 48,
+          padding: isMobile ? 32 : 48,
           textAlign: "center",
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         }}>
-          <Clock size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+          <Clock size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
+          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 14 : 14 }}>
             Veuillez créer ou activer une année scolaire dans les paramètres.
           </p>
         </div>
@@ -352,32 +359,50 @@ export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeAct
     );
   }
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 13 : 14;
+  const toolbarFlexDirection = isMobile ? "column" : "row";
+  const toolbarAlignItems = isMobile ? "stretch" : "center";
+  const selectPadding = isMobile ? "12px 14px" : "8px 12px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const buttonPadding = isMobile ? "12px 16px" : "8px 14px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const tableFontSize = isMobile ? 12 : 13;
+  const cellPadding = isMobile ? 6 : 8;
+  const headerPadding = isMobile ? 8 : 10;
+  const addRowButtonPadding = isMobile ? "12px 16px" : "8px 16px";
+  const addRowButtonFontSize = isMobile ? 14 : 13;
+
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
+      <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
           Emploi du temps annuel
         </h2>
-        <p style={{ color: dark ? "#94A3B8" : "#64748B", marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: dark ? "#94A3B8" : "#64748B", marginTop: 4, fontSize: subtitleSize }}>
           {anneeActive ? `Année : ${anneeActive.nom}` : ""}
         </p>
       </div>
 
       {/* Choix de la classe */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <School size={18} color={dark ? "#94A3B8" : "#64748B"} />
+      <div style={{ display: "flex", gap: 12, marginBottom: isMobile ? 16 : 24, flexWrap: "wrap", alignItems: toolbarAlignItems, flexDirection: toolbarFlexDirection }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, width: isMobile ? "100%" : "auto" }}>
+          <School size={isMobile ? 18 : 18} color={dark ? "#94A3B8" : "#64748B"} />
           <select
             value={classeSelectionnee}
             onChange={(e) => setClasseSelectionnee(e.target.value)}
             style={{
-              padding: "8px 12px",
+              padding: selectPadding,
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 8,
-              fontSize: 14,
+              fontSize: selectFontSize,
               outline: "none",
               background: dark ? "#1E293B" : "#F8FAFC",
               color: dark ? "#F1F5F9" : "#1E293B",
+              flex: 1,
+              width: isMobile ? "100%" : "auto",
             }}
           >
             <option value="">-- Choisir une classe --</option>
@@ -385,19 +410,21 @@ export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeAct
           </select>
         </div>
         {classeSelectionnee && (
-          <>
+          <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
             <button
               onClick={handleSave}
               disabled={saving}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "8px 14px",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: buttonPadding,
                 background: saving ? "#A5B4FC" : dark ? "#818CF8" : "#4F46E5",
                 color: "white",
                 border: "none",
                 borderRadius: 8,
                 cursor: "pointer",
                 fontWeight: 500,
+                fontSize: buttonFontSize,
+                flex: isMobile ? 1 : "none",
               }}
             >
               {saving ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
@@ -406,42 +433,44 @@ export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeAct
             <button
               onClick={handleDelete}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "8px 14px",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: buttonPadding,
                 background: "#EF4444",
                 color: "white",
                 border: "none",
                 borderRadius: 8,
                 cursor: "pointer",
                 fontWeight: 500,
+                fontSize: buttonFontSize,
+                flex: isMobile ? 1 : "none",
               }}
             >
               <Trash2 size={16} /> Supprimer
             </button>
-          </>
+          </div>
         )}
       </div>
 
       {/* Tableau */}
       {classeSelectionnee && (
-        <div style={{ overflowX: "auto", marginBottom: 24 }}>
+        <div style={{ overflowX: "auto", marginBottom: 24, WebkitOverflowScrolling: "touch" }}>
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: dark ? "#94A3B8" : "#64748B" }}>
               <Loader size={32} className="animate-spin" />
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 700 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: tableFontSize, minWidth: isMobile ? 650 : 700 }}>
               <thead>
                 <tr style={{ background: dark ? "#0F172A" : "#1E293B", color: "white" }}>
-                  <th style={{ padding: 10, textAlign: "center" }}>Heures</th>
-                  {JOURS.map(jour => <th key={jour} style={{ padding: 10, textAlign: "center" }}>{jour}</th>)}
+                  <th style={{ padding: headerPadding, textAlign: "center" }}>Heures</th>
+                  {JOURS.map(jour => <th key={jour} style={{ padding: headerPadding, textAlign: "center" }}>{jour}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {heures.map((heure, idx) => (
                   <tr key={heure} style={{ borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
                     <td style={{
-                      padding: 8,
+                      padding: cellPadding,
                       textAlign: "center",
                       fontWeight: 600,
                       background: dark ? "#1E293B" : "#F8FAFC",
@@ -485,7 +514,7 @@ export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeAct
                       )}
                     </td>
                     {JOURS.map(jour => (
-                      <td key={jour} style={{ padding: 4, textAlign: "center" }}>
+                      <td key={jour} style={{ padding: cellPadding, textAlign: "center" }}>
                         <CelluleEmploi
                           value={grille[jour]?.[heure] || ""}
                           onChange={val => updateCell(jour, heure, val)}
@@ -501,15 +530,16 @@ export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeAct
           <button
             onClick={() => setShowAddHeure(true)}
             style={{
-              display: "flex", alignItems: "center", gap: 6,
-              marginTop: 12, padding: "8px 16px",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              marginTop: 12, padding: addRowButtonPadding,
               background: dark ? "#1E293B" : "#F1F5F9",
               color: dark ? "#818CF8" : "#4F46E5",
               border: `1px dashed ${dark ? "#334155" : "#CBD5E1"}`,
               borderRadius: 8,
               fontWeight: 500,
               cursor: "pointer",
-              fontSize: 13,
+              fontSize: addRowButtonFontSize,
+              width: isMobile ? "100%" : "auto",
             }}
           >
             <Plus size={16} /> Ajouter une ligne horaire
@@ -517,7 +547,7 @@ export function GestionEmploiDuTemps({ ecoleId, classes, user, anneeId, anneeAct
         </div>
       )}
 
-      <AddHeureModal open={showAddHeure} onClose={() => setShowAddHeure(false)} onConfirm={addHeure} />
+      <AddHeureModal open={showAddHeure} onClose={() => setShowAddHeure(false)} onConfirm={addHeure} isMobile={isMobile} />
       <ConfirmDialog {...dialogProps} />
     </div>
   );

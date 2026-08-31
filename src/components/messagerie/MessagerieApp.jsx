@@ -18,7 +18,6 @@ export const VIEW = {
   BROADCAST: "broadcast",
 };
 
-// Rôles autorisés à envoyer des messages groupés
 const ROLES_AUTORISES_DIFFUSION = ["admin", "directeur", "disciplinaire"];
 
 export function MessagerieApp({ user, ecoleId, initialSelectedUserId }) {
@@ -33,6 +32,7 @@ export function MessagerieApp({ user, ecoleId, initialSelectedUserId }) {
   const [piecesJointes, setPiecesJointes] = useState([]);
   const [lien, setLien] = useState("");
   const [groupMessages, setGroupMessages] = useState([]);
+  const [isUploading, setIsUploading] = useState(false); // État d'upload
 
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -151,6 +151,10 @@ export function MessagerieApp({ user, ecoleId, initialSelectedUserId }) {
   };
 
   const goBack = () => {
+    // Fermer le clavier sur mobile
+    if (isMobile && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     if (view === VIEW.CHAT) {
       setSelectedUserId(null);
       setView(VIEW.LIST);
@@ -201,6 +205,7 @@ export function MessagerieApp({ user, ecoleId, initialSelectedUserId }) {
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setIsUploading(true);
     try {
       const uploadUrl = await uploadFile({});
       const result = await fetch(uploadUrl, {
@@ -213,6 +218,9 @@ export function MessagerieApp({ user, ecoleId, initialSelectedUserId }) {
       setPiecesJointes((prev) => [...prev, { nom: file.name, type: file.type, url: publicUrl }]);
     } catch (err) {
       toast.error("Erreur upload : " + err.message);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -323,6 +331,7 @@ export function MessagerieApp({ user, ecoleId, initialSelectedUserId }) {
               handleCallUser={handleCallUser}
               selectedUserId={selectedUserId}
               messagesEndRef={messagesEndRef}
+              isUploading={isUploading} // transmettre l'état d'upload
             />
           ) : (
             !isMobile && (

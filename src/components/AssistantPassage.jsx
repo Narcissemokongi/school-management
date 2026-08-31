@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
@@ -12,6 +13,7 @@ import {
 
 export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // <-- Hook mobile
   const { confirm, dialogProps } = useConfirm();
 
   // ----- Données -----
@@ -34,8 +36,8 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
   const [decisions, setDecisions] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filter, setFilter] = useState("tous"); // "tous" | "a_decider" | "decides" | "avec_proposition" | "sans_proposition"
-  const [sortBy, setSortBy] = useState("nom"); // "nom" | "decision"
+  const [filter, setFilter] = useState("tous");
+  const [sortBy, setSortBy] = useState("nom");
   const [classeParDefaut, setClasseParDefaut] = useState("");
 
   // ----- Dérivations -----
@@ -94,7 +96,6 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
     let filtered = parClasse.map(([classe, eleves]) => {
       let filteredEleves = eleves;
 
-      // Recherche
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         filteredEleves = filteredEleves.filter((insc) =>
@@ -102,7 +103,6 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
         );
       }
 
-      // Filtres
       if (filter === "a_decider") {
         filteredEleves = filteredEleves.filter((insc) => !decisions[insc.eleveId]);
       } else if (filter === "decides") {
@@ -113,7 +113,6 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
         filteredEleves = filteredEleves.filter((insc) => !propositions.some((p) => p.eleveId === insc.eleveId));
       }
 
-      // Tri
       if (sortBy === "decision") {
         filteredEleves = [...filteredEleves].sort((a, b) => {
           const statutA = decisions[a.eleveId]?.statut || "zzz";
@@ -264,20 +263,35 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
     );
   }
 
+  // Styles responsives
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 16;
+  const statBadgeSize = isMobile ? 12 : 12;
+  const toolbarGap = isMobile ? 8 : 12;
+  const toolbarDirection = isMobile ? "column" : "row";
+  const toolbarAlign = isMobile ? "stretch" : "center";
+  const cardPadding = isMobile ? "12px 14px" : "14px 16px";
+  const cardGap = isMobile ? 8 : 12;
+  const selectPadding = isMobile ? "10px 12px" : "8px 12px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const buttonPadding = isMobile ? "12px 16px" : "12px 24px";
+  const buttonFontSize = isMobile ? 16 : 14;
+
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <h2 style={{ fontSize: 28, fontWeight: 700, color: colors.textPrimary, marginBottom: 8 }}>
+      <h2 style={{ fontSize: titleSize, fontWeight: 700, color: colors.textPrimary, marginBottom: 8 }}>
         Assistant de passage
       </h2>
-      <p style={{ color: colors.textSecondary, marginBottom: 24 }}>
+      <p style={{ color: colors.textSecondary, marginBottom: isMobile ? 16 : 24, fontSize: subtitleSize }}>
         Validez ou ajustez les décisions pour chaque élève. Les propositions des enseignants sont affichées.
       </p>
 
       {/* Statistiques rapides */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 16 : 24 }}>
         <Badge text={`Élèves : ${nbTotal}`} bg={colors.cardBg} color={colors.textPrimary} border={colors.cardBorder} />
         <Badge text={`Propositions : ${nbPropositions}`} bg={colors.propBadgeBg} color={colors.propBadgeText} />
         <Badge text={`Décisions : ${nbDecisions}`} bg={colors.badgePassant} color={colors.badgePassantText} />
@@ -287,15 +301,21 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
       </div>
 
       {/* Sélecteur année + recherche + filtre + tri */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24, alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-          <Calendar size={18} color={colors.textSecondary} />
+      <div style={{ display: "flex", flexDirection: toolbarDirection, flexWrap: "wrap", gap: toolbarGap, marginBottom: isMobile ? 16 : 24, alignItems: toolbarAlign }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: isMobile ? "none" : 1, minWidth: isMobile ? "100%" : 200 }}>
+          <Calendar size={isMobile ? 16 : 18} color={colors.textSecondary} />
           <select
             value={nouvelleAnneeId}
             onChange={(e) => setNouvelleAnneeId(e.target.value)}
             style={{
-              padding: "8px 12px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8,
-              fontSize: 14, background: colors.selectBg, color: colors.selectText, outline: "none", flex: 1,
+              padding: selectPadding,
+              border: `1px solid ${colors.cardBorder}`,
+              borderRadius: 8,
+              fontSize: selectFontSize,
+              background: colors.selectBg,
+              color: colors.selectText,
+              outline: "none",
+              flex: 1,
             }}
           >
             <option value="">-- Année de destination --</option>
@@ -307,39 +327,39 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
           </select>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", background: colors.cardBg, border: `1px solid ${colors.cardBorder}`, borderRadius: 8, padding: "8px 12px", flex: 2, minWidth: 200 }}>
-          <Search size={16} color={colors.textSecondary} />
+        <div style={{ display: "flex", alignItems: "center", background: colors.cardBg, border: `1px solid ${colors.cardBorder}`, borderRadius: 8, padding: selectPadding, flex: isMobile ? "none" : 2, minWidth: isMobile ? "100%" : 200 }}>
+          <Search size={isMobile ? 14 : 16} color={colors.textSecondary} />
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Rechercher un élève..."
-            style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: 14, color: colors.textPrimary, marginLeft: 8 }}
+            style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: selectFontSize, color: colors.textPrimary, marginLeft: 8 }}
           />
-          {searchTerm && <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textSecondary }}><X size={16} /></button>}
+          {searchTerm && <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textSecondary }}><X size={isMobile ? 14 : 16} /></button>}
         </div>
 
         {/* Boutons de filtre */}
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          <FilterButton label="Tous" active={filter === "tous"} onClick={() => setFilter("tous")} colors={colors} />
-          <FilterButton label="À décider" active={filter === "a_decider"} onClick={() => setFilter("a_decider")} colors={colors} />
-          <FilterButton label="Décidés" active={filter === "decides"} onClick={() => setFilter("decides")} colors={colors} />
-          <FilterButton label="Avec proposition" active={filter === "avec_proposition"} onClick={() => setFilter("avec_proposition")} colors={colors} />
-          <FilterButton label="Sans proposition" active={filter === "sans_proposition"} onClick={() => setFilter("sans_proposition")} colors={colors} />
+        <div style={{ display: "flex", gap: isMobile ? 4 : 4, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
+          <FilterButton label="Tous" active={filter === "tous"} onClick={() => setFilter("tous")} colors={colors} isMobile={isMobile} />
+          <FilterButton label="À décider" active={filter === "a_decider"} onClick={() => setFilter("a_decider")} colors={colors} isMobile={isMobile} />
+          <FilterButton label="Décidés" active={filter === "decides"} onClick={() => setFilter("decides")} colors={colors} isMobile={isMobile} />
+          <FilterButton label="Avec proposition" active={filter === "avec_proposition"} onClick={() => setFilter("avec_proposition")} colors={colors} isMobile={isMobile} />
+          <FilterButton label="Sans proposition" active={filter === "sans_proposition"} onClick={() => setFilter("sans_proposition")} colors={colors} isMobile={isMobile} />
         </div>
 
         {/* Tri */}
-        <div style={{ display: "flex", gap: 4 }}>
-          <FilterButton label="Tri nom" active={sortBy === "nom"} onClick={() => setSortBy("nom")} colors={colors} />
-          <FilterButton label="Tri décision" active={sortBy === "decision"} onClick={() => setSortBy("decision")} colors={colors} />
+        <div style={{ display: "flex", gap: 4, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
+          <FilterButton label="Tri nom" active={sortBy === "nom"} onClick={() => setSortBy("nom")} colors={colors} isMobile={isMobile} />
+          <FilterButton label="Tri décision" active={sortBy === "decision"} onClick={() => setSortBy("decision")} colors={colors} isMobile={isMobile} />
         </div>
       </div>
 
       {/* Action groupée */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: isMobile ? 16 : 24, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
         <select
           value={classeParDefaut}
           onChange={(e) => setClasseParDefaut(e.target.value)}
-          style={{ padding: "8px 12px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: 14, background: colors.selectBg, color: colors.selectText }}
+          style={{ padding: selectPadding, border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: selectFontSize, background: colors.selectBg, color: colors.selectText, width: isMobile ? "100%" : "auto" }}
         >
           <option value="">-- Classe par défaut --</option>
           {classesTriees.map((c) => <option key={c._id} value={c.nom} style={{ background: colors.cardBg }}>{c.nom}</option>)}
@@ -348,13 +368,15 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
           onClick={marquerTousPassants}
           disabled={!classeParDefaut || nbSansDecision === 0}
           style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            padding: isMobile ? "10px 16px" : "8px 16px",
             background: colors.accent, color: "white", border: "none", borderRadius: 8,
-            cursor: "pointer", fontSize: 13, fontWeight: 500,
+            cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500,
             opacity: !classeParDefaut || nbSansDecision === 0 ? 0.6 : 1,
+            width: isMobile ? "100%" : "auto",
           }}
         >
-          <ListChecks size={16} /> Marquer tous les sans-décision comme passants
+          <ListChecks size={isMobile ? 16 : 16} /> Marquer tous les sans-décision comme passants
         </button>
       </div>
 
@@ -365,11 +387,11 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
         </div>
       ) : (
         parClasseFiltre.map(([classe, eleves]) => (
-          <div key={classe} style={{ marginBottom: 32 }}>
-            <h3 style={{ fontSize: 20, fontWeight: 600, color: colors.textPrimary, marginBottom: 12 }}>
+          <div key={classe} style={{ marginBottom: isMobile ? 24 : 32 }}>
+            <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, color: colors.textPrimary, marginBottom: isMobile ? 8 : 12 }}>
               {classe}
             </h3>
-            <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gap: cardGap }}>
               {eleves.map((insc) => {
                 const decision = decisions[insc.eleveId] || {};
                 const hasProposition = propositions.some((p) => p.eleveId === insc.eleveId);
@@ -381,18 +403,18 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
                     style={{
                       background: colors.cardBg,
                       borderRadius: 12,
-                      padding: "14px 16px",
+                      padding: cardPadding,
                       border: `1px solid ${isSansDecision ? colors.warning : hasProposition ? colors.success : colors.cardBorder}`,
                       boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
                       transition: "background-color 0.3s",
                     }}
                   >
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                      <div style={{ flex: 1, minWidth: 200 }}>
-                        <div style={{ fontWeight: 600, color: colors.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flexWrap: "wrap", gap: isMobile ? 8 : 12, alignItems: isMobile ? "stretch" : "center" }}>
+                      <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200 }}>
+                        <div style={{ fontWeight: 600, color: colors.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: isMobile ? 15 : 16 }}>
                           {insc.nom} {insc.postnom} {insc.prenom}
                         </div>
-                        <div style={{ fontSize: 13, color: colors.textSecondary }}>
+                        <div style={{ fontSize: isMobile ? 13 : 13, color: colors.textSecondary }}>
                           Matricule : {insc.code || "—"}
                         </div>
                         {hasProposition && (
@@ -412,13 +434,13 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
                       </div>
 
                       {/* Sélecteur de décision */}
-                      <div style={{ minWidth: 150 }}>
+                      <div style={{ minWidth: isMobile ? "100%" : 150 }}>
                         <select
                           value={decision.statut || ""}
                           onChange={(e) => updateDecision(insc.eleveId, "statut", e.target.value)}
                           style={{
-                            width: "100%", padding: "8px 12px", border: `1px solid ${colors.cardBorder}`,
-                            borderRadius: 8, fontSize: 14, background: colors.selectBg, color: colors.selectText, outline: "none",
+                            width: "100%", padding: selectPadding, border: `1px solid ${colors.cardBorder}`,
+                            borderRadius: 8, fontSize: selectFontSize, background: colors.selectBg, color: colors.selectText, outline: "none",
                           }}
                         >
                           <option value="">-- Choisir --</option>
@@ -431,13 +453,13 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
                       </div>
 
                       {decision.statut === "passant" && (
-                        <div style={{ minWidth: 150 }}>
+                        <div style={{ minWidth: isMobile ? "100%" : 150 }}>
                           <select
                             value={decision.classeDestination || ""}
                             onChange={(e) => updateDecision(insc.eleveId, "classeDestination", e.target.value)}
                             style={{
-                              width: "100%", padding: "8px 12px", border: `1px solid ${colors.cardBorder}`,
-                              borderRadius: 8, fontSize: 14, background: colors.selectBg, color: colors.selectText, outline: "none",
+                              width: "100%", padding: selectPadding, border: `1px solid ${colors.cardBorder}`,
+                              borderRadius: 8, fontSize: selectFontSize, background: colors.selectBg, color: colors.selectText, outline: "none",
                             }}
                           >
                             <option value="">-- Classe --</option>
@@ -452,31 +474,31 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
 
                       {/* Badge de décision */}
                       {decision.statut ? (
-                        <div style={{ minWidth: 80, textAlign: "center" }}>
+                        <div style={{ minWidth: isMobile ? "100%" : 80, textAlign: "center" }}>
                           {decision.statut === "passant" ? (
-                            <span style={{ background: colors.badgePassant, color: colors.badgePassantText, padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                            <span style={{ background: colors.badgePassant, color: colors.badgePassantText, padding: "4px 10px", borderRadius: 20, fontSize: isMobile ? 12 : 12, fontWeight: 600 }}>
                               Passant
                             </span>
                           ) : decision.statut === "redoublant" ? (
-                            <span style={{ background: colors.badgeRedoublant, color: colors.badgeRedoublantText, padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                            <span style={{ background: colors.badgeRedoublant, color: colors.badgeRedoublantText, padding: "4px 10px", borderRadius: 20, fontSize: isMobile ? 12 : 12, fontWeight: 600 }}>
                               Redoublant
                             </span>
                           ) : (
-                            <span style={{ background: colors.cardBorder, color: colors.textSecondary, padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                            <span style={{ background: colors.cardBorder, color: colors.textSecondary, padding: "4px 10px", borderRadius: 20, fontSize: isMobile ? 12 : 12, fontWeight: 600 }}>
                               {decision.statut}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span style={{ color: colors.danger, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600 }}>
-                          <AlertTriangle size={14} /> À décider
+                        <span style={{ color: colors.danger, display: "inline-flex", alignItems: "center", gap: 4, fontSize: isMobile ? 12 : 12, fontWeight: 600 }}>
+                          <AlertTriangle size={isMobile ? 14 : 14} /> À décider
                         </span>
                       )}
                     </div>
 
                     {/* Proposition détaillée de l'enseignant */}
                     {prop && (
-                      <div style={{ marginTop: 8, fontSize: 12, color: colors.textSecondary, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ marginTop: 8, fontSize: isMobile ? 12 : 12, color: colors.textSecondary, display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <span>📝 Proposition : {prop.statutPropose}</span>
                         {prop.classeDestinationPropose && <span>→ {prop.classeDestinationPropose}</span>}
                       </div>
@@ -491,12 +513,12 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
 
       {/* Boutons d'action */}
       {parClasse.length > 0 && (
-        <div style={{ display: "flex", gap: 12, marginTop: 32, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, marginTop: isMobile ? 24 : 32, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
           <button
             onClick={handlePromotion}
             disabled={submitting || !nouvelleAnneeId || nbSansDecision > 0}
             style={{
-              padding: "12px 24px",
+              padding: buttonPadding,
               background: colors.accent,
               color: "white",
               border: "none",
@@ -505,18 +527,21 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 8,
               opacity: submitting || !nouvelleAnneeId || nbSansDecision > 0 ? 0.7 : 1,
+              width: isMobile ? "100%" : "auto",
+              fontSize: buttonFontSize,
             }}
           >
-            {submitting ? <Loader size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+            {submitting ? <Loader size={18} className="animate-spin" /> : <ArrowRight size={isMobile ? 16 : 18} />}
             Promouvoir les élèves
           </button>
           <button
             onClick={handleCloture}
             disabled={submitting}
             style={{
-              padding: "12px 24px",
+              padding: buttonPadding,
               background: colors.danger,
               color: "white",
               border: "none",
@@ -525,10 +550,13 @@ export function AssistantPassage({ ecoleId, anneeActiveId, classes, user }) {
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 8,
+              width: isMobile ? "100%" : "auto",
+              fontSize: buttonFontSize,
             }}
           >
-            <ClipboardList size={18} /> Clôturer l'année
+            <ClipboardList size={isMobile ? 16 : 18} /> Clôturer l'année
           </button>
         </div>
       )}
@@ -556,19 +584,20 @@ function Badge({ text, bg, color, border }) {
   );
 }
 
-function FilterButton({ label, active, onClick, colors }) {
+function FilterButton({ label, active, onClick, colors, isMobile }) {
   return (
     <button
       onClick={onClick}
       style={{
-        padding: "6px 10px",
+        padding: isMobile ? "10px 12px" : "6px 10px",
         background: active ? colors.accent : "transparent",
         color: active ? "#FFF" : colors.textSecondary,
         border: `1px solid ${colors.cardBorder}`,
         borderRadius: 6,
         cursor: "pointer",
-        fontSize: 12,
+        fontSize: isMobile ? 14 : 12,
         whiteSpace: "nowrap",
+        width: isMobile ? "100%" : "auto",
       }}
     >
       {label}

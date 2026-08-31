@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { useStyles } from "../../styles/theme"
+import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 import { Loader, Search, Check, X, User, Users, Link2, Unlink } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -9,10 +10,11 @@ export function AssociationsEleveModal({
   eleve,
   parents,
   elevesUsers,
-  currentUserId, // ID de l'utilisateur connecté (admin/directeur)
+  currentUserId,
   onClose,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [searchParent, setSearchParent] = useState("");
   const [searchUser, setSearchUser] = useState("");
   const [associatingParent, setAssociatingParent] = useState(null);
@@ -57,7 +59,7 @@ export function AssociationsEleveModal({
     try {
       await associerParentMutation({
         eleveId: eleve._id,
-        parentId: parentId || undefined, // undefined pour dissocier
+        parentId: parentId || undefined,
         actionUserId: currentUserId,
       });
       toast.success(parentId ? "Parent associé avec succès" : "Association parent retirée");
@@ -73,7 +75,7 @@ export function AssociationsEleveModal({
     try {
       await associerCompteMutation({
         eleveId: eleve._id,
-        userId: userId || undefined, // undefined pour dissocier
+        userId: userId || undefined,
         actionUserId: currentUserId,
       });
       toast.success(userId ? "Compte élève associé" : "Compte élève dissocié");
@@ -83,6 +85,29 @@ export function AssociationsEleveModal({
       setAssociatingUser(null);
     }
   };
+
+  // Styles adaptatifs
+  const modalPadding = isMobile ? 16 : 24;
+  const modalMaxWidth = isMobile ? "95%" : 800;
+  const modalMaxHeight = isMobile ? "85vh" : "90vh";
+  const headerMarginBottom = isMobile ? 16 : 20;
+  const titleSize = isMobile ? 18 : 20;
+  const closeIconSize = isMobile ? 22 : 24;
+  const infoElevePadding = isMobile ? 10 : 12;
+  const infoEleveFontSize = isMobile ? 14 : 14;
+  const sectionTitleSize = isMobile ? 15 : 16;
+  const sectionGap = isMobile ? 16 : 24;
+  const gridColumns = isMobile ? "1fr" : "1fr 1fr";
+  const searchInputPadding = isMobile ? "10px 12px 10px 36px" : "8px 12px 8px 34px";
+  const searchInputFontSize = isMobile ? 16 : 14;
+  const searchIconLeft = isMobile ? 10 : 10;
+  const listItemPadding = isMobile ? "8px 10px" : "6px 8px";
+  const listItemFontSize = isMobile ? 14 : 13;
+  const associateButtonPadding = isMobile ? "6px 10px" : "4px 8px";
+  const associateButtonFontSize = isMobile ? 12 : 12;
+  const dissociateButtonMarginTop = isMobile ? 8 : 8;
+  const closeButtonPadding = isMobile ? "12px 0" : "10px 0";
+  const closeButtonFontSize = isMobile ? 16 : 14;
 
   return (
     <div style={{
@@ -96,62 +121,62 @@ export function AssociationsEleveModal({
       alignItems: "center",
       justifyContent: "center",
       zIndex: 1000,
-      padding: 16,
+      padding: isMobile ? 12 : 16,
     }}>
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 24,
+        padding: modalPadding,
         width: "100%",
-        maxWidth: 800,
-        maxHeight: "90vh",
+        maxWidth: modalMaxWidth,
+        maxHeight: modalMaxHeight,
         overflowY: "auto",
         boxShadow: dark ? "0 10px 30px rgba(0,0,0,0.5)" : "0 10px 30px rgba(0,0,0,0.1)",
         border: `1px solid ${cardBorder}`,
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: textPrimary }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: headerMarginBottom }}>
+          <h3 style={{ margin: 0, fontSize: titleSize, fontWeight: 700, color: textPrimary }}>
             Associations de l'élève
           </h3>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}>
-            <X size={24} />
+            <X size={closeIconSize} />
           </button>
         </div>
 
-        <div style={{ marginBottom: 16, padding: 12, background: dark ? "#0F172A" : "#F9FAFB", borderRadius: 8 }}>
-          <p style={{ margin: 0, color: textSecondary }}>
+        <div style={{ marginBottom: 16, padding: infoElevePadding, background: dark ? "#0F172A" : "#F9FAFB", borderRadius: 8 }}>
+          <p style={{ margin: 0, color: textSecondary, fontSize: infoEleveFontSize }}>
             Élève : <strong style={{ color: textPrimary }}>{eleve.prenom} {eleve.nom} {eleve.postnom}</strong>
           </p>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: sectionGap }}>
           {/* Section Parent */}
           <div>
-            <h4 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 12 }}>
+            <h4 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: sectionTitleSize, fontWeight: 600, color: textPrimary, marginBottom: 12 }}>
               <Users size={18} /> Parent
             </h4>
 
             {/* Parent actuel */}
             {eleve.parentId ? (
-              <div style={{ marginBottom: 12, padding: 10, background: dark ? "#1E293B" : "#F1F5F9", borderRadius: 8, border: `1px solid ${cardBorder}` }}>
-                <p style={{ margin: 0, fontSize: 14, color: textPrimary }}>
+              <div style={{ marginBottom: 12, padding: infoElevePadding, background: dark ? "#1E293B" : "#F1F5F9", borderRadius: 8, border: `1px solid ${cardBorder}` }}>
+                <p style={{ margin: 0, fontSize: infoEleveFontSize, color: textPrimary }}>
                   Parent actuel : {parents.find(p => p._id === eleve.parentId)?.nom || "Inconnu"}
                 </p>
                 <button
                   onClick={() => handleAssocierParent(undefined)}
                   disabled={associatingParent !== null}
-                  style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: dangerColor, cursor: "pointer" }}
+                  style={{ marginTop: dissociateButtonMarginTop, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: dangerColor, cursor: "pointer", fontSize: isMobile ? 14 : 14 }}
                 >
                   <Unlink size={14} /> Dissocier
                 </button>
               </div>
             ) : (
-              <p style={{ color: textSecondary, marginBottom: 12 }}>Aucun parent associé</p>
+              <p style={{ color: textSecondary, marginBottom: 12, fontSize: infoEleveFontSize }}>Aucun parent associé</p>
             )}
 
             {/* Recherche parent */}
             <div style={{ position: "relative", marginBottom: 8 }}>
-              <Search size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
+              <Search size={16} style={{ position: "absolute", left: searchIconLeft, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
               <input
                 type="text"
                 placeholder="Rechercher un parent..."
@@ -159,28 +184,29 @@ export function AssociationsEleveModal({
                 onChange={(e) => setSearchParent(e.target.value)}
                 style={{
                   width: "100%",
-                  padding: "8px 12px 8px 34px",
+                  padding: searchInputPadding,
                   borderRadius: 8,
                   border: `1px solid ${cardBorder}`,
                   background: inputBg,
                   color: textPrimary,
-                  fontSize: 14,
+                  fontSize: searchInputFontSize,
                   outline: "none",
+                  boxSizing: "border-box",
                 }}
               />
             </div>
 
-            <div style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ maxHeight: isMobile ? 180 : 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
               {filteredParents.slice(0, 20).map((parent) => (
-                <div key={parent._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 6, background: dark ? "#1E293B" : "#F9FAFB", border: `1px solid ${cardBorder}` }}>
-                  <span style={{ fontSize: 13, color: textPrimary }}>
+                <div key={parent._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: listItemPadding, borderRadius: 6, background: dark ? "#1E293B" : "#F9FAFB", border: `1px solid ${cardBorder}` }}>
+                  <span style={{ fontSize: listItemFontSize, color: textPrimary }}>
                     {parent.nom} {parent.prenom} ({parent.login})
                   </span>
                   <button
                     onClick={() => handleAssocierParent(parent._id)}
                     disabled={associatingParent === parent._id}
                     style={{
-                      padding: "4px 8px",
+                      padding: associateButtonPadding,
                       borderRadius: 6,
                       border: "none",
                       background: accentColor,
@@ -189,6 +215,7 @@ export function AssociationsEleveModal({
                       display: "flex",
                       alignItems: "center",
                       gap: 4,
+                      fontSize: associateButtonFontSize,
                     }}
                   >
                     {associatingParent === parent._id ? <Loader size={12} className="animate-spin" /> : <Link2 size={12} />}
@@ -201,29 +228,29 @@ export function AssociationsEleveModal({
 
           {/* Section Compte élève */}
           <div>
-            <h4 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 12 }}>
+            <h4 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: sectionTitleSize, fontWeight: 600, color: textPrimary, marginBottom: 12 }}>
               <User size={18} /> Compte utilisateur élève
             </h4>
 
             {eleve.userId ? (
-              <div style={{ marginBottom: 12, padding: 10, background: dark ? "#1E293B" : "#F1F5F9", borderRadius: 8, border: `1px solid ${cardBorder}` }}>
-                <p style={{ margin: 0, fontSize: 14, color: textPrimary }}>
+              <div style={{ marginBottom: 12, padding: infoElevePadding, background: dark ? "#1E293B" : "#F1F5F9", borderRadius: 8, border: `1px solid ${cardBorder}` }}>
+                <p style={{ margin: 0, fontSize: infoEleveFontSize, color: textPrimary }}>
                   Compte actuel : {elevesUsers.find(u => u._id === eleve.userId)?.login || "Inconnu"}
                 </p>
                 <button
                   onClick={() => handleAssocierCompte(undefined)}
                   disabled={associatingUser !== null}
-                  style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: dangerColor, cursor: "pointer" }}
+                  style={{ marginTop: dissociateButtonMarginTop, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: dangerColor, cursor: "pointer", fontSize: isMobile ? 14 : 14 }}
                 >
                   <Unlink size={14} /> Dissocier
                 </button>
               </div>
             ) : (
-              <p style={{ color: textSecondary, marginBottom: 12 }}>Aucun compte associé</p>
+              <p style={{ color: textSecondary, marginBottom: 12, fontSize: infoEleveFontSize }}>Aucun compte associé</p>
             )}
 
             <div style={{ position: "relative", marginBottom: 8 }}>
-              <Search size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
+              <Search size={16} style={{ position: "absolute", left: searchIconLeft, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
               <input
                 type="text"
                 placeholder="Rechercher un compte élève..."
@@ -231,28 +258,29 @@ export function AssociationsEleveModal({
                 onChange={(e) => setSearchUser(e.target.value)}
                 style={{
                   width: "100%",
-                  padding: "8px 12px 8px 34px",
+                  padding: searchInputPadding,
                   borderRadius: 8,
                   border: `1px solid ${cardBorder}`,
                   background: inputBg,
                   color: textPrimary,
-                  fontSize: 14,
+                  fontSize: searchInputFontSize,
                   outline: "none",
+                  boxSizing: "border-box",
                 }}
               />
             </div>
 
-            <div style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ maxHeight: isMobile ? 180 : 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
               {filteredUsers.slice(0, 20).map((user) => (
-                <div key={user._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 6, background: dark ? "#1E293B" : "#F9FAFB", border: `1px solid ${cardBorder}` }}>
-                  <span style={{ fontSize: 13, color: textPrimary }}>
+                <div key={user._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: listItemPadding, borderRadius: 6, background: dark ? "#1E293B" : "#F9FAFB", border: `1px solid ${cardBorder}` }}>
+                  <span style={{ fontSize: listItemFontSize, color: textPrimary }}>
                     {user.nom} {user.prenom} ({user.login})
                   </span>
                   <button
                     onClick={() => handleAssocierCompte(user._id)}
                     disabled={associatingUser === user._id}
                     style={{
-                      padding: "4px 8px",
+                      padding: associateButtonPadding,
                       borderRadius: 6,
                       border: "none",
                       background: accentColor,
@@ -261,6 +289,7 @@ export function AssociationsEleveModal({
                       display: "flex",
                       alignItems: "center",
                       gap: 4,
+                      fontSize: associateButtonFontSize,
                     }}
                   >
                     {associatingUser === user._id ? <Loader size={12} className="animate-spin" /> : <Link2 size={12} />}
@@ -275,15 +304,16 @@ export function AssociationsEleveModal({
         <button
           onClick={onClose}
           style={{
-            marginTop: 24,
+            marginTop: isMobile ? 16 : 24,
             width: "100%",
-            padding: "10px 0",
+            padding: closeButtonPadding,
             background: "transparent",
             color: textPrimary,
             border: `1px solid ${cardBorder}`,
             borderRadius: 8,
             cursor: "pointer",
             fontWeight: 600,
+            fontSize: closeButtonFontSize,
           }}
         >
           Fermer

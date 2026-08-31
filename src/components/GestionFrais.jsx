@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import * as XLSX from "xlsx";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
@@ -10,19 +11,19 @@ import { DataTable } from "./DataTable";
 import {
   Loader, DollarSign, Upload, Trash2, Edit2, School,
   Download, FileSpreadsheet, CheckCircle, Clock, Search,
-  Settings, Users, ChevronDown, ChevronUp, FileWarning, // ✅ Ajoutez FileWarning
+  Settings, Users, ChevronDown, ChevronUp, FileWarning,
 } from "lucide-react";
 import { trierEleves } from "../utils/tri";
 
 export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
   const ecole = useQuery(api.ecoles.get, ecoleId ? { ecoleId } : "skip");
   const devise = ecole?.devise || "CDF";
   const deviseSymbol = devise === "USD" ? "$" : "FC";
 
-  // Requêtes pour les frais de classe
   const fraisClasses = useQuery(api.frais.listFraisClasses, ecoleId ? { ecoleId, anneeId } : "skip") ?? [];
   const upsertFraisClasse = useMutation(api.frais.upsertFraisClasse);
 
@@ -234,12 +235,12 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
 
   if (!anneeId) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
         <DollarSign size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
           Aucune année scolaire active
         </h2>
-        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 14 : 14 }}>
           Veuillez activer une année scolaire.
         </p>
       </div>
@@ -274,27 +275,60 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
   const filterActiveBg = dark ? "#312E81" : "#EEF2FF";
   const filterActiveText = dark ? "#A5B4FC" : "#4F46E5";
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 14;
+  const headerMarginBottom = isMobile ? 16 : 24;
+  const headerFlexDirection = isMobile ? "column" : "row";
+  const headerAlignItems = isMobile ? "stretch" : "center";
+  const headerGap = isMobile ? 8 : 0;
+  const filtersFlexDirection = isMobile ? "column" : "row";
+  const filtersGap = isMobile ? 8 : 16;
+  const filtersAlignItems = isMobile ? "stretch" : "center";
+  const classTabPadding = isMobile ? "10px 12px" : "8px 16px";
+  const classTabFontSize = isMobile ? 14 : 13;
+  const statGridCols = isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))";
+  const statGap = isMobile ? 8 : 16;
+  const subTabPadding = isMobile ? "10px 12px" : "12px 20px";
+  const subTabFontSize = isMobile ? 14 : 16;
+  const importCardPadding = isMobile ? 16 : 24;
+  const importButtonsFlexDirection = isMobile ? "column" : "row";
+  const importButtonWidth = isMobile ? "100%" : "auto";
+  const exportButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const exportButtonFontSize = isMobile ? 16 : 14;
+  const exportButtonWidth = isMobile ? "100%" : "auto";
+  const modalMaxWidth = isMobile ? "92%" : 400;
+  const modalPadding = isMobile ? 16 : 24;
+  const modalInputPadding = isMobile ? "12px 14px" : "10px 14px";
+  const modalInputFontSize = isMobile ? 16 : 14;
+  const modalButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const modalButtonFontSize = isMobile ? 16 : 14;
+
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ marginBottom: headerMarginBottom, display: "flex", flexDirection: headerFlexDirection, justifyContent: "space-between", alignItems: headerAlignItems, gap: headerGap }}>
         <div>
-          <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+          <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
             Gestion des frais ({deviseSymbol})
           </h2>
-          <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+          <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
             {frais.length} élève(s) avec des frais {anneeActive ? `· ${anneeActive.nom}` : ""}
           </p>
         </div>
         <button
           onClick={() => setShowConfig(true)}
           style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "10px 16px", background: dark ? "#334155" : "#F1F5F9",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            padding: isMobile ? "12px 16px" : "10px 16px",
+            background: dark ? "#334155" : "#F1F5F9",
             color: dark ? "#F1F5F9" : "#1E293B", border: "none",
             borderRadius: 12, fontWeight: 500, cursor: "pointer",
+            fontSize: isMobile ? 16 : 14,
+            width: isMobile ? "100%" : "auto",
           }}
         >
           <Settings size={18} /> Frais par classe
@@ -302,17 +336,17 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
       </div>
 
       {/* Filtres */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 24, alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", borderBottom: `2px solid ${cardBorder}`, paddingBottom: 8, flex: 1 }}>
+      <div style={{ display: "flex", flexDirection: filtersFlexDirection, flexWrap: "wrap", gap: filtersGap, marginBottom: headerMarginBottom, alignItems: filtersAlignItems }}>
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", borderBottom: `2px solid ${cardBorder}`, paddingBottom: 8, flex: 1, WebkitOverflowScrolling: "touch" }}>
           <button
             onClick={() => setClasseActive("")}
             style={{
-              padding: "8px 16px", border: "none", borderRadius: 20,
+              padding: classTabPadding, border: "none", borderRadius: 20,
               background: classeActive === "" ? accent : "transparent",
               color: classeActive === "" ? "#FFFFFF" : textSecondary,
-              fontWeight: classeActive === "" ? 600 : 400, fontSize: 13,
+              fontWeight: classeActive === "" ? 600 : 400, fontSize: classTabFontSize,
               cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
-              display: "flex", alignItems: "center", gap: 6,
+              display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
             }}
           >
             <School size={16} />
@@ -323,11 +357,11 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
               key={c.nom}
               onClick={() => setClasseActive(c.nom)}
               style={{
-                padding: "8px 16px", border: "none", borderRadius: 20,
+                padding: classTabPadding, border: "none", borderRadius: 20,
                 background: classeActive === c.nom ? accent : "transparent",
                 color: classeActive === c.nom ? "#FFFFFF" : textSecondary,
-                fontWeight: classeActive === c.nom ? 600 : 400, fontSize: 13,
-                cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
+                fontWeight: classeActive === c.nom ? 600 : 400, fontSize: classTabFontSize,
+                cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap", flexShrink: 0,
               }}
             >
               {c.nom} ({c.nbEleves})
@@ -335,7 +369,7 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
           {[
             { id: "tous", label: "Tous" },
             { id: "paye", label: "Payé" },
@@ -345,15 +379,17 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
               key={filtre.id}
               onClick={() => setStatutFiltre(filtre.id)}
               style={{
-                padding: "6px 14px",
+                padding: isMobile ? "10px 14px" : "6px 14px",
                 border: `1px solid ${cardBorder}`,
                 borderRadius: 20,
                 background: statutFiltre === filtre.id ? filterActiveBg : "transparent",
                 color: statutFiltre === filtre.id ? filterActiveText : textSecondary,
                 fontWeight: statutFiltre === filtre.id ? 600 : 400,
-                fontSize: 13,
+                fontSize: isMobile ? 14 : 13,
                 cursor: "pointer",
                 transition: "all 0.2s",
+                width: isMobile ? "100%" : "auto",
+                textAlign: "center",
               }}
             >
               {filtre.label}
@@ -363,25 +399,26 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
       </div>
 
       {/* Cartes statistiques */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
-        <StatCard icon={<DollarSign size={20} />} label="Total dû" value={`${totalFrais.toLocaleString()} ${deviseSymbol}`} color="#4F46E5" dark={dark} />
-        <StatCard icon={<CheckCircle size={20} />} label="Total payé" value={`${totalPaye.toLocaleString()} ${deviseSymbol}`} color="#10B981" dark={dark} />
-        <StatCard icon={<FileWarning size={20} />} label="Reste à payer" value={`${resteAPayer.toLocaleString()} ${deviseSymbol}`} color="#F59E0B" dark={dark} />
-        <StatCard icon={<Users size={20} />} label="Élèves payés" value={nbPayes} color="#10B981" dark={dark} />
-        <StatCard icon={<Clock size={20} />} label="En attente" value={nbAttente} color="#F59E0B" dark={dark} />
+      <div style={{ display: "grid", gridTemplateColumns: statGridCols, gap: statGap, marginBottom: headerMarginBottom }}>
+        <StatCard icon={<DollarSign size={20} />} label="Total dû" value={`${totalFrais.toLocaleString()} ${deviseSymbol}`} color="#4F46E5" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<CheckCircle size={20} />} label="Total payé" value={`${totalPaye.toLocaleString()} ${deviseSymbol}`} color="#10B981" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<FileWarning size={20} />} label="Reste à payer" value={`${resteAPayer.toLocaleString()} ${deviseSymbol}`} color="#F59E0B" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<Users size={20} />} label="Élèves payés" value={nbPayes} color="#10B981" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<Clock size={20} />} label="En attente" value={nbAttente} color="#F59E0B" dark={dark} isMobile={isMobile} />
       </div>
 
       {/* Sous-onglets mode ajout */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: headerMarginBottom, overflowX: "auto", whiteSpace: "nowrap" }}>
         <button
           onClick={() => { setMode("individuel"); setEditData(null); }}
           style={{
-            padding: "12px 20px", border: "none", background: "transparent",
+            padding: subTabPadding, border: "none", background: "transparent",
             color: mode === "individuel" ? accent : textSecondary,
             fontWeight: mode === "individuel" ? 600 : 400,
             borderBottom: mode === "individuel" ? `3px solid ${accent}` : "3px solid transparent",
             cursor: "pointer", transition: "all 0.2s",
             display: "flex", alignItems: "center", gap: 6,
+            fontSize: subTabFontSize, flexShrink: 0,
           }}
         >
           <Users size={18} /> Ajout individuel
@@ -389,12 +426,13 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
         <button
           onClick={() => { setMode("groupe"); setEditData(null); }}
           style={{
-            padding: "12px 20px", border: "none", background: "transparent",
+            padding: subTabPadding, border: "none", background: "transparent",
             color: mode === "groupe" ? accent : textSecondary,
             fontWeight: mode === "groupe" ? 600 : 400,
             borderBottom: mode === "groupe" ? `3px solid ${accent}` : "3px solid transparent",
             cursor: "pointer", transition: "all 0.2s",
             display: "flex", alignItems: "center", gap: 6,
+            fontSize: subTabFontSize, flexShrink: 0,
           }}
         >
           <School size={18} /> Ajout groupé
@@ -414,6 +452,7 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
           onSuccess={() => setEditData(null)}
           deviseSymbol={deviseSymbol}
           dark={dark}
+          isMobile={isMobile}
         />
       ) : (
         <AddFraisGroupe
@@ -425,21 +464,22 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
           userId={user._id}
           dark={dark}
           deviseSymbol={deviseSymbol}
+          isMobile={isMobile}
         />
       )}
 
       {/* Import Excel */}
-      <div style={{ background: cardBg, borderRadius: 16, padding: 24, margin: "24px 0", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}` }}>
-        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8, color: textPrimary }}>
+      <div style={{ background: cardBg, borderRadius: 16, padding: importCardPadding, margin: "24px 0", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}` }}>
+        <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8, color: textPrimary }}>
           <Upload size={20} /> Importer des frais depuis Excel
         </h3>
         <input type="file" accept=".xlsx, .xls" onChange={handleImportFraisExcel} style={{ display: "none" }} ref={fraisFileInputRef} />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={() => fraisFileInputRef.current.click()} disabled={importing} style={{ background: dark ? "#34D399" : "#10B981", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexDirection: importButtonsFlexDirection }}>
+          <button onClick={() => fraisFileInputRef.current.click()} disabled={importing} style={{ background: dark ? "#34D399" : "#10B981", color: "white", border: "none", borderRadius: 10, padding: isMobile ? "12px 16px" : "10px 20px", fontWeight: 600, cursor: "pointer", fontSize: isMobile ? 16 : 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: importButtonWidth }}>
             {importing ? <Loader size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
             {importing ? "Import en cours..." : "Sélectionner un fichier Excel"}
           </button>
-          <button onClick={handleDownloadTemplate} style={{ background: dark ? "#334155" : "#F1F5F9", color: textPrimary, border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={handleDownloadTemplate} style={{ background: dark ? "#334155" : "#F1F5F9", color: textPrimary, border: "none", borderRadius: 10, padding: isMobile ? "12px 16px" : "10px 20px", fontWeight: 600, cursor: "pointer", fontSize: isMobile ? 16 : 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: importButtonWidth }}>
             <Download size={16} />
             Télécharger le modèle
           </button>
@@ -479,8 +519,8 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
       />
 
       {/* Bouton Export Excel */}
-      <div style={{ marginTop: 16, textAlign: "right" }}>
-        <button onClick={handleExportExcel} disabled={exporting} style={{ background: accent, color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", fontSize: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <div style={{ marginTop: 16, textAlign: isMobile ? "center" : "right" }}>
+        <button onClick={handleExportExcel} disabled={exporting} style={{ background: accent, color: "white", border: "none", borderRadius: 10, padding: exportButtonPadding, fontWeight: 600, cursor: "pointer", fontSize: exportButtonFontSize, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, width: exportButtonWidth }}>
           {exporting ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}
           {exporting ? "Export en cours..." : "Exporter en Excel"}
         </button>
@@ -488,13 +528,13 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
 
       {/* Modale configuration frais de classe */}
       {showConfig && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowConfig(false)}>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: 24, maxWidth: 400, width: "90%", boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 20, color: textPrimary }}>Configurer les frais de classe</h3>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: isMobile ? 12 : 16 }} onClick={() => setShowConfig(false)}>
+          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: modalPadding, maxWidth: modalMaxWidth, width: "100%", boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: 20, color: textPrimary }}>Configurer les frais de classe</h3>
             <form onSubmit={handleSaveFraisClasse}>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: 14, color: textSecondary }}>Classe</label>
-                <select value={configClasse} onChange={(e) => setConfigClasse(e.target.value)} style={{ width: "100%", padding: "10px 14px", border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: 14, background: inputBg, color: inputText }}>
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Classe</label>
+                <select value={configClasse} onChange={(e) => setConfigClasse(e.target.value)} style={{ width: "100%", padding: modalInputPadding, border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: modalInputFontSize, background: inputBg, color: inputText }}>
                   <option value="">Sélectionner une classe</option>
                   {classesStats.map((c) => (
                     <option key={c.nom} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c.nom} (actuel : {c.montantTotal.toLocaleString()} {deviseSymbol})</option>
@@ -502,12 +542,12 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
                 </select>
               </div>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: 14, color: textSecondary }}>Montant total ({deviseSymbol})</label>
-                <input type="number" step="0.01" value={configMontant} onChange={(e) => setConfigMontant(e.target.value)} placeholder="Ex: 50000" style={{ width: "100%", padding: "10px 14px", border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: 14, background: inputBg, color: inputText }} />
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Montant total ({deviseSymbol})</label>
+                <input type="number" step="0.01" value={configMontant} onChange={(e) => setConfigMontant(e.target.value)} placeholder="Ex: 50000" style={{ width: "100%", padding: modalInputPadding, border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: modalInputFontSize, background: inputBg, color: inputText }} />
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-                <button type="submit" style={{ background: accent, color: "white", border: "none", borderRadius: 8, padding: "10px 20px", fontWeight: 600, cursor: "pointer" }}>Enregistrer</button>
-                <button type="button" onClick={() => setShowConfig(false)} style={{ background: dark ? "#334155" : "#F1F5F9", color: textPrimary, border: "none", borderRadius: 8, padding: "10px 20px", fontWeight: 500, cursor: "pointer" }}>Annuler</button>
+              <div style={{ display: "flex", gap: 8, marginTop: 20, flexDirection: isMobile ? "column" : "row" }}>
+                <button type="submit" style={{ background: accent, color: "white", border: "none", borderRadius: 8, padding: modalButtonPadding, fontWeight: 600, cursor: "pointer", fontSize: modalButtonFontSize }}>Enregistrer</button>
+                <button type="button" onClick={() => setShowConfig(false)} style={{ background: dark ? "#334155" : "#F1F5F9", color: textPrimary, border: "none", borderRadius: 8, padding: modalButtonPadding, fontWeight: 500, cursor: "pointer", fontSize: modalButtonFontSize }}>Annuler</button>
               </div>
             </form>
           </div>
@@ -521,19 +561,19 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
 
 // --- Sous-composants ---
 
-function StatCard({ icon, label, value, color, dark }) {
+function StatCard({ icon, label, value, color, dark, isMobile }) {
   return (
-    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 12, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-      <div style={{ width: 40, height: 40, background: `${color}${dark ? "33" : "15"}`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color }}>{icon}</div>
+    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, display: "flex", alignItems: "center", gap: 12, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
+      <div style={{ width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, background: `${color}${dark ? "33" : "15"}`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color }}>{icon}</div>
       <div>
-        <div style={{ fontSize: 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
+        <div style={{ fontSize: isMobile ? 13 : 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
+        <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
       </div>
     </div>
   );
 }
 
-function AddFraisIndividuel({ eleves, fraisClasses, upsertFrais, ecoleId, anneeId, userId, initialData, onSuccess, deviseSymbol, dark }) {
+function AddFraisIndividuel({ eleves, fraisClasses, upsertFrais, ecoleId, anneeId, userId, initialData, onSuccess, deviseSymbol, dark, isMobile }) {
   const [selectedEleve, setSelectedEleve] = useState(initialData?.eleveId || "");
   const [montantPaye, setMontantPaye] = useState(initialData?.montantPaye?.toString() || "");
   const [commentaire, setCommentaire] = useState(initialData?.commentaire || "");
@@ -600,13 +640,32 @@ function AddFraisIndividuel({ eleves, fraisClasses, upsertFrais, ecoleId, anneeI
     }
   };
 
+  const inputStyle = {
+    width: "100%",
+    padding: isMobile ? "12px 14px" : "10px 14px",
+    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+    borderRadius: 8,
+    fontSize: isMobile ? 16 : 14,
+    background: dark ? "#0F172A" : "#F8FAFC",
+    color: dark ? "#F1F5F9" : "#1E293B",
+    boxSizing: "border-box",
+  };
+
+  const cardPadding = isMobile ? 16 : 24;
+  const titleSize = isMobile ? 16 : 18;
+  const labelSize = isMobile ? 15 : 14;
+  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const buttonFlexDirection = isMobile ? "column" : "row";
+  const buttonWidth = isMobile ? "100%" : "auto";
+
   return (
-    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: 24, marginBottom: 24, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: cardPadding, marginBottom: 24, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
+      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
         {editId ? "Modifier les frais" : "Ajouter des frais"}
       </h3>
       <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Élève</label>
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Élève</label>
         {!selectedEleve ? (
           <div style={{ marginBottom: 16 }}>
             <div style={{ position: "relative" }}>
@@ -616,7 +675,7 @@ function AddFraisIndividuel({ eleves, fraisClasses, upsertFrais, ecoleId, anneeI
                 placeholder="Rechercher par nom ou classe..."
                 value={searchEleve}
                 onChange={(e) => setSearchEleve(e.target.value)}
-                style={{ width: "100%", padding: "10px 14px 10px 34px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }}
+                style={{ ...inputStyle, paddingLeft: 34 }}
               />
             </div>
             {searchEleve.trim() && (
@@ -643,23 +702,23 @@ function AddFraisIndividuel({ eleves, fraisClasses, upsertFrais, ecoleId, anneeI
           </div>
         )}
 
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Montant total ({deviseSymbol})</label>
-        <input type="text" value={montantTotal ? parseFloat(montantTotal).toLocaleString() : "Non défini"} readOnly style={{ width: "100%", padding: "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, marginBottom: 16, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B", opacity: 0.7 }} />
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant total ({deviseSymbol})</label>
+        <input type="text" value={montantTotal ? parseFloat(montantTotal).toLocaleString() : "Non défini"} readOnly style={{ ...inputStyle, marginBottom: 16, opacity: 0.7 }} />
 
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Montant payé ({deviseSymbol})</label>
-        <input type="number" step="0.01" placeholder="Ex: 20000" value={montantPaye} onChange={(e) => { setMontantPaye(e.target.value); setErrors((prev) => ({ ...prev, montantPaye: undefined })); }} style={{ width: "100%", padding: "10px 14px", border: `1px solid ${errors.montantPaye ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, marginBottom: 16, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }} />
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant payé ({deviseSymbol})</label>
+        <input type="number" step="0.01" placeholder="Ex: 20000" value={montantPaye} onChange={(e) => { setMontantPaye(e.target.value); setErrors((prev) => ({ ...prev, montantPaye: undefined })); }} style={{ ...inputStyle, marginBottom: 16, borderColor: errors.montantPaye ? "#EF4444" : undefined }} />
         {errors.montantPaye && <div style={{ color: "#EF4444", fontSize: 12, marginTop: -12, marginBottom: 12 }}>{errors.montantPaye}</div>}
 
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Commentaire (optionnel)</label>
-        <input value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Ex: Frais de scolarité" style={{ width: "100%", padding: "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, marginBottom: 20, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }} />
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Commentaire (optionnel)</label>
+        <input value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Ex: Frais de scolarité" style={{ ...inputStyle, marginBottom: 20 }} />
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <button type="submit" disabled={submitting} style={{ background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <div style={{ display: "flex", gap: 10, flexDirection: buttonFlexDirection }}>
+          <button type="submit" disabled={submitting} style={{ background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 10, padding: buttonPadding, fontWeight: 600, cursor: "pointer", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: buttonFontSize, width: buttonWidth }}>
             {submitting ? <Loader size={16} className="animate-spin" /> : null}
             {submitting ? "Enregistrement..." : editId ? "Mettre à jour" : "Ajouter"}
           </button>
           {editId && (
-            <button type="button" onClick={() => { setEditId(null); setSelectedEleve(""); setMontantPaye(""); setCommentaire(""); setErrors({}); if (onSuccess) onSuccess(); }} style={{ background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 10, padding: "10px 20px", cursor: "pointer", color: dark ? "#F1F5F9" : "#1E293B" }}>
+            <button type="button" onClick={() => { setEditId(null); setSelectedEleve(""); setMontantPaye(""); setCommentaire(""); setErrors({}); if (onSuccess) onSuccess(); }} style={{ background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 10, padding: buttonPadding, cursor: "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: buttonFontSize, width: buttonWidth }}>
               Annuler
             </button>
           )}
@@ -669,7 +728,7 @@ function AddFraisIndividuel({ eleves, fraisClasses, upsertFrais, ecoleId, anneeI
   );
 }
 
-function AddFraisGroupe({ eleves, fraisClasses, upsertBulk, ecoleId, anneeId, userId, dark, deviseSymbol }) {
+function AddFraisGroupe({ eleves, fraisClasses, upsertBulk, ecoleId, anneeId, userId, dark, deviseSymbol, isMobile }) {
   const [selectedEleveIds, setSelectedEleveIds] = useState([]);
   const [montantPaye, setMontantPaye] = useState("");
   const [commentaire, setCommentaire] = useState("");
@@ -734,15 +793,32 @@ function AddFraisGroupe({ eleves, fraisClasses, upsertBulk, ecoleId, anneeId, us
     }
   };
 
-  return (
-    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: 24, marginBottom: 24, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>Ajouter des frais groupés</h3>
+  const cardPadding = isMobile ? 16 : 24;
+  const titleSize = isMobile ? 16 : 18;
+  const labelSize = isMobile ? 15 : 14;
+  const inputStyle = {
+    width: "100%",
+    padding: isMobile ? "12px 14px" : "10px 14px",
+    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+    borderRadius: 8,
+    fontSize: isMobile ? 16 : 14,
+    background: dark ? "#0F172A" : "#F8FAFC",
+    color: dark ? "#F1F5F9" : "#1E293B",
+    boxSizing: "border-box",
+  };
+  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const checkboxSize = isMobile ? 18 : 16;
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ fontWeight: 500, fontSize: 14, color: dark ? "#CBD5E1" : "#374151" }}>Élèves concernés</span>
+  return (
+    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: cardPadding, marginBottom: 24, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
+      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>Ajouter des frais groupés</h3>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexDirection: isMobile ? "column" : "row", gap: 8 }}>
+        <span style={{ fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Élèves concernés</span>
         <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={selectAll} style={{ background: "none", border: "none", color: dark ? "#818CF8" : "#4F46E5", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Tout sélectionner</button>
-          <button type="button" onClick={deselectAll} style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Désélectionner</button>
+          <button type="button" onClick={selectAll} style={{ background: "none", border: "none", color: dark ? "#818CF8" : "#4F46E5", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Tout sélectionner</button>
+          <button type="button" onClick={deselectAll} style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Désélectionner</button>
         </div>
       </div>
 
@@ -753,14 +829,14 @@ function AddFraisGroupe({ eleves, fraisClasses, upsertBulk, ecoleId, anneeId, us
           placeholder="Rechercher un élève..."
           value={searchEleve}
           onChange={(e) => setSearchEleve(e.target.value)}
-          style={{ width: "100%", padding: "10px 14px 10px 34px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }}
+          style={{ ...inputStyle, paddingLeft: 34 }}
         />
       </div>
 
       <div style={{ maxHeight: 220, overflowY: "auto", border: `1px solid ${errors.selectedEleveIds ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`, borderRadius: 12, padding: 8, marginBottom: 8, background: dark ? "#0F172A" : "#F8FAFC" }}>
         {elevesFiltresRecherche.map((e) => (
-          <label key={e._id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", fontSize: 14, cursor: "pointer", borderRadius: 6, background: selectedEleveIds.includes(e._id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent", color: dark ? "#F1F5F9" : "#1E293B" }}>
-            <input type="checkbox" checked={selectedEleveIds.includes(e._id)} onChange={() => toggleEleve(e._id)} style={{ width: 16, height: 16, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
+          <label key={e._id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", fontSize: isMobile ? 15 : 14, cursor: "pointer", borderRadius: 6, background: selectedEleveIds.includes(e._id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent", color: dark ? "#F1F5F9" : "#1E293B" }}>
+            <input type="checkbox" checked={selectedEleveIds.includes(e._id)} onChange={() => toggleEleve(e._id)} style={{ width: checkboxSize, height: checkboxSize, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
             {e.nom} {e.postnom} {e.prenom} ({e.classe})
           </label>
         ))}
@@ -769,17 +845,17 @@ function AddFraisGroupe({ eleves, fraisClasses, upsertBulk, ecoleId, anneeId, us
       <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", marginBottom: 16 }}>{selectedEleveIds.length} élève(s) sélectionné(s)</div>
 
       <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Montant total ({deviseSymbol})</label>
-        <input type="text" value={montantTotalMoyen !== null && montantTotalMoyen !== 0 ? montantTotalMoyen.toLocaleString() : (selectedEleveIds.length > 0 ? "Classes multiples" : "Sélectionnez des élèves")} readOnly style={{ width: "100%", padding: "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, marginBottom: 16, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B", opacity: 0.7 }} />
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant total ({deviseSymbol})</label>
+        <input type="text" value={montantTotalMoyen !== null && montantTotalMoyen !== 0 ? montantTotalMoyen.toLocaleString() : (selectedEleveIds.length > 0 ? "Classes multiples" : "Sélectionnez des élèves")} readOnly style={{ ...inputStyle, marginBottom: 16, opacity: 0.7 }} />
 
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Montant payé ({deviseSymbol})</label>
-        <input type="number" step="0.01" placeholder="Ex: 20000" value={montantPaye} onChange={(e) => { setMontantPaye(e.target.value); setErrors((prev) => ({ ...prev, montantPaye: undefined })); }} style={{ width: "100%", padding: "10px 14px", border: `1px solid ${errors.montantPaye ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, marginBottom: 16, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }} />
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant payé ({deviseSymbol})</label>
+        <input type="number" step="0.01" placeholder="Ex: 20000" value={montantPaye} onChange={(e) => { setMontantPaye(e.target.value); setErrors((prev) => ({ ...prev, montantPaye: undefined })); }} style={{ ...inputStyle, marginBottom: 16, borderColor: errors.montantPaye ? "#EF4444" : undefined }} />
         {errors.montantPaye && <div style={{ color: "#EF4444", fontSize: 13, marginTop: -12, marginBottom: 12 }}>{errors.montantPaye}</div>}
 
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Commentaire (optionnel)</label>
-        <input value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Ex: Frais de scolarité" style={{ width: "100%", padding: "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, fontSize: 14, marginBottom: 20, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }} />
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Commentaire (optionnel)</label>
+        <input value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Ex: Frais de scolarité" style={{ ...inputStyle, marginBottom: 20 }} />
 
-        <button type="submit" disabled={submitting} style={{ width: "100%", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 10, padding: "12px 0", fontWeight: 600, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <button type="submit" disabled={submitting} style={{ width: "100%", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 10, padding: buttonPadding, fontWeight: 600, cursor: "pointer", fontSize: buttonFontSize, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           {submitting ? <Loader size={16} className="animate-spin" /> : null}
           {submitting ? "Application en cours..." : `Appliquer à ${selectedEleveIds.length} élève(s)`}
         </button>

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react"; // <-- Ajout de useState
 import { useStyles } from "../styles/theme";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { ChevronLeft, ChevronRight } from "lucide-react";

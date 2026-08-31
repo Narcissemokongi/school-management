@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { Loader, User, Lock, Eye, EyeOff } from "lucide-react";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 
 export function UserForm({ initialValues, onSubmit, onCancel }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const isEdit = !!initialValues;
 
   const [form, setForm] = useState({
@@ -80,12 +82,22 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
   const buttonSecondaryText = dark ? "#F1F5F9" : "#1E293B";
   const errorColor = "#EF4444";
 
+  // Styles adaptatifs
+  const inputPadding = isMobile ? "12px 14px" : "10px 14px";
+  const inputFontSize = isMobile ? 16 : 14;
+  const labelFontSize = isMobile ? 15 : 14;
+  const titleSize = isMobile ? 18 : 20;
+  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const buttonDirection = isMobile ? "column" : "row";
+  const buttonWidth = isMobile ? "100%" : "auto";
+
   const inputStyle = (hasError = false) => ({
     width: "100%",
-    padding: "10px 14px",
+    padding: inputPadding,
     border: `1px solid ${hasError ? errorColor : borderColor}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: inputFontSize,
     outline: "none",
     background: inputBg,
     color: inputText,
@@ -98,13 +110,13 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ width: "100%" }}>
-      <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
+      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
         {isEdit ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
       </h3>
 
       {/* Nom complet */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
           Nom complet
         </label>
         <input
@@ -120,7 +132,7 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
 
       {/* Login */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
           Login
         </label>
         <input
@@ -141,7 +153,7 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
 
       {/* Mot de passe */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
           Mot de passe {isEdit && "(laisser vide pour ne pas changer)"}
         </label>
         <div style={{ position: "relative" }}>
@@ -169,7 +181,7 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
             }}
             aria-label={showPassword ? "Cacher le mot de passe" : "Afficher le mot de passe"}
           >
-            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            {showPassword ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
           </button>
         </div>
         {errors.password && <span style={{ color: errorColor, fontSize: 12, marginTop: 4, display: "block" }}>{errors.password}</span>}
@@ -177,7 +189,7 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
 
       {/* Rôle */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
           Rôle
         </label>
         <select
@@ -198,7 +210,7 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
       {/* Classe (si enseignant) */}
       {form.role === "enseignant" && (
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
             Classe
           </label>
           <input
@@ -213,7 +225,7 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
       )}
 
       {/* Boutons */}
-      <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 20, flexDirection: buttonDirection }}>
         <button
           type="submit"
           disabled={loading}
@@ -222,14 +234,16 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
             color: "white",
             border: "none",
             borderRadius: 8,
-            padding: "10px 20px",
+            padding: buttonPadding,
             fontWeight: 600,
             cursor: loading ? "not-allowed" : "pointer",
             display: "flex",
             alignItems: "center",
             gap: 6,
-            flex: 1,
             justifyContent: "center",
+            flex: isMobile ? "none" : 1,
+            width: buttonWidth,
+            fontSize: buttonFontSize,
           }}
         >
           {loading ? <Loader size={16} className="animate-spin" /> : null}
@@ -243,9 +257,11 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
             color: buttonSecondaryText,
             border: "none",
             borderRadius: 8,
-            padding: "10px 20px",
+            padding: buttonPadding,
             fontWeight: 500,
             cursor: "pointer",
+            width: buttonWidth,
+            fontSize: buttonFontSize,
           }}
         >
           Annuler

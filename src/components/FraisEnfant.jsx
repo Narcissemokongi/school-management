@@ -1,11 +1,13 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { DollarSign, TrendingDown, CheckCircle, Clock } from "lucide-react";
 import { Skeleton } from "./Skeleton";
 
 export function FraisEnfant({ eleveId }) {
-  const { dark } = useStyles(); // ✅ récupère le mode sombre/clair
+  const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const frais = useQuery(api.frais.listByEleve, { eleveId }) ?? [];
   const eleve = useQuery(api.eleves.get, { id: eleveId });
@@ -36,13 +38,13 @@ export function FraisEnfant({ eleveId }) {
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 24,
+        padding: isMobile ? 16 : 24,
         boxShadow: shadow,
         marginTop: 16,
         textAlign: "center",
         border: `1px solid ${cardBorder}`,
       }}>
-        <p style={{ color: textSecondary, fontSize: 14, margin: 0 }}>Élève introuvable.</p>
+        <p style={{ color: textSecondary, fontSize: isMobile ? 14 : 14, margin: 0 }}>Élève introuvable.</p>
       </div>
     );
   }
@@ -52,17 +54,17 @@ export function FraisEnfant({ eleveId }) {
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 24,
+        padding: isMobile ? 20 : 24,
         boxShadow: shadow,
         marginTop: 16,
         textAlign: "center",
         border: `1px solid ${cardBorder}`,
       }}>
-        <DollarSign size={32} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 8 }} />
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: textPrimary, margin: "0 0 4px" }}>
+        <DollarSign size={isMobile ? 28 : 32} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 8 }} />
+        <h3 style={{ fontSize: isMobile ? 15 : 16, fontWeight: 600, color: textPrimary, margin: "0 0 4px" }}>
           Frais scolaires
         </h3>
-        <p style={{ color: textSecondary, fontSize: 14, margin: 0 }}>
+        <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14, margin: 0 }}>
           Aucune information de frais disponible.
         </p>
       </div>
@@ -72,8 +74,18 @@ export function FraisEnfant({ eleveId }) {
   const devise = ecole?.devise || "CDF";
   const deviseLabel = devise === "USD" ? "$" : "FC";
 
+  // Styles adaptatifs
+  const cardPadding = isMobile ? 14 : 20;
+  const gap = isMobile ? 8 : 12;
+  const titleSize = isMobile ? 15 : 16;
+  const labelFontSize = isMobile ? 13 : 14;
+  const valueFontSize = isMobile ? 14 : 14;
+  const headerMarginBottom = isMobile ? 12 : 16;
+  const montantsMarginBottom = isMobile ? 12 : 16;
+  const progressionMarginBottom = isMobile ? 4 : 8;
+
   return (
-    <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+    <div style={{ marginTop: 16, display: "grid", gap: gap }}>
       {frais.map((f) => {
         const reste = f.montantTotal - f.montantPaye;
         const pourcentagePaye = f.montantTotal > 0 ? Math.round((f.montantPaye / f.montantTotal) * 100) : 0;
@@ -89,7 +101,7 @@ export function FraisEnfant({ eleveId }) {
             style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 20,
+              padding: cardPadding,
               boxShadow: shadow,
               border: `1px solid ${cardBorder}`,
               transition: "box-shadow 0.15s, background-color 0.3s",
@@ -100,10 +112,10 @@ export function FraisEnfant({ eleveId }) {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: 16,
+              marginBottom: headerMarginBottom,
             }}>
               <h3 style={{
-                fontSize: 16,
+                fontSize: titleSize,
                 fontWeight: 600,
                 color: textPrimary,
                 margin: 0,
@@ -111,7 +123,7 @@ export function FraisEnfant({ eleveId }) {
                 alignItems: "center",
                 gap: 8,
               }}>
-                <DollarSign size={20} color={accent} />
+                <DollarSign size={isMobile ? 18 : 20} color={accent} />
                 Frais scolaires
               </h3>
               {estPaye ? (
@@ -123,7 +135,7 @@ export function FraisEnfant({ eleveId }) {
                   color: badgePayeText,
                   padding: "4px 10px",
                   borderRadius: 20,
-                  fontSize: 12,
+                  fontSize: isMobile ? 11 : 12,
                   fontWeight: 600,
                 }}>
                   <CheckCircle size={14} />
@@ -138,7 +150,7 @@ export function FraisEnfant({ eleveId }) {
                   color: badgeAttenteText,
                   padding: "4px 10px",
                   borderRadius: 20,
-                  fontSize: 12,
+                  fontSize: isMobile ? 11 : 12,
                   fontWeight: 600,
                 }}>
                   <Clock size={14} />
@@ -148,16 +160,16 @@ export function FraisEnfant({ eleveId }) {
             </div>
 
             {/* Montants */}
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: montantsMarginBottom }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ color: textSecondary, fontSize: 14 }}>Montant total</span>
-                <span style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
+                <span style={{ color: textSecondary, fontSize: labelFontSize }}>Montant total</span>
+                <span style={{ fontWeight: 600, fontSize: valueFontSize, color: textPrimary }}>
                   {montantTotalFormatted} {deviseLabel}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ color: textSecondary, fontSize: 14 }}>Montant payé</span>
-                <span style={{ fontWeight: 600, fontSize: 14, color: success }}>
+                <span style={{ color: textSecondary, fontSize: labelFontSize }}>Montant payé</span>
+                <span style={{ fontWeight: 600, fontSize: valueFontSize, color: success }}>
                   {montantPayeFormatted} {deviseLabel}
                 </span>
               </div>
@@ -167,12 +179,12 @@ export function FraisEnfant({ eleveId }) {
                 paddingTop: 8,
                 borderTop: `1px solid ${borderLight}`,
               }}>
-                <span style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
+                <span style={{ fontWeight: 600, fontSize: valueFontSize, color: textPrimary }}>
                   Reste à payer
                 </span>
                 <span style={{
                   fontWeight: 700,
-                  fontSize: 14,
+                  fontSize: valueFontSize,
                   color: reste > 0 ? danger : success,
                 }}>
                   {resteFormatted} {deviseLabel}
@@ -181,12 +193,12 @@ export function FraisEnfant({ eleveId }) {
             </div>
 
             {/* Barre de progression */}
-            <div style={{ marginBottom: 8 }}>
+            <div style={{ marginBottom: progressionMarginBottom }}>
               <div style={{
                 display: "flex",
                 justifyContent: "space-between",
                 marginBottom: 4,
-                fontSize: 12,
+                fontSize: isMobile ? 11 : 12,
                 color: textSecondary,
               }}>
                 <span>Progression</span>
@@ -212,7 +224,7 @@ export function FraisEnfant({ eleveId }) {
             {/* Commentaire */}
             {f.commentaire && (
               <div style={{
-                fontSize: 13,
+                fontSize: isMobile ? 12 : 13,
                 color: textSecondary,
                 display: "flex",
                 alignItems: "center",

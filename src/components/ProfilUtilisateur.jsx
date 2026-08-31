@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
@@ -13,6 +14,7 @@ import { provincesRDC } from "../utils/rdcData";
 
 export function ProfilUtilisateur({ user }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
   // États pour le changement de mot de passe
@@ -136,13 +138,13 @@ export function ProfilUtilisateur({ user }) {
     }
   };
 
-  // Styles
+  // Styles adaptatifs
   const inputStyle = {
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     background: dark ? "#0F172A" : "#F9FAFB",
     color: dark ? "#F1F5F9" : "#1E293B",
@@ -154,7 +156,7 @@ export function ProfilUtilisateur({ user }) {
     display: "block",
     marginBottom: 4,
     fontWeight: 500,
-    fontSize: 14,
+    fontSize: isMobile ? 15 : 14,
     color: dark ? "#CBD5E1" : "#374151",
   };
 
@@ -187,9 +189,19 @@ export function ProfilUtilisateur({ user }) {
     ? provincesRDC.find((p) => p.nom === province)?.territoires || []
     : [];
 
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const cardPadding = isMobile ? 16 : 24;
+  const titleSize = isMobile ? 22 : 28;
+  const sectionTitleSize = isMobile ? 17 : 18;
+  const avatarSize = isMobile ? 48 : 56;
+  const gridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))";
+  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const buttonWidth = isMobile ? "100%" : "auto";
+
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }}>
-      <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: containerPadding }}>
+      <h2 style={{ fontSize: titleSize, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
         Mon profil
       </h2>
 
@@ -197,16 +209,16 @@ export function ProfilUtilisateur({ user }) {
       <div style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 16,
-        padding: 24,
-        marginTop: 24,
-        marginBottom: 24,
+        padding: cardPadding,
+        marginTop: isMobile ? 16 : 24,
+        marginBottom: isMobile ? 16 : 24,
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 12 : 16 }}>
           <div style={{
-            width: 56,
-            height: 56,
+            width: avatarSize,
+            height: avatarSize,
             borderRadius: "50%",
             background: dark ? "#312E81" : "#EEF2FF",
             display: "flex",
@@ -214,13 +226,13 @@ export function ProfilUtilisateur({ user }) {
             justifyContent: "center",
             color: dark ? "#A5B4FC" : "#4F46E5",
           }}>
-            <User size={28} />
+            <User size={isMobile ? 24 : 28} />
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 18, color: dark ? "#F1F5F9" : "#1E293B" }}>
+            <div style={{ fontWeight: 700, fontSize: isMobile ? 16 : 18, color: dark ? "#F1F5F9" : "#1E293B" }}>
               {user.nom} {user.postnom || ""}
             </div>
-            <div style={{ fontSize: 14, color: dark ? "#94A3B8" : "#64748B" }}>
+            <div style={{ fontSize: isMobile ? 13 : 14, color: dark ? "#94A3B8" : "#64748B" }}>
               @{user.login} · Rôle : {user.role}
             </div>
           </div>
@@ -232,17 +244,17 @@ export function ProfilUtilisateur({ user }) {
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 16,
-          padding: 24,
-          marginBottom: 24,
+          padding: cardPadding,
+          marginBottom: isMobile ? 16 : 24,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         }}>
-          <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>
+          <h3 style={{ fontSize: sectionTitleSize, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>
             <GraduationCap size={18} style={{ verticalAlign: "middle", marginRight: 6 }} />
             Informations personnelles
           </h3>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: isMobile ? 8 : 16 }}>
             <div>
               <label style={labelStyle}>Sexe</label>
               <select value={sexe} onChange={(e) => setSexe(e.target.value)} style={inputStyle}>
@@ -317,14 +329,17 @@ export function ProfilUtilisateur({ user }) {
               marginTop: 16,
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 8,
-              padding: "10px 20px",
+              padding: buttonPadding,
               background: savingInfo ? "#A5B4FC" : dark ? "#818CF8" : "#4F46E5",
               color: "white",
               border: "none",
               borderRadius: 8,
               cursor: savingInfo ? "not-allowed" : "pointer",
               fontWeight: 600,
+              fontSize: buttonFontSize,
+              width: buttonWidth,
             }}
           >
             {savingInfo ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
@@ -337,11 +352,11 @@ export function ProfilUtilisateur({ user }) {
       <div style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 16,
-        padding: 24,
+        padding: cardPadding,
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
       }}>
-        <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>
+        <h3 style={{ fontSize: sectionTitleSize, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>
           Modifier mon mot de passe
         </h3>
 
@@ -361,7 +376,7 @@ export function ProfilUtilisateur({ user }) {
               style={eyeButtonStyle}
               aria-label={showOld ? "Cacher le mot de passe" : "Afficher le mot de passe"}
             >
-              {showOld ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showOld ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
             </button>
           </div>
         </div>
@@ -382,7 +397,7 @@ export function ProfilUtilisateur({ user }) {
               style={eyeButtonStyle}
               aria-label={showNew ? "Cacher le mot de passe" : "Afficher le mot de passe"}
             >
-              {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showNew ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
             </button>
           </div>
           {newPwd.length > 0 && newPwd.length < 4 && (
@@ -408,7 +423,7 @@ export function ProfilUtilisateur({ user }) {
               style={eyeButtonStyle}
               aria-label={showConfirm ? "Cacher le mot de passe" : "Afficher le mot de passe"}
             >
-              {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showConfirm ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
             </button>
           </div>
           {confirmPwd.length > 0 && newPwd !== confirmPwd && (
@@ -424,8 +439,9 @@ export function ProfilUtilisateur({ user }) {
           style={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            padding: "10px 20px",
+            padding: buttonPadding,
             background: changing ? "#A5B4FC" : dark ? "#818CF8" : "#4F46E5",
             color: "white",
             border: "none",
@@ -433,6 +449,8 @@ export function ProfilUtilisateur({ user }) {
             cursor: changing ? "not-allowed" : "pointer",
             fontWeight: 600,
             marginTop: 8,
+            fontSize: buttonFontSize,
+            width: buttonWidth,
           }}
         >
           {changing ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}

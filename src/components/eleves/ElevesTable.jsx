@@ -1,11 +1,13 @@
 import { DataTable } from "../DataTable";
 import { Pencil, UserCheck, Trash2, Copy, Eye, Calendar, MapPin, Phone, User } from "lucide-react";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 import toast from "react-hot-toast";
 import { trierClasses } from "../../utils/sort";
 
 export function ElevesTable({ data, onEditParent, onEditUser, onDelete, onViewDetails }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const copyMatricule = (code) => {
     navigator.clipboard.writeText(code).then(() => toast.success("Matricule copié !"));
@@ -61,6 +63,20 @@ export function ElevesTable({ data, onEditParent, onEditUser, onDelete, onViewDe
     }
   };
 
+  // Boutons d'action adaptés
+  const actionButtonStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    padding: isMobile ? "8px 12px" : "6px 10px",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+    fontSize: isMobile ? 14 : 12,
+    whiteSpace: "nowrap",
+  };
+
   return (
     <DataTable
       columns={[
@@ -68,6 +84,7 @@ export function ElevesTable({ data, onEditParent, onEditUser, onDelete, onViewDe
           header: "Matricule",
           accessor: "code",
           sortable: true,
+          hideOnMobile: false, // toujours visible
           render: (e) => e.code ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               {e.code}
@@ -76,7 +93,7 @@ export function ElevesTable({ data, onEditParent, onEditUser, onDelete, onViewDe
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
                 title="Copier le matricule"
               >
-                <Copy size={14} color={dark ? "#94A3B8" : "#64748B"} />
+                <Copy size={isMobile ? 16 : 14} color={dark ? "#94A3B8" : "#64748B"} />
               </button>
             </span>
           ) : "—",
@@ -85,6 +102,7 @@ export function ElevesTable({ data, onEditParent, onEditUser, onDelete, onViewDe
           header: "Élève",
           accessor: "nom",
           sortable: true,
+          hideOnMobile: false, // toujours visible
           render: (e) => (
             <div>
               <strong>{e.nom} {e.postnom} {e.prenom}</strong>
@@ -94,67 +112,87 @@ export function ElevesTable({ data, onEditParent, onEditUser, onDelete, onViewDe
             </div>
           ),
         },
-        { header: "Classe", accessor: "classe", sortable: true },
+        {
+          header: "Classe",
+          accessor: "classe",
+          sortable: true,
+          hideOnMobile: false, // visible car important
+        },
         {
           header: "Province",
           accessor: "province",
           sortable: true,
+          hideOnMobile: true, // masqué sur mobile
           render: (e) => e.province || "—",
         },
         {
           header: "Téléphone",
           accessor: "telephone",
+          hideOnMobile: true, // masqué sur mobile
           render: (e) => e.telephone || "—",
         },
         {
           header: "Statut",
           accessor: "statut",
           sortable: true,
+          hideOnMobile: false, // visible car important
           render: (e) => renderStatut(e.statut),
         },
-        { header: "Parent", accessor: "parentName", render: (e) => e.parentName !== "—" ? `${e.parentName} (@${e.parentLogin})` : "—" },
-        { header: "Compte élève", accessor: "eleveUserName", render: (e) => e.eleveUserName !== "—" ? `${e.eleveUserName} (@${e.eleveUserLogin})` : "—" },
+        {
+          header: "Parent",
+          accessor: "parentName",
+          hideOnMobile: true, // masqué sur mobile
+          render: (e) => e.parentName !== "—" ? `${e.parentName} (@${e.parentLogin})` : "—",
+        },
+        {
+          header: "Compte élève",
+          accessor: "eleveUserName",
+          hideOnMobile: true, // masqué sur mobile
+          render: (e) => e.eleveUserName !== "—" ? `${e.eleveUserName} (@${e.eleveUserLogin})` : "—",
+        },
         {
           header: "Actions",
           sortable: false,
+          hideOnMobile: false,
           render: (e) => (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: isMobile ? 4 : 6, flexWrap: "wrap", justifyContent: "center" }}>
               <button
                 onClick={(ev) => { ev.stopPropagation(); onViewDetails?.(e._id); }}
                 style={{
+                  ...actionButtonStyle,
                   background: "transparent",
-                  border: "none",
                   color: dark ? "#818CF8" : "#4F46E5",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: 4,
+                  padding: isMobile ? "8px" : "4px",
                 }}
                 title="Voir la fiche complète"
               >
-                <Eye size={18} />
+                <Eye size={isMobile ? 20 : 18} />
               </button>
               <button
                 onClick={(ev) => { ev.stopPropagation(); onEditParent(e._id); }}
-                style={{ background: "#4F46E5", color: "white", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}
+                style={{ ...actionButtonStyle, background: "#4F46E5", color: "white" }}
                 title="Modifier le parent"
               >
-                <UserCheck size={16} /> Parent
+                <UserCheck size={isMobile ? 18 : 16} /> Parent
               </button>
               <button
                 onClick={(ev) => { ev.stopPropagation(); onEditUser(e._id); }}
-                style={{ background: "#6366F1", color: "white", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}
+                style={{ ...actionButtonStyle, background: "#6366F1", color: "white" }}
                 title="Modifier le compte élève"
               >
-                <Pencil size={16} /> Compte
+                <Pencil size={isMobile ? 18 : 16} /> Compte
               </button>
               <button
                 onClick={(ev) => { ev.stopPropagation(); onDelete(e._id); }}
-                style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 4 }}
+                style={{
+                  ...actionButtonStyle,
+                  background: "none",
+                  color: "#EF4444",
+                  padding: isMobile ? "8px" : "4px",
+                }}
                 title="Supprimer"
               >
-                <Trash2 size={18} />
+                <Trash2 size={isMobile ? 20 : 18} />
               </button>
             </div>
           ),

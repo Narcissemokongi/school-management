@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import {
   Loader2, User, Lock, Eye, EyeOff, School, UserCheck, BadgeCheck,
   CheckCircle2, XCircle, AlertCircle, Check,
@@ -15,6 +16,7 @@ const ROLES = [
 
 export function RegisterScreen({ onSwitchToLogin }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const [nom, setNom] = useState("");
   const [login, setLogin] = useState("");
@@ -87,15 +89,15 @@ export function RegisterScreen({ onSwitchToLogin }) {
     }
   };
 
+  // Styles adaptatifs
   const labelStyle = {
     display: "block",
     marginBottom: 6,
     fontWeight: 500,
-    fontSize: 14,
+    fontSize: isMobile ? 15 : 14,
     color: dark ? "#CBD5E1" : "#374151",
   };
 
-  // Style pour le conteneur flex (icône + input) – élimine tout chevauchement
   const fieldContainerStyle = {
     display: "flex",
     alignItems: "center",
@@ -103,7 +105,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
     borderRadius: 10,
     background: dark ? "#0F172A" : "#F9FAFB",
     transition: "border-color 0.2s, background-color 0.3s",
-    height: "46px",
+    height: isMobile ? 52 : 46,
     boxSizing: "border-box",
   };
 
@@ -111,7 +113,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "48px",
+    width: isMobile ? 52 : 48,
     flexShrink: 0,
     color: dark ? "#94A3B8" : "#9CA3AF",
   };
@@ -122,11 +124,23 @@ export function RegisterScreen({ onSwitchToLogin }) {
     outline: "none",
     background: "transparent",
     color: dark ? "#F1F5F9" : "#1E293B",
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     height: "100%",
     padding: "0 12px 0 0",
     boxSizing: "border-box",
   };
+
+  const containerPadding = isMobile ? "16px" : "24px";
+  const cardPadding = isMobile ? "32px 20px" : "40px 32px";
+  const logoSize = isMobile ? 80 : 100;
+  const titleFontSize = isMobile ? 20 : 24;
+  const subtitleFontSize = isMobile ? 14 : 14;
+  const roleButtonPadding = isMobile ? "10px 14px" : "8px 16px";
+  const roleButtonFontSize = isMobile ? 14 : 14;
+  const submitFontSize = isMobile ? 16 : 16;
+  const errorFontSize = isMobile ? 14 : 13;
+  const successFontSize = isMobile ? 14 : 13;
+  const conditionsFontSize = isMobile ? 14 : 13;
 
   return (
     <div style={{
@@ -135,29 +149,29 @@ export function RegisterScreen({ onSwitchToLogin }) {
       alignItems: "center",
       justifyContent: "center",
       background: dark ? "#0F172A" : "#F3F4F6",
-      padding: "24px",
+      padding: containerPadding,
       transition: "background-color 0.3s",
     }}>
       <div style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 16,
         boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
-        padding: "40px 32px",
+        padding: cardPadding,
         width: "100%",
         maxWidth: 480,
         transition: "background-color 0.3s",
       }}>
-        {/* En-tête corrigé : logo plus petit, marge positive */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
+        {/* En-tête */}
+        <div style={{ textAlign: "center", marginBottom: isMobile ? 24 : 32 }}>
           <img
             src="/logo.png"
             alt="School Management"
-            style={{ width: 100, height: 100, marginBottom: 12 }}
+            style={{ width: logoSize, height: logoSize, marginBottom: 12 }}
           />
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+          <h1 style={{ fontSize: titleFontSize, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
             School Management
           </h1>
-          <p style={{ color: dark ? "#CBD5E1" : "#64748B", marginTop: 8, fontSize: 14 }}>
+          <p style={{ color: dark ? "#CBD5E1" : "#64748B", marginTop: 8, fontSize: subtitleFontSize }}>
             Créer un compte
           </p>
         </div>
@@ -169,7 +183,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
             color: dark ? "#34D399" : "#065F46",
             padding: "12px 14px",
             borderRadius: 8,
-            fontSize: 13,
+            fontSize: successFontSize,
             fontWeight: 500,
             marginBottom: 20,
             display: "flex",
@@ -202,7 +216,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
           {/* Rôle */}
           <div style={{ marginBottom: 24 }}>
             <label style={labelStyle}>Vous êtes</label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap" }}>
               {ROLES.map((r) => (
                 <button
                   key={r.value}
@@ -212,12 +226,12 @@ export function RegisterScreen({ onSwitchToLogin }) {
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
-                    padding: "8px 16px",
+                    padding: roleButtonPadding,
                     background: role === r.value ? (dark ? "#818CF8" : "#4F46E5") : "transparent",
                     color: role === r.value ? "#FFFFFF" : dark ? "#CBD5E1" : "#374151",
                     border: `1.5px solid ${role === r.value ? (dark ? "#818CF8" : "#4F46E5") : dark ? "rgba(255,255,255,0.1)" : "#E2E8F0"}`,
                     borderRadius: 10,
-                    fontSize: 14,
+                    fontSize: roleButtonFontSize,
                     fontWeight: 500,
                     cursor: "pointer",
                     transition: "all 0.2s",
@@ -309,9 +323,9 @@ export function RegisterScreen({ onSwitchToLogin }) {
                 <div style={{ height: 4, background: dark ? "#334155" : "#E2E8F0", borderRadius: 2, overflow: "hidden" }}>
                   <div style={{ width: passwordStrength.width, background: passwordStrength.color, height: "100%", borderRadius: 2, transition: "width 0.3s" }} />
                 </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4, flexDirection: isMobile ? "column" : "row", gap: 4 }}>
                   <span style={{ fontSize: 12, color: passwordStrength.color }}>{passwordStrength.label}</span>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11, justifyContent: isMobile ? "center" : "flex-start" }}>
                     <span style={{ color: passwordStrength.checks.length ? "#10B981" : "#EF4444" }}>
                       {passwordStrength.checks.length ? <Check size={12} /> : <XCircle size={12} />} 6+ caractères
                     </span>
@@ -400,7 +414,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
               style={{ width: 18, height: 18, marginTop: 2, cursor: "pointer", accentColor: dark ? "#818CF8" : "#4F46E5" }}
               aria-required="true"
             />
-            <label htmlFor="conditions" style={{ fontSize: 13, color: dark ? "#CBD5E1" : "#4B5563" }}>
+            <label htmlFor="conditions" style={{ fontSize: conditionsFontSize, color: dark ? "#CBD5E1" : "#4B5563" }}>
               J'accepte les conditions d'utilisation et la politique de confidentialité.
             </label>
           </div>
@@ -412,7 +426,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
               color: dark ? "#F87171" : "#B91C1C",
               padding: "10px 14px",
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: errorFontSize,
               fontWeight: 500,
               marginBottom: 16,
               display: "flex",
@@ -428,12 +442,12 @@ export function RegisterScreen({ onSwitchToLogin }) {
             disabled={loading}
             style={{
               width: "100%",
-              padding: "12px 0",
+              padding: isMobile ? "14px 0" : "12px 0",
               background: loading ? "#A5B4FC" : dark ? "#818CF8" : "#4F46E5",
               color: "#FFFFFF",
               border: "none",
               borderRadius: 10,
-              fontSize: 16,
+              fontSize: submitFontSize,
               fontWeight: 600,
               cursor: loading ? "not-allowed" : "pointer",
               display: "flex",
@@ -454,7 +468,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
 
         {/* Pied */}
         <div style={{ marginTop: 20, textAlign: "center" }}>
-          <p style={{ color: dark ? "#CBD5E1" : "#6B7280", fontSize: 14, margin: 0 }}>
+          <p style={{ color: dark ? "#CBD5E1" : "#6B7280", fontSize: isMobile ? 14 : 14, margin: 0 }}>
             Déjà un compte ?{" "}
             <a
               href="#"

@@ -70,11 +70,29 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
     }
   };
 
+  // Styles adaptatifs
+  const cardPadding = isMobile ? 16 : 24;
+  const cardMarginBottom = isMobile ? 16 : 24;
+  const titleFontSize = isMobile ? 22 : 28;
+  const headerMarginBottom = isMobile ? 16 : 20;
+  const targetButtonsFlexDirection = isMobile ? "column" : "row";
+  const targetButtonPadding = isMobile ? "12px 16px" : "8px 16px";
+  const targetButtonFontSize = isMobile ? 16 : 14;
+  const targetButtonWidth = isMobile ? "100%" : "auto";
+  const selectPadding = isMobile ? "12px 14px" : "10px 14px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const textareaPadding = isMobile ? "12px 14px" : "10px 14px";
+  const textareaFontSize = isMobile ? 16 : 14;
+  const textareaMinHeight = isMobile ? 150 : 120;
+  const sendButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const sendButtonFontSize = isMobile ? 16 : 14;
+  const sendButtonWidth = isMobile ? "100%" : "auto";
+
   return (
     <div>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: headerMarginBottom }}>
         {isMobile && (
           <button
             onClick={onBack}
@@ -83,93 +101,100 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
               border: "none",
               cursor: "pointer",
               color: textPrimary,
+              padding: 4,
             }}
             aria-label="Retour"
           >
             <ArrowLeft size={24} />
           </button>
         )}
-        <h2 style={{ ...S.h2, color: textPrimary }}>Message groupé</h2>
+        <h2 style={{ ...S.h2, color: textPrimary, fontSize: titleFontSize }}>Message groupé</h2>
       </div>
 
-      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}`, transition: "background-color 0.3s" }}>
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}`, transition: "background-color 0.3s", padding: cardPadding }}>
         {/* Sélecteurs de cible */}
-        <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: isMobile ? 8 : 12, marginBottom: 16, flexWrap: "wrap", flexDirection: targetButtonsFlexDirection }}>
           <button
             onClick={() => setTarget("parents")}
             disabled={sending}
             style={{
-              padding: "8px 16px",
+              padding: targetButtonPadding,
               borderRadius: 8,
               background: target === "parents" ? accent : buttonSecondaryBg,
               color: target === "parents" ? "#FFFFFF" : buttonSecondaryText,
               border: `1px solid ${cardBorder}`,
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
               cursor: sending ? "not-allowed" : "pointer",
               opacity: sending ? 0.7 : 1,
               fontWeight: 500,
-              fontSize: 14,
+              fontSize: targetButtonFontSize,
+              width: targetButtonWidth,
             }}
           >
-            <Users size={16} /> Parents
+            <Users size={isMobile ? 18 : 16} /> Parents
           </button>
           <button
             onClick={() => setTarget("eleves")}
             disabled={sending}
             style={{
-              padding: "8px 16px",
+              padding: targetButtonPadding,
               borderRadius: 8,
               background: target === "eleves" ? accent : buttonSecondaryBg,
               color: target === "eleves" ? "#FFFFFF" : buttonSecondaryText,
               border: `1px solid ${cardBorder}`,
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
               cursor: sending ? "not-allowed" : "pointer",
               opacity: sending ? 0.7 : 1,
               fontWeight: 500,
-              fontSize: 14,
+              fontSize: targetButtonFontSize,
+              width: targetButtonWidth,
             }}
           >
-            <GraduationCap size={16} /> Tous les élèves
+            <GraduationCap size={isMobile ? 18 : 16} /> Tous les élèves
           </button>
           <button
             onClick={() => setTarget("classe")}
             disabled={sending}
             style={{
-              padding: "8px 16px",
+              padding: targetButtonPadding,
               borderRadius: 8,
               background: target === "classe" ? accent : buttonSecondaryBg,
               color: target === "classe" ? "#FFFFFF" : buttonSecondaryText,
               border: `1px solid ${cardBorder}`,
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
               cursor: sending ? "not-allowed" : "pointer",
               opacity: sending ? 0.7 : 1,
               fontWeight: 500,
-              fontSize: 14,
+              fontSize: targetButtonFontSize,
+              width: targetButtonWidth,
             }}
           >
-            <BookOpen size={16} /> Par classe
+            <BookOpen size={isMobile ? 18 : 16} /> Par classe
           </button>
         </div>
 
         {/* Sélecteur de classe */}
         {target === "classe" && (
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Classe</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>Classe</label>
             <select
               style={{
                 width: "100%",
-                padding: "10px 14px",
+                padding: selectPadding,
                 borderRadius: 8,
                 border: `1px solid ${cardBorder}`,
                 background: inputBg,
                 color: inputText,
-                fontSize: 14,
+                fontSize: selectFontSize,
                 outline: "none",
               }}
               value={selectedClasse}
@@ -186,7 +211,7 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
           </div>
         )}
 
-        <p style={{ color: textSecondary, fontSize: 14, marginBottom: 12 }}>
+        <p style={{ color: textSecondary, fontSize: isMobile ? 14 : 14, marginBottom: 12 }}>
           Ce message sera envoyé à{" "}
           <strong>
             {target === "parents"
@@ -200,15 +225,16 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
         <textarea
           style={{
             width: "100%",
-            padding: "10px 14px",
+            padding: textareaPadding,
             borderRadius: 8,
             border: `1px solid ${cardBorder}`,
             background: inputBg,
             color: inputText,
-            fontSize: 14,
+            fontSize: textareaFontSize,
             resize: "vertical",
-            minHeight: 120,
+            minHeight: textareaMinHeight,
             outline: "none",
+            boxSizing: "border-box",
           }}
           placeholder="Écrivez votre communiqué..."
           value={message}
@@ -221,18 +247,20 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
           disabled={sending || !message.trim() || (target === "classe" && !selectedClasse)}
           style={{
             marginTop: 12,
-            padding: "10px 20px",
+            padding: sendButtonPadding,
             borderRadius: 8,
             background: accent,
             color: "white",
             border: "none",
             fontWeight: 600,
-            fontSize: 14,
+            fontSize: sendButtonFontSize,
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
             cursor: sending ? "not-allowed" : "pointer",
             opacity: sending || !message.trim() || (target === "classe" && !selectedClasse) ? 0.6 : 1,
+            width: sendButtonWidth,
           }}
         >
           {sending ? <Loader size={18} className="animate-spin" /> : <Send size={18} />}

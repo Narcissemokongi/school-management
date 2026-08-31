@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { Home, Search, ArrowLeft } from "lucide-react";
 
 export function NotFound() {
   const { dark } = useStyles();
+  const isMobile = useIsMobile();
 
   // Couleurs adaptatives
   const bg = dark ? "#0F172A" : "#F8FAFC";
@@ -14,6 +16,17 @@ export function NotFound() {
   const buttonBg = dark ? "#818CF8" : "#4F46E5";
   const buttonHover = dark ? "#6366F1" : "#4338CA";
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "32px 16px" : "32px 24px";
+  const iconContainerSize = isMobile ? 80 : 100;
+  const iconSize = isMobile ? 36 : 48;
+  const title404 = isMobile ? "64px" : "clamp(64px, 12vw, 96px)";
+  const subtitleSize = isMobile ? "20px" : "clamp(20px, 4vw, 28px)";
+  const descriptionSize = isMobile ? 13 : 14;
+  const actionsFlexDirection = isMobile ? "column" : "row";
+  const actionButtonPadding = isMobile ? "12px 16px" : "12px 24px";
+  const actionButtonWidth = isMobile ? "100%" : "auto";
+
   return (
     <div
       style={{
@@ -22,7 +35,7 @@ export function NotFound() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "32px 24px",
+        padding: containerPadding,
         textAlign: "center",
         background: bg,
         color: textPrimary,
@@ -33,26 +46,26 @@ export function NotFound() {
       {/* Icône principale avec animation */}
       <div
         style={{
-          width: 100,
-          height: 100,
+          width: iconContainerSize,
+          height: iconContainerSize,
           borderRadius: "50%",
           background: circleBg,
           border: `1px solid ${circleBorder}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          marginBottom: 24,
+          marginBottom: isMobile ? 16 : 24,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.1)",
           animation: "float 3s ease-in-out infinite",
         }}
       >
-        <Search size={48} color={dark ? "#818CF8" : "#4F46E5"} />
+        <Search size={iconSize} color={dark ? "#818CF8" : "#4F46E5"} />
       </div>
 
       {/* Titre 404 animé */}
       <h1
         style={{
-          fontSize: "clamp(64px, 12vw, 96px)",
+          fontSize: title404,
           fontWeight: 900,
           color: dark ? "#818CF8" : "#4F46E5",
           margin: "0 0 8px",
@@ -67,7 +80,7 @@ export function NotFound() {
       {/* Sous-titre */}
       <h2
         style={{
-          fontSize: "clamp(20px, 4vw, 28px)",
+          fontSize: subtitleSize,
           fontWeight: 600,
           color: dark ? "#CBD5E1" : "#1E293B",
           margin: "0 0 8px",
@@ -79,9 +92,9 @@ export function NotFound() {
       {/* Description */}
       <p
         style={{
-          fontSize: 14,
+          fontSize: descriptionSize,
           color: textSecondary,
-          marginBottom: 32,
+          marginBottom: isMobile ? 24 : 32,
           maxWidth: 420,
           lineHeight: 1.6,
         }}
@@ -91,22 +104,31 @@ export function NotFound() {
       </p>
 
       {/* Boutons d'action */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+      <div style={{
+        display: "flex",
+        gap: 12,
+        flexWrap: "wrap",
+        justifyContent: "center",
+        flexDirection: actionsFlexDirection,
+        width: isMobile ? "100%" : "auto",
+      }}>
         <Link
           to="/"
           style={{
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            padding: "12px 24px",
+            padding: actionButtonPadding,
             background: buttonBg,
             color: "#FFFFFF",
             borderRadius: 12,
             textDecoration: "none",
             fontWeight: 600,
-            fontSize: 14,
+            fontSize: isMobile ? 16 : 14,
             boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)",
             transition: "background 0.2s, transform 0.2s, box-shadow 0.2s",
+            width: actionButtonWidth,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = buttonHover;
@@ -119,7 +141,7 @@ export function NotFound() {
             e.currentTarget.style.boxShadow = dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)";
           }}
         >
-          <Home size={20} /> Retour à l'accueil
+          <Home size={isMobile ? 20 : 20} /> Retour à l'accueil
         </Link>
 
         <button
@@ -127,16 +149,18 @@ export function NotFound() {
           style={{
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            padding: "12px 24px",
+            padding: actionButtonPadding,
             background: "transparent",
             color: dark ? "#CBD5E1" : "#1E293B",
             border: `1px solid ${circleBorder}`,
             borderRadius: 12,
             fontWeight: 600,
-            fontSize: 14,
+            fontSize: isMobile ? 16 : 14,
             cursor: "pointer",
             transition: "background 0.2s, transform 0.1s",
+            width: actionButtonWidth,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)";
@@ -147,7 +171,7 @@ export function NotFound() {
             e.currentTarget.style.transform = "translateY(0)";
           }}
         >
-          <ArrowLeft size={18} /> Page précédente
+          <ArrowLeft size={isMobile ? 18 : 18} /> Page précédente
         </button>
       </div>
 

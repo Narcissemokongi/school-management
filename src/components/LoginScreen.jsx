@@ -2,13 +2,15 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import {
   Loader2, User, Lock, Eye, EyeOff, LogIn, Clock, ShieldCheck,
 } from "lucide-react";
 
 export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const { dark } = useStyles();
-  const [step, setStep] = useState("credentials"); // "credentials" | "twoFactor"
+  const isMobile = useIsMobile(); // Détection mobile
+  const [step, setStep] = useState("credentials");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -37,7 +39,6 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
 
     setLoading(true);
     try {
-      // Envoyer le mot de passe brut, le serveur le vérifie
       const user = await authenticate({ login: login.trim(), password });
 
       if (!user) {
@@ -73,7 +74,6 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
     setLoading(true);
     try {
       await verifyLoginCode({ userId, code });
-      // La vérification réussie, on connecte l'utilisateur stocké
       onLogin(pendingUser);
     } catch (err) {
       setError(err.message || "Code invalide.");
@@ -111,6 +111,11 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const linkColor = dark ? "#818CF8" : "#4F46E5";
   const iconColor = dark ? "#94A3B8" : "#9CA3AF";
 
+  // Ajustements mobiles
+  const inputFontSize = isMobile ? 16 : 14; // 16px pour éviter le zoom iOS
+  const cardPadding = isMobile ? "32px 20px" : "40px 32px";
+  const logoSize = isMobile ? 64 : 72;
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -118,7 +123,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
       alignItems: "center",
       justifyContent: "center",
       background: containerBg,
-      padding: "24px",
+      padding: isMobile ? "16px" : "24px",
       transition: "background-color 0.3s",
     }}>
       <div style={{
@@ -126,18 +131,18 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
         borderRadius: 16,
         boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
         border: `1px solid ${cardBorder}`,
-        padding: "40px 32px",
+        padding: cardPadding,
         width: "100%",
         maxWidth: 420,
         transition: "background-color 0.3s, border-color 0.3s",
       }}>
         {/* En-tête */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <img src="/logo.png" alt="School Management" style={{ width: 72, height: 72, marginBottom: 16 }} />
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: textPrimary, margin: 0 }}>
+        <div style={{ textAlign: "center", marginBottom: isMobile ? 24 : 32 }}>
+          <img src="/logo.png" alt="School Management" style={{ width: logoSize, height: logoSize, marginBottom: 16 }} />
+          <h1 style={{ fontSize: isMobile ? 22 : 24, fontWeight: 700, color: textPrimary, margin: 0 }}>
             {step === "credentials" ? "School Management" : "Vérification en deux étapes"}
           </h1>
-          <p style={{ color: textSecondary, marginTop: 8, fontSize: 14 }}>
+          <p style={{ color: textSecondary, marginTop: 8, fontSize: isMobile ? 14 : 14 }}>
             {step === "credentials"
               ? "Connectez-vous à votre compte"
               : "Un code a été envoyé à votre adresse email."}
@@ -148,7 +153,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
           <form onSubmit={handleCredentialsSubmit}>
             {/* Champ identifiant */}
             <div style={{ marginBottom: 20 }}>
-              <label htmlFor="login-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: labelColor }}>
+              <label htmlFor="login-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: labelColor }}>
                 Identifiant
               </label>
               <div style={{ position: "relative" }}>
@@ -165,7 +170,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     padding: "12px 14px 12px 42px",
                     border: `1.5px solid ${inputBorder}`,
                     borderRadius: 10,
-                    fontSize: 14,
+                    fontSize: inputFontSize,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
@@ -179,7 +184,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
 
             {/* Champ mot de passe */}
             <div style={{ marginBottom: 20 }}>
-              <label htmlFor="password-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: labelColor }}>
+              <label htmlFor="password-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: labelColor }}>
                 Mot de passe
               </label>
               <div style={{ position: "relative" }}>
@@ -196,7 +201,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     padding: "12px 42px 12px 42px",
                     border: `1.5px solid ${inputBorder}`,
                     borderRadius: 10,
-                    fontSize: 14,
+                    fontSize: inputFontSize,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
@@ -262,7 +267,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
           <form onSubmit={handleTwoFactorSubmit}>
             {/* Champ code 2FA */}
             <div style={{ marginBottom: 20 }}>
-              <label htmlFor="code-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: labelColor }}>
+              <label htmlFor="code-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: labelColor }}>
                 Code de vérification
               </label>
               <div style={{ position: "relative" }}>
@@ -280,7 +285,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     padding: "12px 14px 12px 42px",
                     border: `1.5px solid ${inputBorder}`,
                     borderRadius: 10,
-                    fontSize: 14,
+                    fontSize: 16,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
@@ -355,7 +360,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
           </form>
         )}
 
-        {/* Lien vers l'inscription (uniquement à l'étape credentials) */}
+        {/* Lien vers l'inscription */}
         {step === "credentials" && (
           <div style={{ marginTop: 20, textAlign: "center" }}>
             <p style={{ color: textSecondary, fontSize: 14, margin: 0 }}>

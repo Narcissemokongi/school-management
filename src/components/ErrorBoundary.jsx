@@ -1,10 +1,12 @@
 import { Component, useState } from "react";
 import { useTheme } from "./ThemeProvider";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { AlertTriangle, RefreshCw, Home, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 
 // Composant d'affichage avec thème et animations
 function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = false }) {
   const { dark } = useTheme();
+  const isMobile = useIsMobile(); // Détection mobile
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const isDev = import.meta.env.DEV || showDetailsInProduction;
@@ -30,6 +32,20 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
     }
   };
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "24px 16px" : "32px 24px";
+  const iconContainerSize = isMobile ? 72 : 88;
+  const iconSize = isMobile ? 36 : 44;
+  const titleFontSize = isMobile ? 22 : 28;
+  const messageFontSize = isMobile ? 14 : 15;
+  const errorBoxFontSize = isMobile ? 11 : 12;
+  const errorBoxMaxWidth = isMobile ? "95%" : 500;
+  const actionButtonPadding = isMobile ? "12px 16px" : "12px 24px";
+  const actionButtonFontSize = isMobile ? 15 : 15;
+  const actionsFlexDirection = isMobile ? "column" : "row";
+  const actionsGap = isMobile ? 8 : 12;
+  const actionsButtonWidth = isMobile ? "100%" : "auto";
+
   return (
     <div
       role="alert"
@@ -40,7 +56,7 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
         alignItems: "center",
         justifyContent: "center",
         minHeight: "100vh",
-        padding: "32px 24px",
+        padding: containerPadding,
         textAlign: "center",
         background: dark ? "#0F172A" : "#F8FAFC",
         color: dark ? "#F1F5F9" : "#1E293B",
@@ -50,25 +66,25 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
     >
       <div
         style={{
-          width: 88,
-          height: 88,
+          width: iconContainerSize,
+          height: iconContainerSize,
           borderRadius: "50%",
           background: dark ? "#1E293B" : "#FEE2E2",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          marginBottom: 24,
+          marginBottom: isMobile ? 16 : 24,
           boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(0,0,0,0.1)",
           animation: reduceMotion ? "none" : "pulse 2s infinite",
         }}
       >
-        <AlertTriangle size={44} color="#EF4444" />
+        <AlertTriangle size={iconSize} color="#EF4444" />
       </div>
 
-      <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 8px", color: dark ? "#F1F5F9" : "#1E293B" }}>
+      <h1 style={{ fontSize: titleFontSize, fontWeight: 700, margin: "0 0 8px", color: dark ? "#F1F5F9" : "#1E293B" }}>
         Oups, une erreur est survenue
       </h1>
-      <p style={{ fontSize: 15, color: dark ? "#94A3B8" : "#64748B", marginBottom: 32, maxWidth: 460, lineHeight: 1.6 }}>
+      <p style={{ fontSize: messageFontSize, color: dark ? "#94A3B8" : "#64748B", marginBottom: isMobile ? 20 : 32, maxWidth: 460, lineHeight: 1.6 }}>
         Quelque chose s'est mal passé. Vous pouvez essayer de recharger la page ou revenir à l'accueil.
       </p>
 
@@ -77,12 +93,12 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
           style={{
             background: dark ? "#1E293B" : "#FEF2F2",
             color: dark ? "#FCA5A5" : "#B91C1C",
-            padding: "12px 16px",
+            padding: isMobile ? "10px 12px" : "12px 16px",
             borderRadius: 8,
-            fontSize: 12,
+            fontSize: errorBoxFontSize,
             fontFamily: "monospace",
-            maxWidth: 500,
-            marginBottom: 24,
+            maxWidth: errorBoxMaxWidth,
+            marginBottom: isMobile ? 16 : 24,
             textAlign: "left",
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
@@ -90,7 +106,7 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
             border: `1px solid ${dark ? "#334155" : "#FECACA"}`,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontWeight: 600 }}>Détails techniques</span>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -136,23 +152,32 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+      <div style={{
+        display: "flex",
+        flexDirection: actionsFlexDirection,
+        gap: actionsGap,
+        flexWrap: "wrap",
+        justifyContent: "center",
+        width: isMobile ? "100%" : "auto",
+      }}>
         <button
           onClick={onRetry}
           style={{
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            padding: "12px 24px",
+            padding: actionButtonPadding,
             background: dark ? "#818CF8" : "#4F46E5",
             color: "#FFFFFF",
             border: "none",
             borderRadius: 12,
-            fontSize: 15,
+            fontSize: actionButtonFontSize,
             fontWeight: 600,
             cursor: "pointer",
             boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)",
             transition: "background 0.2s, transform 0.1s",
+            width: actionsButtonWidth,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = dark ? "#6366F1" : "#4338CA";
@@ -170,17 +195,19 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
           style={{
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            padding: "12px 24px",
+            padding: actionButtonPadding,
             background: dark ? "#1E293B" : "#FFFFFF",
             color: dark ? "#F1F5F9" : "#1E293B",
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 12,
-            fontSize: 15,
+            fontSize: actionButtonFontSize,
             fontWeight: 500,
             textDecoration: "none",
             cursor: "pointer",
             transition: "background 0.2s, transform 0.1s",
+            width: actionsButtonWidth,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = dark ? "#263142" : "#F1F5F9";
@@ -198,17 +225,19 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
           style={{
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            padding: "12px 24px",
+            padding: actionButtonPadding,
             background: dark ? "#1E293B" : "#FFFFFF",
             color: dark ? "#F1F5F9" : "#1E293B",
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 12,
-            fontSize: 15,
+            fontSize: actionButtonFontSize,
             fontWeight: 500,
             textDecoration: "none",
             cursor: "pointer",
             transition: "background 0.2s, transform 0.1s",
+            width: actionsButtonWidth,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = dark ? "#263142" : "#F1F5F9";
@@ -249,7 +278,6 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // Journaliser l'erreur (remplacer par un service comme Sentry)
     console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 

@@ -1,8 +1,10 @@
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 import { useStyles } from "../../styles/theme";
 import { Check, CheckCheck, Paperclip } from "lucide-react";
 
 export function MessageBubble({ msg, user, getUserName }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const isMine = msg.expediteurId === user?._id;
 
   // Statut de lecture (true si le message a été lu, sinon false)
@@ -31,6 +33,14 @@ export function MessageBubble({ msg, user, getUserName }) {
     minute: "2-digit",
   });
 
+  // Ajustements adaptatifs
+  const maxWidth = isMobile ? "85%" : "70%";
+  const contentFontSize = isMobile ? 15 : 14; // 15px sur mobile pour une meilleure lisibilité
+  const senderFontSize = isMobile ? 12 : 12;
+  const timeFontSize = isMobile ? 10 : 11;
+  const attachmentFontSize = isMobile ? 13 : 13;
+  const padding = isMobile ? "6px 10px 8px 10px" : "6px 10px 8px 10px";
+
   return (
     <div style={{
       display: "flex",
@@ -38,8 +48,8 @@ export function MessageBubble({ msg, user, getUserName }) {
       marginBottom: 12,
     }}>
       <div style={{
-        maxWidth: "70%",
-        padding: "6px 10px 8px 10px",
+        maxWidth: maxWidth,
+        padding: padding,
         borderRadius: isMine ? "12px 12px 0 12px" : "12px 12px 12px 0",
         background: isMine ? sentBg : receivedBg,
         color: isMine ? sentText : receivedText,
@@ -50,7 +60,7 @@ export function MessageBubble({ msg, user, getUserName }) {
         {/* Nom de l'expéditeur (pour les messages reçus dans les groupes) */}
         {getUserName && !isMine && (
           <div style={{
-            fontSize: 12,
+            fontSize: senderFontSize,
             fontWeight: 700,
             marginBottom: 2,
             color: senderColor,
@@ -61,7 +71,7 @@ export function MessageBubble({ msg, user, getUserName }) {
 
         {/* Contenu du message */}
         <div style={{
-          fontSize: 14,
+          fontSize: contentFontSize,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
           lineHeight: 1.4,
@@ -83,10 +93,10 @@ export function MessageBubble({ msg, user, getUserName }) {
               marginTop: 6,
               color: attachmentColor,
               textDecoration: "underline",
-              fontSize: 13,
+              fontSize: attachmentFontSize,
             }}
           >
-            <Paperclip size={14} />
+            <Paperclip size={isMobile ? 16 : 14} />
             {pj.nom}
           </a>
         ))}
@@ -98,11 +108,11 @@ export function MessageBubble({ msg, user, getUserName }) {
           alignItems: "center",
           gap: 4,
           marginTop: 4,
-          fontSize: 11,
+          fontSize: timeFontSize,
           color: timeColor,
         }}>
           <span title={fullDateString}>{timeString}</span>
-          {isMine && (isRead ? <CheckCheck size={16} /> : <Check size={16} />)}
+          {isMine && (isRead ? <CheckCheck size={isMobile ? 18 : 16} /> : <Check size={isMobile ? 18 : 16} />)}
         </div>
       </div>
     </div>

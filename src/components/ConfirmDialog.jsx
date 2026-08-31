@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { AlertTriangle, X } from "lucide-react";
 
 export function ConfirmDialog({
@@ -12,6 +13,7 @@ export function ConfirmDialog({
   onCancel,
 }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   // Fermeture par Échap
   useEffect(() => {
@@ -27,6 +29,19 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
+  // Styles adaptatifs
+  const dialogPadding = isMobile ? 20 : 28;
+  const dialogWidth = isMobile ? "95%" : 420;
+  const iconSize = isMobile ? 28 : 32;
+  const iconContainerSize = isMobile ? 56 : 64;
+  const titleFontSize = isMobile ? 18 : 20;
+  const messageFontSize = isMobile ? 14 : 14;
+  const buttonPadding = isMobile ? "12px 20px" : "10px 24px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const buttonFlexDirection = isMobile ? "column" : "row";
+  const buttonWidth = isMobile ? "100%" : "auto";
+  const closeButtonSize = isMobile ? 22 : 20;
+
   return (
     <div
       style={{
@@ -41,8 +56,9 @@ export function ConfirmDialog({
         justifyContent: "center",
         zIndex: 10000,
         animation: "fadeIn 0.2s ease",
+        padding: isMobile ? 12 : 16,
       }}
-      onClick={onCancel}   // ✅ clic sur l'overlay annule
+      onClick={onCancel}
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
@@ -52,16 +68,16 @@ export function ConfirmDialog({
           background: dark ? "#1E293B" : "#FFFFFF",
           color: dark ? "#F1F5F9" : "#1E293B",
           borderRadius: 16,
-          padding: 28,
-          width: 420,
-          maxWidth: "90%",
+          padding: dialogPadding,
+          width: dialogWidth,
+          maxWidth: "95%",
           boxShadow: dark ? "0 10px 30px rgba(0,0,0,0.5)" : "0 10px 30px rgba(0,0,0,0.3)",
           textAlign: "center",
           border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
           position: "relative",
           animation: "slideUp 0.25s ease",
         }}
-        onClick={(e) => e.stopPropagation()}   // ✅ empêche la fermeture lors du clic interne
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Bouton de fermeture X */}
         <button
@@ -81,13 +97,13 @@ export function ConfirmDialog({
           }}
           aria-label="Fermer"
         >
-          <X size={20} />
+          <X size={closeButtonSize} />
         </button>
 
         <div
           style={{
-            width: 64,
-            height: 64,
+            width: iconContainerSize,
+            height: iconContainerSize,
             borderRadius: "50%",
             background: dark ? "#78350F" : "#FEF3C7",
             display: "flex",
@@ -96,29 +112,31 @@ export function ConfirmDialog({
             margin: "0 auto 16px",
           }}
         >
-          <AlertTriangle size={32} color={dark ? "#FBBF24" : "#F59E0B"} />
+          <AlertTriangle size={iconSize} color={dark ? "#FBBF24" : "#F59E0B"} />
         </div>
         <h3
           id="confirm-dialog-title"
-          style={{ marginBottom: 8, fontSize: 20, fontWeight: 700 }}
+          style={{ marginBottom: 8, fontSize: titleFontSize, fontWeight: 700 }}
         >
           {title}
         </h3>
-        <p style={{ fontSize: 14, color: S.textMuted, marginBottom: 24, lineHeight: 1.5 }}>
+        <p style={{ fontSize: messageFontSize, color: S.textMuted, marginBottom: isMobile ? 20 : 24, lineHeight: 1.5 }}>
           {message}
         </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexDirection: buttonFlexDirection }}>
           <button
             onClick={onCancel}
             style={{
-              padding: "10px 24px",
+              padding: buttonPadding,
               borderRadius: 8,
               border: `1px solid ${S.cardBorder}`,
               background: "transparent",
               color: S.textMuted,
               cursor: "pointer",
               fontWeight: 500,
+              fontSize: buttonFontSize,
               transition: "background 0.2s",
+              width: buttonWidth,
             }}
           >
             {cancelLabel}
@@ -126,14 +144,16 @@ export function ConfirmDialog({
           <button
             onClick={onConfirm}
             style={{
-              padding: "10px 24px",
+              padding: buttonPadding,
               borderRadius: 8,
               border: "none",
               background: "#EF4444",
               color: "white",
               cursor: "pointer",
               fontWeight: 600,
+              fontSize: buttonFontSize,
               transition: "background 0.2s",
+              width: buttonWidth,
             }}
           >
             {confirmLabel}

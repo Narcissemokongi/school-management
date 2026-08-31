@@ -1,10 +1,12 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Calendar, Clock, MapPin, BookOpen, Loader } from "lucide-react";
 
 export function ConsultationExamens({ ecoleId, anneeId, classe }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const examens = useQuery(
     api.examens.listByClasse,
@@ -27,7 +29,6 @@ export function ConsultationExamens({ ecoleId, anneeId, classe }) {
     );
   }
 
-  // Gestion du chargement
   if (examens === undefined) {
     return (
       <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
@@ -41,14 +42,14 @@ export function ConsultationExamens({ ecoleId, anneeId, classe }) {
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 48,
+        padding: isMobile ? 32 : 48,
         textAlign: "center",
         boxShadow: shadow,
         border: `1px solid ${cardBorder}`,
         marginTop: 16,
       }}>
-        <Calendar size={48} color={textSecondary} style={{ marginBottom: 12 }} />
-        <p style={{ color: textSecondary, fontSize: 16 }}>Aucun examen planifié pour cette classe.</p>
+        <Calendar size={isMobile ? 40 : 48} color={textSecondary} style={{ marginBottom: 12 }} />
+        <p style={{ color: textSecondary, fontSize: isMobile ? 14 : 16, margin: 0 }}>Aucun examen planifié pour cette classe.</p>
       </div>
     );
   }
@@ -61,73 +62,83 @@ export function ConsultationExamens({ ecoleId, anneeId, classe }) {
     return acc;
   }, {});
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "12px" : "16px";
+  const titleSize = isMobile ? 20 : 24;
+  const dateTitleSize = isMobile ? 15 : 16;
+  const cardPadding = isMobile ? "10px 12px" : "12px 16px";
+  const cardGap = isMobile ? 8 : 16;
+  const cardFlexDirection = isMobile ? "column" : "row";
+  const cardAlignItems = isMobile ? "stretch" : "center";
+
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "16px" }}>
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       <h2 style={{
-        fontSize: 24,
+        fontSize: titleSize,
         fontWeight: 700,
         color: textPrimary,
-        marginBottom: 24,
+        marginBottom: isMobile ? 16 : 24,
         display: "flex",
         alignItems: "center",
         gap: 8,
       }}>
-        <Calendar size={24} color={accent} />
+        <Calendar size={isMobile ? 20 : 24} color={accent} />
         Calendrier des examens
       </h2>
 
       {Object.entries(groupes)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, liste]) => (
-          <div key={date} style={{ marginBottom: 24 }}>
+          <div key={date} style={{ marginBottom: isMobile ? 16 : 24 }}>
             <h3 style={{
               display: "flex",
               alignItems: "center",
               gap: 8,
-              fontSize: 16,
+              fontSize: dateTitleSize,
               fontWeight: 600,
               color: textPrimary,
-              marginBottom: 12,
+              marginBottom: isMobile ? 8 : 12,
             }}>
-              <Calendar size={18} color={accent} />
+              <Calendar size={isMobile ? 16 : 18} color={accent} />
               {date}
             </h3>
 
-            <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: isMobile ? 6 : 8 }}>
               {liste.map((exam) => (
                 <div
                   key={exam._id}
                   style={{
-                    padding: "12px 16px",
+                    padding: cardPadding,
                     background: cardBg,
                     borderRadius: 12,
                     border: `1px solid ${cardBorder}`,
                     boxShadow: shadow,
                     display: "flex",
+                    flexDirection: cardFlexDirection,
                     flexWrap: "wrap",
-                    gap: 16,
-                    alignItems: "center",
+                    gap: cardGap,
+                    alignItems: cardAlignItems,
                   }}
                 >
-                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500, color: textPrimary }}>
-                    <BookOpen size={14} color={accent} />
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500, color: textPrimary, fontSize: isMobile ? 14 : 15 }}>
+                    <BookOpen size={isMobile ? 14 : 14} color={accent} />
                     {exam.matiere}
                   </span>
                   {exam.heure && (
-                    <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
                       <Clock size={14} />
                       {exam.heure}
                     </span>
                   )}
                   {exam.duree && (
-                    <span style={{ color: textSecondary, fontSize: 13 }}>
+                    <span style={{ color: textSecondary, fontSize: isMobile ? 12 : 13 }}>
                       ⏱️ {exam.duree}
                     </span>
                   )}
                   {exam.salle && (
-                    <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
                       <MapPin size={14} />
                       {exam.salle}
                     </span>

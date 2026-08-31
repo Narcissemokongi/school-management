@@ -34,16 +34,25 @@ export function GroupChatView({
   const accentColor = dark ? "#818CF8" : "#4F46E5";
   const messageAreaBg = dark ? "#0F172A" : "#F8FAFC";
 
+  // Styles adaptatifs
+  const headerPadding = isMobile ? 12 : 16;
+  const headerGap = isMobile ? 8 : 12;
+  const groupTitleSize = isMobile ? 15 : 16;
+  const groupIconSize = isMobile ? 18 : 20;
+  const messageAreaPadding = isMobile ? 12 : 16;
+  const emptyStatePadding = isMobile ? 32 : 40;
+  const emptyStateFontSize = isMobile ? 13 : 14;
+
   return (
     <>
       {/* En-tête */}
       <div
         style={{
-          padding: "16px",
+          padding: headerPadding,
           borderBottom: `1px solid ${headerBorder}`,
           display: "flex",
           alignItems: "center",
-          gap: 12,
+          gap: headerGap,
           background: headerBg,
           transition: "background-color 0.3s, border-color 0.3s",
         }}
@@ -56,6 +65,8 @@ export function GroupChatView({
               border: "none",
               cursor: "pointer",
               color: textPrimary,
+              padding: 4,
+              flexShrink: 0,
             }}
             aria-label="Retour"
           >
@@ -63,13 +74,13 @@ export function GroupChatView({
           </button>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
           {group?.icon === "GraduationCap" ? (
-            <GraduationCap size={20} color={accentColor} />
+            <GraduationCap size={groupIconSize} color={accentColor} />
           ) : (
-            <Users size={20} color={accentColor} />
+            <Users size={groupIconSize} color={accentColor} />
           )}
-          <span style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>
+          <span style={{ fontWeight: 600, fontSize: groupTitleSize, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {group ? group.label : "Groupe introuvable"}
           </span>
         </div>
@@ -80,7 +91,7 @@ export function GroupChatView({
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "16px",
+          padding: messageAreaPadding,
           background: messageAreaBg,
           transition: "background-color 0.3s",
         }}
@@ -90,7 +101,7 @@ export function GroupChatView({
             <Loader size={28} className="animate-spin" />
           </div>
         ) : groupMessages.length === 0 ? (
-          <div style={{ textAlign: "center", color: textSecondary, padding: 40 }}>
+          <div style={{ textAlign: "center", color: textSecondary, padding: emptyStatePadding, fontSize: emptyStateFontSize }}>
             Aucun message dans ce groupe.
           </div>
         ) : (
@@ -112,6 +123,7 @@ export function GroupChatView({
         setMessage={setNewGroupMessage}
         onSend={handleSend}
         placeholder="Message au groupe..."
+        isMobile={isMobile} // Prop transmise pour adaptation interne
       />
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>

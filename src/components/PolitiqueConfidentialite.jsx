@@ -1,10 +1,12 @@
 // src/components/PolitiqueConfidentialite.jsx
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { Shield, Search, ArrowUp, List, X } from "lucide-react";
 
 export function PolitiqueConfidentialite() {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile();
   const [searchTerm, setSearchTerm] = useState("");
   const [showScrollTop, setShowScrollTop] = useState(false);
   const topRef = useRef(null);
@@ -25,7 +27,7 @@ export function PolitiqueConfidentialite() {
     { id: "contact", title: "12. Contact" },
   ];
 
-  // Filtre des sections selon la recherche (sur les titres uniquement pour simplifier)
+  // Filtre des sections selon la recherche (sur les titres uniquement)
   const filteredSections = useMemo(() => {
     if (!searchTerm.trim()) return sections;
     const q = searchTerm.toLowerCase();
@@ -38,8 +40,7 @@ export function PolitiqueConfidentialite() {
     else setShowScrollTop(false);
   };
 
-  // Ajout d'un écouteur de scroll
-  useState(() => {
+  useEffect(() => {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -55,14 +56,30 @@ export function PolitiqueConfidentialite() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : 20;
+  const titleSize = isMobile ? 22 : 28;
+  const searchPadding = isMobile ? "12px 14px 12px 40px" : "10px 14px 10px 40px";
+  const searchFontSize = isMobile ? 16 : 14;
+  const tocPadding = isMobile ? 14 : 16;
+  const tocTitleSize = isMobile ? 16 : 18;
+  const tocLinkFontSize = isMobile ? 15 : 14;
+  const contentPadding = isMobile ? 14 : 20;
+  const contentFontSize = isMobile ? 14 : 15;
+  const sectionTitleSize = isMobile ? 17 : 18;
+  const backToTopSize = isMobile ? 44 : 44;
+  const backToTopIconSize = isMobile ? 20 : 20;
+  const backToTopBottom = isMobile ? 16 : 24;
+  const backToTopRight = isMobile ? 16 : 24;
+
   return (
-    <div ref={topRef} style={{ maxWidth: 900, margin: "0 auto", padding: 20 }}>
-      <h1 style={{ ...S.h2, display: "flex", alignItems: "center", gap: 8 }}>
-        <Shield size={28} /> Politique de confidentialité
+    <div ref={topRef} style={{ maxWidth: 900, margin: "0 auto", padding: containerPadding }}>
+      <h1 style={{ ...S.h2, display: "flex", alignItems: "center", gap: 8, fontSize: titleSize }}>
+        <Shield size={isMobile ? 24 : 28} /> Politique de confidentialité
       </h1>
 
       {/* Barre de recherche */}
-      <div style={{ position: "relative", marginBottom: 24 }}>
+      <div style={{ position: "relative", marginBottom: isMobile ? 16 : 24 }}>
         <Search size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
         <input
           type="search"
@@ -71,13 +88,14 @@ export function PolitiqueConfidentialite() {
           onChange={(e) => setSearchTerm(e.target.value)}
           style={{
             width: "100%",
-            padding: "10px 14px 10px 40px",
+            padding: searchPadding,
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 8,
             background: dark ? "#0F172A" : "#F9FAFB",
             color: dark ? "#F1F5F9" : "#1E293B",
-            fontSize: 14,
+            fontSize: searchFontSize,
             outline: "none",
+            boxSizing: "border-box",
           }}
           aria-label="Rechercher dans la politique"
         />
@@ -102,9 +120,9 @@ export function PolitiqueConfidentialite() {
       </div>
 
       {/* Table des matières */}
-      <div style={{ ...S.card, padding: 16, marginBottom: 24 }}>
-        <h2 style={{ ...S.h3, display: "flex", alignItems: "center", gap: 8 }}>
-          <List size={18} /> Table des matières
+      <div style={{ ...S.card, padding: tocPadding, marginBottom: isMobile ? 16 : 24 }}>
+        <h2 style={{ ...S.h3, display: "flex", alignItems: "center", gap: 8, fontSize: tocTitleSize }}>
+          <List size={isMobile ? 16 : 18} /> Table des matières
         </h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {filteredSections.map((section) => (
@@ -118,8 +136,8 @@ export function PolitiqueConfidentialite() {
                 cursor: "pointer",
                 color: dark ? "#818CF8" : "#4F46E5",
                 fontWeight: 500,
-                fontSize: 14,
-                padding: "2px 0",
+                fontSize: tocLinkFontSize,
+                padding: isMobile ? "6px 0" : "2px 0",
                 transition: "color 0.2s",
               }}
               onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
@@ -132,13 +150,13 @@ export function PolitiqueConfidentialite() {
       </div>
 
       {/* Contenu principal */}
-      <div style={{ ...S.card, marginTop: 20, fontSize: 15, lineHeight: 1.7 }}>
+      <div style={{ ...S.card, marginTop: 20, fontSize: contentFontSize, lineHeight: 1.7, padding: contentPadding }}>
         {filteredSections.length === 0 ? (
           <p style={S.muted}>Aucune section trouvée.</p>
         ) : (
           <>
             <section id="introduction" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>1. Introduction</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>1. Introduction</h2>
               <p style={S.muted}>
                 La présente politique de confidentialité a pour but d’informer les utilisateurs de
                 l’application <strong>School Management</strong> sur la manière dont leurs données personnelles
@@ -149,7 +167,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="responsable" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>2. Responsable du traitement</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>2. Responsable du traitement</h2>
               <p style={S.muted}>
                 Le responsable du traitement des données est l’établissement scolaire ou l’organisation
                 qui utilise l’application School Management. Le sous-traitant technique (fournisseur de la
@@ -158,7 +176,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="donnees" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>3. Données collectées</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>3. Données collectées</h2>
               <p style={S.muted}>Nous collectons les catégories de données suivantes :</p>
               <ul style={S.muted}>
                 <li><strong>Données d’identification</strong> : nom, prénom, identifiants de connexion.</li>
@@ -171,7 +189,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="finalites" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>4. Finalités du traitement</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>4. Finalités du traitement</h2>
               <p style={S.muted}>Les données collectées sont utilisées pour :</p>
               <ul style={S.muted}>
                 <li>La gestion administrative et pédagogique des élèves.</li>
@@ -183,7 +201,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="base" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>5. Base légale du traitement</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>5. Base légale du traitement</h2>
               <p style={S.muted}>
                 Conformément au Code du numérique, le traitement des données est fondé sur
                 l’exécution d’une mission d’intérêt public (éducation) confiée au responsable du
@@ -193,7 +211,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="destinataires" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>6. Destinataires des données</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>6. Destinataires des données</h2>
               <p style={S.muted}>
                 Les données sont accessibles aux personnels habilités de l’établissement (direction,
                 enseignants, personnel disciplinaire, comptable) selon leur rôle. Les parents ont accès
@@ -203,7 +221,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="conservation" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>7. Durée de conservation</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>7. Durée de conservation</h2>
               <p style={S.muted}>
                 Les données sont conservées pendant la durée de scolarité de l’élève dans l’établissement,
                 puis archivées pendant une durée conforme aux obligations légales applicables aux
@@ -213,7 +231,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="securite" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>8. Sécurité</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>8. Sécurité</h2>
               <p style={S.muted}>
                 Nous mettons en œuvre des mesures techniques et organisationnelles appropriées pour
                 protéger les données contre tout accès non autorisé, modification, divulgation ou
@@ -223,7 +241,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="droits" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>9. Droits des utilisateurs</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>9. Droits des utilisateurs</h2>
               <p style={S.muted}>
                 Conformément au Code du numérique de la RDC, vous disposez des droits suivants :
               </p>
@@ -244,7 +262,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="cookies" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>10. Cookies et technologies similaires</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>10. Cookies et technologies similaires</h2>
               <p style={S.muted}>
                 L’application utilise des cookies techniques strictement nécessaires à son fonctionnement
                 (cookie de session pour l’authentification, stockage local pour le thème sombre/clair).
@@ -255,7 +273,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="modification" style={{ marginBottom: 24 }}>
-              <h2 style={S.h3}>11. Modification de la politique</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>11. Modification de la politique</h2>
               <p style={S.muted}>
                 Nous nous réservons le droit de modifier la présente politique de confidentialité à tout
                 moment. Les utilisateurs seront informés de toute modification substantielle par le biais
@@ -264,7 +282,7 @@ export function PolitiqueConfidentialite() {
             </section>
 
             <section id="contact">
-              <h2 style={S.h3}>12. Contact</h2>
+              <h2 style={{ ...S.h3, fontSize: sectionTitleSize }}>12. Contact</h2>
               <p style={S.muted}>
                 Pour toute question relative à cette politique de confidentialité ou pour exercer vos
                 droits, vous pouvez contacter l’établissement scolaire responsable du traitement,
@@ -281,11 +299,11 @@ export function PolitiqueConfidentialite() {
           onClick={scrollToTop}
           style={{
             position: "fixed",
-            bottom: 24,
-            right: 24,
+            bottom: backToTopBottom,
+            right: backToTopRight,
             zIndex: 1000,
-            width: 44,
-            height: 44,
+            width: backToTopSize,
+            height: backToTopSize,
             borderRadius: "50%",
             background: dark ? "#818CF8" : "#4F46E5",
             color: "white",
@@ -299,7 +317,7 @@ export function PolitiqueConfidentialite() {
           }}
           aria-label="Retour en haut de page"
         >
-          <ArrowUp size={20} />
+          <ArrowUp size={backToTopIconSize} />
         </button>
       )}
 

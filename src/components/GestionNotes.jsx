@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import * as XLSX from "xlsx";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
@@ -14,16 +15,16 @@ import toast from "react-hot-toast";
 import { trierEleves } from "../utils/tri";
 
 // Carte statistique moderne
-function StatCard({ icon, label, value, color, dark }) {
+function StatCard({ icon, label, value, color, dark, isMobile }) {
   return (
     <div
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 16,
-        padding: 16,
+        padding: isMobile ? 14 : 16,
         display: "flex",
         alignItems: "center",
-        gap: 14,
+        gap: isMobile ? 10 : 14,
         boxShadow: dark ? "0 4px 8px rgba(0,0,0,0.4)" : "0 2px 6px rgba(0,0,0,0.08)",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         transition: "transform 0.2s, box-shadow 0.2s",
@@ -34,8 +35,8 @@ function StatCard({ icon, label, value, color, dark }) {
     >
       <div
         style={{
-          width: 44,
-          height: 44,
+          width: isMobile ? 36 : 44,
+          height: isMobile ? 36 : 44,
           borderRadius: 12,
           background: `${color}20`,
           display: "flex",
@@ -47,8 +48,8 @@ function StatCard({ icon, label, value, color, dark }) {
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>
+        <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
+        <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>
           {value}
         </div>
       </div>
@@ -67,6 +68,7 @@ export function GestionNotes({
   coursDisponibles,
 }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
   const [mode, setMode] = useState("individuel");
   const [editData, setEditData] = useState(null);
@@ -87,13 +89,13 @@ export function GestionNotes({
 
   if (!anneeId) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
-        <div style={{ background: cardBg, borderRadius: 16, padding: 48, textAlign: "center", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}` }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px" }}>
+        <div style={{ background: cardBg, borderRadius: 16, padding: isMobile ? 32 : 48, textAlign: "center", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}` }}>
           <BarChart3 size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
+          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: textSecondary, fontSize: 14 }}>
+          <p style={{ color: textSecondary, fontSize: isMobile ? 14 : 14 }}>
             Veuillez créer ou activer une année scolaire dans les paramètres.
           </p>
         </div>
@@ -255,24 +257,49 @@ export function GestionNotes({
     }
   };
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 14;
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const toolbarFlexDirection = isMobile ? "column" : "row";
+  const toolbarAlignItems = isMobile ? "stretch" : "center";
+  const toolbarGap = isMobile ? 8 : 12;
+  const searchInputPadding = isMobile ? "12px 12px 12px 34px" : "10px 12px 10px 34px";
+  const searchInputFontSize = isMobile ? 16 : 14;
+  const selectPadding = isMobile ? "12px 14px" : "10px 14px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const statGridCols = isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))";
+  const statGap = isMobile ? 8 : 12;
+  const subTabPadding = isMobile ? "10px 12px" : "12px 20px";
+  const subTabFontSize = isMobile ? 14 : 16;
+  const importCardPadding = isMobile ? 16 : 24;
+  const importButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const importButtonFontSize = isMobile ? 16 : 14;
+  const listCardPadding = isMobile ? "12px 14px" : "16px 20px";
+  const listCardFlexDirection = isMobile ? "column" : "row";
+  const listCardAlignItems = isMobile ? "stretch" : "center";
+  const listCardGap = isMobile ? 8 : 0;
+  const actionButtonsContainer = isMobile ? "row" : "row";
+
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-          <ClipboardList size={28} color={accent} />
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          <ClipboardList size={isMobile ? 24 : 28} color={accent} />
           Gestion des notes
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           {notes.length} note(s) {anneeActive ? `· ${anneeActive.nom}` : ""}
         </p>
       </div>
 
       {/* Barre d'outils : recherche, filtres, tri */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24, alignItems: "center" }}>
-        <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+      <div style={{ display: "flex", flexDirection: toolbarFlexDirection, flexWrap: "wrap", gap: toolbarGap, marginBottom: headerMarginBottom, alignItems: toolbarAlignItems }}>
+        <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 200 }}>
           <Search size={18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
           <input
             type="text"
@@ -281,13 +308,14 @@ export function GestionNotes({
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 12px 10px 34px",
+              padding: searchInputPadding,
               borderRadius: 8,
               border: `1px solid ${cardBorder}`,
               background: inputBg,
               color: inputText,
-              fontSize: 14,
+              fontSize: searchInputFontSize,
               outline: "none",
+              boxSizing: "border-box",
             }}
           />
         </div>
@@ -296,13 +324,14 @@ export function GestionNotes({
           value={categorieFilter}
           onChange={(e) => setCategorieFilter(e.target.value)}
           style={{
-            padding: "10px 14px",
+            padding: selectPadding,
             borderRadius: 8,
             border: `1px solid ${cardBorder}`,
             background: inputBg,
             color: inputText,
-            fontSize: 14,
+            fontSize: selectFontSize,
             cursor: "pointer",
+            width: isMobile ? "100%" : "auto",
           }}
         >
           <option value="toutes">Toutes catégories</option>
@@ -312,43 +341,59 @@ export function GestionNotes({
           <option value="exercice">Exercice</option>
         </select>
 
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <button onClick={() => toggleSort("eleve")} style={{ padding: "8px 12px", border: `1px solid ${cardBorder}`, borderRadius: 8, background: "transparent", color: textPrimary, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
-            Élève {sortKey === "eleve" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-          </button>
-          <button onClick={() => toggleSort("note")} style={{ padding: "8px 12px", border: `1px solid ${cardBorder}`, borderRadius: 8, background: "transparent", color: textPrimary, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
-            Note {sortKey === "note" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-          </button>
-          <button onClick={() => toggleSort("matiere")} style={{ padding: "8px 12px", border: `1px solid ${cardBorder}`, borderRadius: 8, background: "transparent", color: textPrimary, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
-            Matière {sortKey === "matiere" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-          </button>
-          <button onClick={() => toggleSort("periode")} style={{ padding: "8px 12px", border: `1px solid ${cardBorder}`, borderRadius: 8, background: "transparent", color: textPrimary, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
-            Période {sortKey === "periode" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-          </button>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+          {[
+            { key: "eleve", label: "Élève" },
+            { key: "note", label: "Note" },
+            { key: "matiere", label: "Matière" },
+            { key: "periode", label: "Période" },
+          ].map((btn) => (
+            <button
+              key={btn.key}
+              onClick={() => toggleSort(btn.key)}
+              style={{
+                padding: isMobile ? "10px 12px" : "8px 12px",
+                border: `1px solid ${cardBorder}`,
+                borderRadius: 8,
+                background: "transparent",
+                color: textPrimary,
+                cursor: "pointer",
+                fontSize: isMobile ? 14 : 13,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                flex: isMobile ? 1 : "none",
+                justifyContent: "center",
+              }}
+            >
+              {btn.label} {sortKey === btn.key && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Statistiques rapides */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
-        <StatCard icon={<ClipboardList size={20} />} label="Notes" value={stats.total} color="#4F46E5" dark={dark} />
-        <StatCard icon={<BarChart3 size={20} />} label="Moyenne" value={stats.moyenne} color="#10B981" dark={dark} />
-        <StatCard icon={<BookOpen size={20} />} label="Devoirs" value={stats.parCategorie["devoir"] || 0} color="#F59E0B" dark={dark} />
-        <StatCard icon={<BookOpen size={20} />} label="Examens" value={stats.parCategorie["examen"] || 0} color="#EF4444" dark={dark} />
-        <StatCard icon={<BookOpen size={20} />} label="Interrogations" value={stats.parCategorie["interrogation"] || 0} color="#8B5CF6" dark={dark} />
-        <StatCard icon={<BookOpen size={20} />} label="Exercice" value={stats.parCategorie["exercice"] || 0} color="#0f1190" dark={dark} />
+      <div style={{ display: "grid", gridTemplateColumns: statGridCols, gap: statGap, marginBottom: headerMarginBottom }}>
+        <StatCard icon={<ClipboardList size={20} />} label="Notes" value={stats.total} color="#4F46E5" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<BarChart3 size={20} />} label="Moyenne" value={stats.moyenne} color="#10B981" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<BookOpen size={20} />} label="Devoirs" value={stats.parCategorie["devoir"] || 0} color="#F59E0B" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<BookOpen size={20} />} label="Examens" value={stats.parCategorie["examen"] || 0} color="#EF4444" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<BookOpen size={20} />} label="Interrogations" value={stats.parCategorie["interrogation"] || 0} color="#8B5CF6" dark={dark} isMobile={isMobile} />
+        <StatCard icon={<BookOpen size={20} />} label="Exercice" value={stats.parCategorie["exercice"] || 0} color="#0f1190" dark={dark} isMobile={isMobile} />
       </div>
 
       {/* Onglets pour mode d'ajout */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: headerMarginBottom, overflowX: "auto", whiteSpace: "nowrap" }}>
         <button
           onClick={() => { setMode("individuel"); setEditData(null); }}
           style={{
             display: "flex", alignItems: "center", gap: 6,
-            padding: "12px 20px", border: "none", background: "transparent",
+            padding: subTabPadding, border: "none", background: "transparent",
             color: mode === "individuel" ? accent : textSecondary,
             fontWeight: mode === "individuel" ? 600 : 400,
             borderBottom: mode === "individuel" ? `3px solid ${accent}` : "3px solid transparent",
             cursor: "pointer", transition: "all 0.2s",
+            fontSize: subTabFontSize, flexShrink: 0,
           }}
         >
           <Users size={18} /> Ajout individuel
@@ -357,11 +402,12 @@ export function GestionNotes({
           onClick={() => { setMode("groupe"); setEditData(null); }}
           style={{
             display: "flex", alignItems: "center", gap: 6,
-            padding: "12px 20px", border: "none", background: "transparent",
+            padding: subTabPadding, border: "none", background: "transparent",
             color: mode === "groupe" ? accent : textSecondary,
             fontWeight: mode === "groupe" ? 600 : 400,
             borderBottom: mode === "groupe" ? `3px solid ${accent}` : "3px solid transparent",
             cursor: "pointer", transition: "all 0.2s",
+            fontSize: subTabFontSize, flexShrink: 0,
           }}
         >
           <GraduationCap size={18} /> Ajout groupé
@@ -382,6 +428,7 @@ export function GestionNotes({
           onSuccess={() => setEditData(null)}
           coursDisponibles={coursDisponibles}
           dark={dark}
+          isMobile={isMobile}
         />
       ) : (
         <AddNoteGroupe
@@ -394,12 +441,13 @@ export function GestionNotes({
           userId={user?._id}
           coursDisponibles={coursDisponibles}
           dark={dark}
+          isMobile={isMobile}
         />
       )}
 
       {/* Import Excel */}
-      <div style={{ background: cardBg, borderRadius: 16, padding: 24, margin: "24px 0", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}` }}>
-        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8, color: textPrimary }}>
+      <div style={{ background: cardBg, borderRadius: 16, padding: importCardPadding, margin: "24px 0", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}` }}>
+        <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8, color: textPrimary }}>
           <FileSpreadsheet size={20} /> Importer des résultats depuis Excel
         </h3>
         <input
@@ -416,13 +464,15 @@ export function GestionNotes({
             color: "white",
             border: "none",
             borderRadius: 10,
-            padding: "10px 20px",
+            padding: importButtonPadding,
             fontWeight: 600,
             cursor: "pointer",
-            fontSize: 14,
+            fontSize: importButtonFontSize,
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
+            width: isMobile ? "100%" : "auto",
           }}
         >
           <Upload size={16} /> Sélectionner un fichier Excel
@@ -433,9 +483,9 @@ export function GestionNotes({
       </div>
 
       {/* Liste des notes filtrées et triées */}
-      <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
         {notesFiltrees.length === 0 && (
-          <div style={{ background: cardBg, borderRadius: 16, padding: 48, textAlign: "center", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}`, color: textSecondary }}>
+          <div style={{ background: cardBg, borderRadius: 16, padding: isMobile ? 32 : 48, textAlign: "center", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}`, color: textSecondary }}>
             <BarChart3 size={32} style={{ marginBottom: 8 }} />
             <p>{searchTerm || categorieFilter !== "toutes" ? "Aucune note ne correspond aux filtres." : "Aucune note enregistrée"}</p>
           </div>
@@ -444,18 +494,32 @@ export function GestionNotes({
           const eleve = eleves.find((e) => e._id === n.eleveId);
           const bareme = getBareme(n.matiere);
           return (
-            <div key={n._id} style={{ background: cardBg, borderRadius: 12, padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}`, transition: "box-shadow 0.15s, background-color 0.3s" }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = dark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.08)"}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)"}
+            <div
+              key={n._id}
+              style={{
+                background: cardBg,
+                borderRadius: 12,
+                padding: listCardPadding,
+                display: "flex",
+                flexDirection: listCardFlexDirection,
+                justifyContent: "space-between",
+                alignItems: listCardAlignItems,
+                gap: listCardGap,
+                boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+                border: `1px solid ${cardBorder}`,
+                transition: "box-shadow 0.15s, background-color 0.3s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.boxShadow = dark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.08)")}
+              onMouseLeave={(e) => (e.currentTarget.style.boxShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)")}
             >
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 16, color: textPrimary }}>
                   {eleve?.nom} {eleve?.postnom} {eleve?.prenom && `(${eleve.prenom})`}
                 </div>
-                <div style={{ color: textSecondary, fontSize: 13 }}>
+                <div style={{ color: textSecondary, fontSize: isMobile ? 13 : 13 }}>
                   {n.matiere} — {n.periode} (coeff. {n.coefficient}) · Catégorie : {n.categorie || "—"}
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: textPrimary }}>
+                <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, marginTop: 4, color: textPrimary }}>
                   {n.note}/{bareme}
                 </div>
                 {n.appreciation && (
@@ -464,10 +528,10 @@ export function GestionNotes({
                   </div>
                 )}
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, flexDirection: actionButtonsContainer }}>
                 <button
                   onClick={() => { setEditData(n); setMode("individuel"); }}
-                  style={{ background: accent, color: "white", border: "none", borderRadius: 8, padding: "8px", cursor: "pointer" }}
+                  style={{ background: accent, color: "white", border: "none", borderRadius: 8, padding: isMobile ? "10px 12px" : "8px", cursor: "pointer" }}
                   title="Modifier la note"
                 >
                   <Edit2 size={16} />
@@ -484,7 +548,7 @@ export function GestionNotes({
                       }
                     }
                   }}
-                  style={{ background: "none", border: "none", color: danger, cursor: "pointer", padding: 8, borderRadius: 8 }}
+                  style={{ background: "none", border: "none", color: danger, cursor: "pointer", padding: isMobile ? "10px 12px" : "8px", borderRadius: 8 }}
                   title="Supprimer la note"
                 >
                   <Trash2 size={16} />
@@ -513,6 +577,7 @@ function AddNoteIndividuel({
   onSuccess,
   coursDisponibles,
   dark,
+  isMobile,
 }) {
   const [selectedEleve, setSelectedEleve] = useState(initialData?.eleveId || "");
   const [matiere, setMatiere] = useState(initialData?.matiere || matiereFixe || "");
@@ -607,34 +672,44 @@ function AddNoteIndividuel({
 
   const inputStyle = (hasError = false) => ({
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${hasError ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`,
     borderRadius: 10,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     marginBottom: 12,
     outline: "none",
     background: dark ? "#0F172A" : "#F8FAFC",
     color: dark ? "#F1F5F9" : "#1E293B",
     transition: "border-color 0.2s, background-color 0.3s",
+    boxSizing: "border-box",
   });
+
+  const cardPadding = isMobile ? 16 : 24;
+  const titleSize = isMobile ? 16 : 18;
+  const labelSize = isMobile ? 15 : 14;
+  const gridColumns = isMobile ? "1fr" : "1fr 1fr";
+  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const buttonFlexDirection = isMobile ? "column" : "row";
+  const buttonWidth = isMobile ? "100%" : "auto";
 
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 16,
-      padding: 24,
+      padding: cardPadding,
       boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
       marginBottom: 24,
       border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     }}>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
         {editId ? "Modifier la note" : "Ajouter une note individuelle"}
       </h3>
 
       <form onSubmit={handleSubmit}>
         {/* Sélection de l'élève avec recherche */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
             Élève <span style={{ color: "#EF4444" }}>*</span>
           </label>
           {!selectedEleve ? (
@@ -679,6 +754,7 @@ function AddNoteIndividuel({
                         background: "transparent",
                         color: dark ? "#F1F5F9" : "#1E293B",
                         cursor: "pointer",
+                        fontSize: isMobile ? 14 : 14,
                       }}
                     >
                       {e.nom} {e.postnom} {e.prenom} <span style={{ color: dark ? "#94A3B8" : "#64748B" }}>({e.classe})</span>
@@ -690,14 +766,14 @@ function AddNoteIndividuel({
           ) : (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 10, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }}>
               <span>{eleves.find((e) => e._id === selectedEleve)?.nom} {eleves.find((e) => e._id === selectedEleve)?.postnom} ({eleves.find((e) => e._id === selectedEleve)?.classe})</span>
-              <button type="button" onClick={() => { setSelectedEleve(""); setSearchEleve(""); }} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer" }}>Changer</button>
+              <button type="button" onClick={() => { setSelectedEleve(""); setSearchEleve(""); }} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: isMobile ? 14 : 14 }}>Changer</button>
             </div>
           )}
         </div>
 
         {/* Matière */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
             Matière <span style={{ color: "#EF4444" }}>*</span>
           </label>
           <input
@@ -714,9 +790,9 @@ function AddNoteIndividuel({
         </div>
 
         {/* Note et coefficient */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
               Note (/{bareme}) <span style={{ color: "#EF4444" }}>*</span>
             </label>
             <input
@@ -736,7 +812,7 @@ function AddNoteIndividuel({
             )}
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
               Coefficient
             </label>
             <input
@@ -752,9 +828,9 @@ function AddNoteIndividuel({
         </div>
 
         {/* Catégorie et période */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
               Catégorie
             </label>
             <select
@@ -769,7 +845,7 @@ function AddNoteIndividuel({
             </select>
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
               Période <span style={{ color: "#EF4444" }}>*</span>
             </label>
             <input
@@ -783,7 +859,7 @@ function AddNoteIndividuel({
 
         {/* Appréciation */}
         <div>
-          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
             Appréciation (optionnel)
           </label>
           <input
@@ -795,15 +871,17 @@ function AddNoteIndividuel({
         </div>
 
         {/* Boutons */}
-        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 20, flexDirection: buttonFlexDirection }}>
           <button
             type="submit"
             disabled={submitting}
             style={{
               background: submitting ? "#A5B4FC" : (dark ? "#818CF8" : "#4F46E5"),
               color: "white", border: "none", borderRadius: 10,
-              padding: "10px 20px", fontWeight: 600, cursor: "pointer",
-              flex: 1, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+              padding: buttonPadding, fontWeight: 600, cursor: "pointer",
+              flex: isMobile ? "none" : 1, fontSize: buttonFontSize,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              width: buttonWidth,
             }}
           >
             {submitting && <Loader size={16} className="animate-spin" />}
@@ -813,7 +891,7 @@ function AddNoteIndividuel({
             <button
               type="button"
               onClick={resetForm}
-              style={{ background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 10, padding: "10px 20px", cursor: "pointer", color: dark ? "#F1F5F9" : "#1E293B" }}
+              style={{ background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 10, padding: buttonPadding, cursor: "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: buttonFontSize, width: buttonWidth }}
             >
               Annuler
             </button>
@@ -835,6 +913,7 @@ function AddNoteGroupe({
   userId,
   coursDisponibles,
   dark,
+  isMobile,
 }) {
   const [selectedEleveIds, setSelectedEleveIds] = useState([]);
   const [bulkMatiere, setBulkMatiere] = useState(matiereFixe || "");
@@ -927,60 +1006,71 @@ function AddNoteGroupe({
 
   const inputStyle = (hasError = false) => ({
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${hasError ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`,
     borderRadius: 10,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     marginBottom: 12,
     outline: "none",
     background: dark ? "#0F172A" : "#F8FAFC",
     color: dark ? "#F1F5F9" : "#1E293B",
     transition: "border-color 0.2s, background-color 0.3s",
+    boxSizing: "border-box",
   });
+
+  const cardPadding = isMobile ? 16 : 24;
+  const titleSize = isMobile ? 16 : 18;
+  const labelSize = isMobile ? 15 : 14;
+  const filtersFlexDirection = isMobile ? "column" : "row";
+  const filtersGap = isMobile ? 8 : 12;
+  const checkboxSize = isMobile ? 18 : 16;
+  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const gridColumns = isMobile ? "1fr" : "1fr 1fr";
 
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 16,
-      padding: 24,
+      padding: cardPadding,
       boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
       marginBottom: 24,
       border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     }}>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
         Ajouter des notes groupées
       </h3>
 
       {/* Filtre par classe et recherche */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: filtersGap, marginBottom: 16, flexWrap: "wrap", flexDirection: filtersFlexDirection }}>
         <select
           value={classeFilter}
           onChange={(e) => setClasseFilter(e.target.value)}
-          style={{ flex: 1, minWidth: 150, padding: "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }}
+          style={{ flex: 1, minWidth: isMobile ? "100%" : 150, padding: isMobile ? "12px 14px" : "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 16 : 14 }}
         >
           <option value="">Toutes les classes</option>
           {classesDisponibles.map((c) => <option key={c} value={c} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c}</option>)}
         </select>
-        <div style={{ position: "relative", flex: 2, minWidth: 200 }}>
+        <div style={{ position: "relative", flex: 2, minWidth: isMobile ? "100%" : 200 }}>
           <input
             type="text"
             placeholder="Rechercher un élève..."
             value={searchEleve}
             onChange={(e) => setSearchEleve(e.target.value)}
-            style={{ width: "100%", padding: "10px 14px 10px 34px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }}
+            style={{ width: "100%", padding: isMobile ? "12px 14px 12px 34px" : "10px 14px 10px 34px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 16 : 14 }}
           />
           <Search size={18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
         </div>
       </div>
 
       {/* Liste des élèves */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ fontWeight: 500, fontSize: 14, color: dark ? "#CBD5E1" : "#374151" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexDirection: isMobile ? "column" : "row", gap: 8 }}>
+        <span style={{ fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
           Élèves concernés
         </span>
         <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={selectAll} style={{ background: "none", border: "none", color: dark ? "#818CF8" : "#4F46E5", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Tout sélectionner</button>
-          <button type="button" onClick={deselectAll} style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Désélectionner</button>
+          <button type="button" onClick={selectAll} style={{ background: "none", border: "none", color: dark ? "#818CF8" : "#4F46E5", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Tout sélectionner</button>
+          <button type="button" onClick={deselectAll} style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Désélectionner</button>
         </div>
       </div>
       <div style={{
@@ -998,7 +1088,7 @@ function AddNoteGroupe({
         {elevesFiltres.map((e) => (
           <label key={e._id} style={{
             display: "flex", alignItems: "center", gap: 8,
-            padding: "6px 8px", fontSize: 14, cursor: "pointer",
+            padding: "6px 8px", fontSize: isMobile ? 15 : 14, cursor: "pointer",
             borderRadius: 6, transition: "background 0.1s",
             background: selectedEleveIds.includes(e._id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent",
           }}>
@@ -1006,7 +1096,7 @@ function AddNoteGroupe({
               type="checkbox"
               checked={selectedEleveIds.includes(e._id)}
               onChange={() => toggleEleve(e._id)}
-              style={{ width: 16, height: 16, accentColor: dark ? "#818CF8" : "#4F46E5" }}
+              style={{ width: checkboxSize, height: checkboxSize, accentColor: dark ? "#818CF8" : "#4F46E5" }}
             />
             <span style={{ color: dark ? "#F1F5F9" : "#1E293B" }}>{e.nom} {e.postnom} {e.prenom} ({e.classe})</span>
           </label>
@@ -1016,9 +1106,9 @@ function AddNoteGroupe({
 
       {/* Formulaire de saisie */}
       <form onSubmit={handleSubmit}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Matière</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Matière</label>
             <input
               value={bulkMatiere}
               onChange={(e) => setBulkMatiere(e.target.value)}
@@ -1030,7 +1120,7 @@ function AddNoteGroupe({
             <datalist id="matieres-bulk">{matieresUtilisees.map((m) => <option key={m} value={m} />)}</datalist>
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>
               Note (/{bareme})
             </label>
             <input
@@ -1045,7 +1135,7 @@ function AddNoteGroupe({
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Coefficient</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Coefficient</label>
             <input
               type="number"
               step="0.5"
@@ -1057,7 +1147,7 @@ function AddNoteGroupe({
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Période</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Période</label>
             <input
               value={bulkPeriode}
               onChange={(e) => setBulkPeriode(e.target.value)}
@@ -1067,9 +1157,9 @@ function AddNoteGroupe({
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Catégorie</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Catégorie</label>
             <select
               value={bulkCategorie}
               onChange={(e) => setBulkCategorie(e.target.value)}
@@ -1082,7 +1172,7 @@ function AddNoteGroupe({
             </select>
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Appréciation (optionnel)</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Appréciation (optionnel)</label>
             <input
               value={bulkAppreciation}
               onChange={(e) => setBulkAppreciation(e.target.value)}
@@ -1097,8 +1187,8 @@ function AddNoteGroupe({
           disabled={submitting || selectedEleveIds.length === 0 || !bulkMatiere || !bulkNote || !bulkPeriode}
           style={{
             background: submitting ? "#A5B4FC" : (dark ? "#818CF8" : "#4F46E5"),
-            color: "white", border: "none", borderRadius: 10, padding: "10px 20px",
-            fontWeight: 600, cursor: "pointer", width: "100%", fontSize: 14,
+            color: "white", border: "none", borderRadius: 10, padding: buttonPadding,
+            fontWeight: 600, cursor: "pointer", width: "100%", fontSize: buttonFontSize,
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8
           }}
         >

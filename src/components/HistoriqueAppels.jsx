@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import toast from "react-hot-toast";
 import {
   MessageCircle,
@@ -16,6 +17,7 @@ import {
 
 export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const historyQuery = useQuery(api.appels.listHistory, { userId: user._id });
   const utilisateursQuery = useQuery(
@@ -35,7 +37,6 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
   const success = dark ? "#34D399" : "#10B981";
   const accent = dark ? "#818CF8" : "#4F46E5";
   const danger = dark ? "#F87171" : "#EF4444";
-  const warning = dark ? "#FBBF24" : "#F59E0B";
 
   const getUserName = (userId) => {
     const u = utilisateurs.find((u) => u._id === userId);
@@ -44,8 +45,6 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
 
   const handleCallBack = async (contactId) => {
     try {
-      // Si l'utilisateur est participant d'un groupe, on ne peut pas rappeler directement un contact
-      // On lance un appel direct audio par défaut
       await createCall({
         calleeId: contactId,
         ecoleId,
@@ -78,23 +77,23 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
 
   const getCallTypeIcon = (call) => {
     if (call.isGroup) {
-      return <Users size={16} color={accent} />;
+      return <Users size={isMobile ? 16 : 16} color={accent} />;
     } else if (call.type === "video") {
-      return <Video size={16} color={accent} />;
+      return <Video size={isMobile ? 16 : 16} color={accent} />;
     } else {
-      return <Phone size={16} color={accent} />;
+      return <Phone size={isMobile ? 16 : 16} color={accent} />;
     }
   };
 
   const getCallStatusIcon = (call) => {
     const isOutgoing = call.callerId === user._id;
     if (call.status === "missed") {
-      return <PhoneMissed size={18} color={danger} />;
+      return <PhoneMissed size={isMobile ? 20 : 18} color={danger} />;
     }
     if (isOutgoing) {
-      return <PhoneOutgoing size={18} color={success} />;
+      return <PhoneOutgoing size={isMobile ? 20 : 18} color={success} />;
     }
-    return <PhoneIncoming size={18} color={accent} />;
+    return <PhoneIncoming size={isMobile ? 20 : 18} color={accent} />;
   };
 
   const getCallStatusText = (call) => {
@@ -129,14 +128,26 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
 
   if (finishedCalls.length === 0) {
     return (
-      <p style={{ color: textSecondary, fontSize: 14, marginTop: 16 }}>
+      <p style={{ color: textSecondary, fontSize: isMobile ? 14 : 14, marginTop: 16 }}>
         Aucun appel récent.
       </p>
     );
   }
 
+  // Styles adaptatifs
+  const rowFlexDirection = isMobile ? "column" : "row";
+  const rowAlignItems = isMobile ? "stretch" : "center";
+  const rowPadding = isMobile ? "10px 12px" : "12px 16px";
+  const rowGap = isMobile ? 8 : 12;
+  const contactNameSize = isMobile ? 15 : 16;
+  const secondaryTextSize = isMobile ? 12 : 13;
+  const actionButtonPadding = isMobile ? 6 : 4;
+  const actionButtonSize = isMobile ? 20 : 20;
+  const metaGap = isMobile ? 4 : 6;
+  const metaFlexWrap = isMobile ? "wrap" : "nowrap";
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 4, marginTop: 16 }}>
       {finishedCalls.map((call) => {
         const partnerId = getCallPartnerId(call);
         const partnerName = partnerId ? getUserName(partnerId) : "Appel de groupe";
@@ -152,27 +163,37 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
             key={call._id}
             style={{
               display: "flex",
-              alignItems: "center",
+              flexDirection: rowFlexDirection,
+              alignItems: rowAlignItems,
               justifyContent: "space-between",
-              padding: "12px 16px",
+              padding: rowPadding,
               background: cardBg,
               borderRadius: 8,
               border: dark ? `1px solid ${borderColor}` : "none",
+              gap: rowGap,
               transition: "background-color 0.3s, border-color 0.3s",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
               {/* Icône de statut (entrant/sortant/manqué) */}
               {getCallStatusIcon(call)}
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontWeight: 600, color: textPrimary }}>{partnerName}</span>
-                  {/* Icône de type (audio/vidéo/groupe) */}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 600, color: textPrimary, fontSize: contactNameSize, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {partnerName}
+                  </span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     {getCallTypeIcon(call)}
                   </span>
                 </div>
-                <div style={{ fontSize: 13, color: textSecondary, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{
+                  fontSize: secondaryTextSize,
+                  color: textSecondary,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: metaGap,
+                  flexWrap: metaFlexWrap,
+                }}>
                   <span>{getCallStatusText(call)}</span>
                   <span>·</span>
                   <span>{dateStr}</span>
@@ -190,7 +211,7 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
                 </div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-end" : "flex-start", flexShrink: 0 }}>
               {partnerId && (
                 <button
                   onClick={() => onNavigateToMessaging && onNavigateToMessaging(partnerId)}
@@ -199,14 +220,14 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
                     border: "none",
                     cursor: "pointer",
                     color: textSecondary,
-                    padding: 4,
+                    padding: actionButtonPadding,
                     display: "flex",
                     alignItems: "center",
                     borderRadius: 6,
                   }}
                   title={`Message à ${partnerName}`}
                 >
-                  <MessageCircle size={20} />
+                  <MessageCircle size={actionButtonSize} />
                 </button>
               )}
               {partnerId && (
@@ -217,14 +238,14 @@ export function HistoriqueAppels({ user, ecoleId, anneeId, onNavigateToMessaging
                     border: "none",
                     cursor: "pointer",
                     color: accent,
-                    padding: 4,
+                    padding: actionButtonPadding,
                     display: "flex",
                     alignItems: "center",
                     borderRadius: 6,
                   }}
                   title={`Rappeler ${partnerName}`}
                 >
-                  <Phone size={20} />
+                  <Phone size={actionButtonSize} />
                 </button>
               )}
             </div>

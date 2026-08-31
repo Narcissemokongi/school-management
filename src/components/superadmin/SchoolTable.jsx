@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 
 export function SchoolTable({
   ecoles,
@@ -21,6 +22,7 @@ export function SchoolTable({
   pageSize = 10,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "nom", direction: "asc" });
@@ -30,7 +32,6 @@ export function SchoolTable({
   const [editNom, setEditNom] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Gestion du chargement
   if (ecoles === undefined) {
     return <TableSkeleton dark={dark} />;
   }
@@ -70,7 +71,7 @@ export function SchoolTable({
   const allVisibleSelected = paginatedData.length > 0 && paginatedData.every((e) => selectedIds.has(e._id));
 
   const requestSort = (key) => {
-    setCurrentPage(1); // Réinitialiser la page lors d'un changement de tri
+    setCurrentPage(1);
     if (sortConfig.key === key) {
       setSortConfig({ key, direction: sortConfig.direction === "asc" ? "desc" : "asc" });
     } else {
@@ -124,9 +125,7 @@ export function SchoolTable({
     }
   };
 
-  // Export CSV avec option de sélection
   const exportCSV = () => {
-    // Si une sélection existe, on n'exporte que la sélection
     const dataToExport = selectedIds.size > 0
       ? filteredAndSorted.filter((e) => selectedIds.has(e._id))
       : filteredAndSorted;
@@ -178,6 +177,15 @@ export function SchoolTable({
     );
   };
 
+  // Styles adaptatifs
+  const headerPadding = isMobile ? "10px 12px" : "12px 16px";
+  const cellPadding = isMobile ? "10px 8px" : "14px 16px";
+  const tableMinWidth = isMobile ? 600 : 700;
+  const actionButtonPadding = isMobile ? "8px 10px" : "6px 12px";
+  const actionIconSize = isMobile ? 18 : 16;
+  const paginationButtonPadding = isMobile ? "8px 12px" : "6px 12px";
+  const paginationFontSize = isMobile ? 14 : 13;
+
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
@@ -194,35 +202,38 @@ export function SchoolTable({
         .skeleton-cell { background: ${dark ? "#334155" : "#E2E8F0"}; border-radius: 4px; animation: pulse 1.5s ease-in-out infinite; }
         @media (max-width: 600px) {
           .hide-mobile { display: none !important; }
+          .hide-on-small { display: none !important; }
         }
       `}</style>
 
       {/* Barre supérieure */}
       <div style={{
-        padding: "12px 16px",
+        padding: headerPadding,
         borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "#F1F5F9"}`,
         display: "flex",
         alignItems: "center",
         gap: 8,
         flexWrap: "wrap",
       }}>
-        <Search size={16} color={dark ? "#94A3B8" : "#64748B"} />
+        <Search size={isMobile ? 18 : 16} color={dark ? "#94A3B8" : "#64748B"} />
         <input
           value={searchTerm}
           onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
           placeholder="Rechercher dans le tableau..."
           style={{
             border: "none", outline: "none", background: "transparent",
-            color: dark ? "#F1F5F9" : "#1E293B", fontSize: 14, flex: 1, minWidth: 150,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            fontSize: isMobile ? 16 : 14,
+            flex: 1, minWidth: 100,
           }}
           aria-label="Rechercher une école"
         />
         {searchTerm && (
           <button onClick={() => { setSearchTerm(""); setCurrentPage(1); }} style={{ background: "none", border: "none", cursor: "pointer" }} aria-label="Effacer la recherche">
-            <X size={16} color={dark ? "#94A3B8" : "#64748B"} />
+            <X size={isMobile ? 18 : 16} color={dark ? "#94A3B8" : "#64748B"} />
           </button>
         )}
-        <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B", whiteSpace: "nowrap" }}>
           {filteredAndSorted.length} école(s)
           {selectable && selectedIds.size > 0 && (
             <span> · {selectedIds.size} sélectionnée(s)</span>
@@ -235,26 +246,26 @@ export function SchoolTable({
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
-            padding: "6px 10px",
+            padding: isMobile ? "8px 10px" : "6px 10px",
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 6,
             background: "transparent",
             color: dark ? "#94A3B8" : "#64748B",
             cursor: "pointer",
-            fontSize: 13,
+            fontSize: isMobile ? 14 : 13,
           }}
         >
-          <Download size={16} /> CSV
+          <Download size={isMobile ? 18 : 16} /> CSV
         </button>
       </div>
 
       {/* Tableau */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: tableMinWidth }}>
           <thead>
             <tr style={{ background: dark ? "#0F172A" : "#F8FAFC" }}>
               {selectable && (
-                <th style={{ padding: "14px 12px", width: 40 }}>
+                <th style={{ padding: cellPadding, width: 40 }}>
                   <button
                     onClick={() => onToggleSelectAll && onToggleSelectAll(paginatedData.map((e) => e._id))}
                     disabled={!onToggleSelectAll}
@@ -269,15 +280,15 @@ export function SchoolTable({
                     }}
                     aria-label={allVisibleSelected ? "Tout désélectionner" : "Tout sélectionner"}
                   >
-                    {allVisibleSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+                    {allVisibleSelected ? <CheckSquare size={isMobile ? 20 : 18} /> : <Square size={isMobile ? 20 : 18} />}
                   </button>
                 </th>
               )}
               {[
-                { key: "nom", label: "École", align: "left" },
-                { key: "code", label: "Code", align: "left" },
-                { key: "userCount", label: "Utilisateurs", align: "center" },
-                { key: "statut", label: "Statut", align: "center" },
+                { key: "nom", label: "École", align: "left", className: "" },
+                { key: "code", label: "Code", align: "left", className: isMobile ? "hide-on-small" : "" },
+                { key: "userCount", label: "Utilisateurs", align: "center", className: isMobile ? "hide-on-small" : "" },
+                { key: "statut", label: "Statut", align: "center", className: "" },
                 { key: "creationTime", label: "Créée le", align: "center", className: "hide-mobile" },
               ].map((col) => (
                 <th
@@ -293,8 +304,8 @@ export function SchoolTable({
                   role="button"
                   style={{
                     textAlign: col.align,
-                    padding: "14px 16px",
-                    fontSize: 13,
+                    padding: cellPadding,
+                    fontSize: isMobile ? 12 : 13,
                     fontWeight: 600,
                     color: dark ? "#94A3B8" : "#64748B",
                     cursor: "pointer",
@@ -303,7 +314,7 @@ export function SchoolTable({
                     outline: "none",
                   }}
                   aria-sort={sortConfig.key === col.key ? (sortConfig.direction === "asc" ? "ascending" : "descending") : "none"}
-                  className={col.className || ""}
+                  className={col.className}
                 >
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                     {col.label}
@@ -311,7 +322,7 @@ export function SchoolTable({
                   </span>
                 </th>
               ))}
-              <th style={{ textAlign: "center", padding: "14px 16px", fontSize: 13, fontWeight: 600, color: dark ? "#94A3B8" : "#64748B" }}>Actions</th>
+              <th style={{ textAlign: "center", padding: cellPadding, fontSize: isMobile ? 12 : 13, fontWeight: 600, color: dark ? "#94A3B8" : "#64748B" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -330,7 +341,7 @@ export function SchoolTable({
                 onClick={() => { if (editingId !== ecole._id) onSelectEcole(ecole._id); }}
               >
                 {selectable && (
-                  <td style={{ padding: "14px 12px", width: 40 }} onClick={(e) => e.stopPropagation()}>
+                  <td style={{ padding: cellPadding, width: 40 }} onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => onToggleSelect && onToggleSelect(ecole._id)}
                       style={{
@@ -342,19 +353,19 @@ export function SchoolTable({
                       }}
                       aria-label={selectedIds.has(ecole._id) ? "Désélectionner" : "Sélectionner"}
                     >
-                      {selectedIds.has(ecole._id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                      {selectedIds.has(ecole._id) ? <CheckSquare size={isMobile ? 20 : 18} /> : <Square size={isMobile ? 20 : 18} />}
                     </button>
                   </td>
                 )}
 
-                <td style={{ padding: "14px 16px", fontWeight: 500 }}>
+                <td style={{ padding: cellPadding, fontWeight: 500 }}>
                   {editingId === ecole._id ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <input
                         value={editNom}
                         onChange={(e) => setEditNom(e.target.value)}
                         style={{
-                          fontSize: 14, padding: "4px 8px",
+                          fontSize: isMobile ? 14 : 14, padding: "4px 8px",
                           border: `1px solid ${dark ? "#818CF8" : "#4F46E5"}`,
                           borderRadius: 6,
                           background: dark ? "#0F172A" : "#F9FAFB",
@@ -365,10 +376,10 @@ export function SchoolTable({
                         aria-label="Nouveau nom de l'école"
                       />
                       <button onClick={(e) => { e.stopPropagation(); handleSaveNom(ecole._id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#10B981" }} title="Enregistrer">
-                        <Save size={16} />
+                        <Save size={actionIconSize} />
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }} title="Annuler">
-                        <X size={16} />
+                        <X size={actionIconSize} />
                       </button>
                     </div>
                   ) : (
@@ -376,38 +387,38 @@ export function SchoolTable({
                   )}
                 </td>
 
-                <td style={{ padding: "14px 16px" }}>
+                <td style={{ padding: cellPadding }} className={isMobile ? "hide-on-small" : ""}>
                   <span style={{
                     background: dark ? "#0F172A" : "#F1F5F9",
                     padding: "2px 10px", borderRadius: 20,
-                    fontFamily: "monospace", fontSize: 13,
+                    fontFamily: "monospace", fontSize: isMobile ? 12 : 13,
                     display: "inline-flex", alignItems: "center", gap: 6,
                     color: dark ? "#E2E8F0" : "#1E293B",
                   }}>
                     {ecole.code || "N/A"}
                     {ecole.code && (
                       <button onClick={(e) => { e.stopPropagation(); copyCode(ecole.code); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} title="Copier le code">
-                        <Copy size={14} color={dark ? "#94A3B8" : "#64748B"} />
+                        <Copy size={isMobile ? 14 : 14} color={dark ? "#94A3B8" : "#64748B"} />
                       </button>
                     )}
                   </span>
                 </td>
 
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>{ecole.userCount ?? 0}</td>
+                <td style={{ padding: cellPadding, textAlign: "center" }} className={isMobile ? "hide-on-small" : ""}>{ecole.userCount ?? 0}</td>
 
-                <td style={{ padding: "14px 16px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                <td style={{ padding: cellPadding, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
                   {renderStatusBadge(ecole.statut)}
                 </td>
 
-                <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }} className="hide-mobile">
+                <td style={{ padding: cellPadding, textAlign: "center", fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }} className="hide-mobile">
                   {ecole._creationTime ? new Date(ecole._creationTime).toLocaleDateString() : "N/A"}
                 </td>
 
-                <td style={{ padding: "14px 16px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                <td style={{ padding: cellPadding, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ display: "flex", gap: isMobile ? 4 : 8, justifyContent: "center", flexWrap: "wrap" }}>
                     {editingId !== ecole._id && (
-                      <button onClick={() => startEdit(ecole)} style={{ background: "none", border: "none", cursor: "pointer", color: dark ? "#818CF8" : "#4F46E5", padding: 8, borderRadius: 8 }} title="Modifier le nom">
-                        <Edit2 size={16} />
+                      <button onClick={() => startEdit(ecole)} style={{ background: "none", border: "none", cursor: "pointer", color: dark ? "#818CF8" : "#4F46E5", padding: 4, borderRadius: 8 }} title="Modifier le nom">
+                        <Edit2 size={actionIconSize} />
                       </button>
                     )}
                     <button
@@ -417,17 +428,17 @@ export function SchoolTable({
                         display: "inline-flex", alignItems: "center", gap: 6,
                         background: ecole.statut === "active" ? "#EF4444" : "#10B981",
                         color: "white", border: "none", borderRadius: 6,
-                        padding: "6px 12px", cursor: togglingId === ecole._id ? "not-allowed" : "pointer",
-                        fontSize: 13, fontWeight: 500, opacity: togglingId === ecole._id ? 0.7 : 1,
+                        padding: actionButtonPadding, cursor: togglingId === ecole._id ? "not-allowed" : "pointer",
+                        fontSize: isMobile ? 12 : 13, fontWeight: 500, opacity: togglingId === ecole._id ? 0.7 : 1,
                       }}
                       title={ecole.statut === "active" ? "Suspendre l'école" : "Réactiver l'école"}
                     >
                       {togglingId === ecole._id ? (
-                        <Loader size={16} className="animate-spin" />
+                        <Loader size={actionIconSize} className="animate-spin" />
                       ) : ecole.statut === "active" ? (
-                        <ShieldOff size={16} />
+                        <ShieldOff size={actionIconSize} />
                       ) : (
-                        <ShieldCheck size={16} />
+                        <ShieldCheck size={actionIconSize} />
                       )}
                       {togglingId === ecole._id ? "..." : ecole.statut === "active" ? "Suspendre" : "Réactiver"}
                     </button>
@@ -437,7 +448,7 @@ export function SchoolTable({
                       style={{ background: "none", border: "none", cursor: deletingId === ecole._id ? "not-allowed" : "pointer", color: "#EF4444", opacity: deletingId === ecole._id ? 0.7 : 1 }}
                       title="Supprimer"
                     >
-                      {deletingId === ecole._id ? <Loader size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                      {deletingId === ecole._id ? <Loader size={actionIconSize} className="animate-spin" /> : <Trash2 size={actionIconSize} />}
                     </button>
                   </div>
                 </td>
@@ -456,7 +467,7 @@ export function SchoolTable({
 
       {/* Pagination + infos */}
       <div style={{
-        padding: "12px 16px",
+        padding: headerPadding,
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -464,30 +475,30 @@ export function SchoolTable({
         flexWrap: "wrap",
         gap: 8,
       }}>
-        <span style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>
+        <span style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>
           {filteredAndSorted.length > 0
             ? `Affichage ${((safeCurrentPage - 1) * pageSize) + 1}–${Math.min(safeCurrentPage * pageSize, filteredAndSorted.length)} sur ${filteredAndSorted.length}`
             : "Aucune école"
           }
         </span>
         {totalPages > 1 && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: isMobile ? 4 : 8, alignItems: "center" }}>
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={safeCurrentPage === 1}
-              style={{ padding: "6px 12px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer", opacity: safeCurrentPage === 1 ? 0.5 : 1 }}
+              style={{ padding: paginationButtonPadding, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer", opacity: safeCurrentPage === 1 ? 0.5 : 1, fontSize: paginationFontSize }}
             >
-              <ChevronLeft size={16} /> Précédent
+              <ChevronLeft size={isMobile ? 18 : 16} /> Précédent
             </button>
-            <span style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>
+            <span style={{ fontSize: paginationFontSize, color: dark ? "#94A3B8" : "#64748B" }}>
               Page {safeCurrentPage} / {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={safeCurrentPage === totalPages}
-              style={{ padding: "6px 12px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer", opacity: safeCurrentPage === totalPages ? 0.5 : 1 }}
+              style={{ padding: paginationButtonPadding, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer", opacity: safeCurrentPage === totalPages ? 0.5 : 1, fontSize: paginationFontSize }}
             >
-              Suivant <ChevronRight size={16} />
+              Suivant <ChevronRight size={isMobile ? 18 : 16} />
             </button>
           </div>
         )}
@@ -496,7 +507,7 @@ export function SchoolTable({
   );
 }
 
-// Composant squelette pour le chargement
+// Composant squelette pour le chargement (inchangé)
 function TableSkeleton({ dark }) {
   const rows = [1, 2, 3, 4, 5];
   return (

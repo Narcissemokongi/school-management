@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Layout } from "./Layout";
 import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { MessagerieApp } from "./messagerie/MessagerieApp";
@@ -12,7 +13,7 @@ import { FraisEnfant } from "./FraisEnfant";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useAppStore } from "../store/appStore";
 import {
   Home, BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, TrendingUp, DollarSign, Clock,
@@ -22,7 +23,9 @@ import { ConsultationExamens } from "./ConsultationExamens";
 
 // ---- Composant ClassementEleve adaptatif ----
 function ClassementEleve({ ecoleId, anneeId, classe, eleveId }) {
-  const { dark } = useStyles(); // ✅ récupère le mode sombre/clair
+  const { dark } = useStyles();
+  const isMobile = useIsMobile(); // <-- Hook mobile
+
   const classement = useQuery(
     api.classement.getClassement,
     (ecoleId && anneeId && classe) ? { ecoleId, anneeId, classe } : "skip"
@@ -52,8 +55,8 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId }) {
   const top3 = classement.slice(0, 3);
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }}>
-      <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, marginBottom: 24 }}>
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+      <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: textPrimary, marginBottom: isMobile ? 16 : 24 }}>
         Mon classement
       </h2>
 
@@ -61,54 +64,54 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId }) {
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 20,
+        padding: isMobile ? 14 : 20,
         boxShadow: shadow,
-        marginBottom: 32,
+        marginBottom: isMobile ? 20 : 32,
         display: "flex",
         alignItems: "center",
-        gap: 16,
+        gap: isMobile ? 10 : 16,
         borderLeft: `6px solid ${accent}`,
         border: `1px solid ${cardBorder}`,
       }}>
-        <Trophy size={40} color={accent} />
+        <Trophy size={isMobile ? 30 : 40} color={accent} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 18, color: textPrimary }}>{eleve.nom} {eleve.postnom}</div>
-          <div style={{ color: textSecondary, fontSize: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: isMobile ? 16 : 18, color: textPrimary }}>{eleve.nom} {eleve.postnom}</div>
+          <div style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
             Rang : <strong>{eleve.rang}</strong> / {classement.length}
           </div>
-          <div style={{ color: accent, fontWeight: 600, fontSize: 13, marginTop: 4 }}>
+          <div style={{ color: accent, fontWeight: 600, fontSize: isMobile ? 12 : 13, marginTop: 4 }}>
             {mention || "Aucune mention"}
           </div>
         </div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: accent }}>
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: accent }}>
           {eleve.moyenneGenerale.toFixed(1)}%
         </div>
       </div>
 
       {/* Top 3 */}
-      <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: textPrimary }}>Top 3 de la classe</h3>
-      <div style={{ display: "grid", gap: 12 }}>
+      <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: isMobile ? 12 : 16, color: textPrimary }}>Top 3 de la classe</h3>
+      <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
         {top3.map((e, idx) => {
           const couleurs = ["#FFD700", "#C0C0C0", "#CD7F32"];
-          const icones = [<Trophy size={24} />, <Medal size={24} />, <Star size={24} />];
+          const icones = [<Trophy size={isMobile ? 20 : 24} />, <Medal size={isMobile ? 20 : 24} />, <Star size={isMobile ? 20 : 24} />];
           return (
             <div key={e._id} style={{
               background: cardBg,
               borderRadius: 12,
-              padding: 16,
+              padding: isMobile ? 12 : 16,
               display: "flex",
               alignItems: "center",
-              gap: 12,
+              gap: isMobile ? 8 : 12,
               boxShadow: shadow,
               border: `1px solid ${cardBorder}`,
               borderLeft: `6px solid ${couleurs[idx]}`,
             }}>
               <div style={{ color: couleurs[idx] }}>{icones[idx]}</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, color: textPrimary }}>{e.nom} {e.postnom}</div>
-                <div style={{ fontSize: 13, color: textSecondary }}>Moyenne : {e.moyenneGenerale.toFixed(1)}%</div>
+                <div style={{ fontWeight: 600, color: textPrimary, fontSize: isMobile ? 14 : 16 }}>{e.nom} {e.postnom}</div>
+                <div style={{ fontSize: isMobile ? 12 : 13, color: textSecondary }}>Moyenne : {e.moyenneGenerale.toFixed(1)}%</div>
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: couleurs[idx] }}>#{e.rang}</div>
+              <div style={{ fontSize: isMobile ? 18 : 24, fontWeight: 800, color: couleurs[idx] }}>#{e.rang}</div>
             </div>
           );
         })}
@@ -128,6 +131,7 @@ export function EleveApp({
   handleLogout,
 }) {
   const { S } = useStyles();
+  const isMobile = useIsMobile(); // <-- Hook mobile
 
   // Onglet actif et contact de messagerie depuis le store
   const tab = useAppStore((state) => state.eleveTab);
@@ -177,9 +181,9 @@ export function EleveApp({
   // État de chargement
   if (eleve === undefined) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-        <GraduationCap size={48} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+        <GraduationCap size={isMobile ? 40 : 48} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 16 }} />
+        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
           Chargement de votre profil…
         </h2>
       </div>
@@ -189,12 +193,12 @@ export function EleveApp({
   // Aucun élève associé
   if (eleve === null) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-        <GraduationCap size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+        <GraduationCap size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
+        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
           Aucun élève associé à ce compte
         </h2>
-        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
           Veuillez contacter l'administration pour associer votre compte à un élève.
         </p>
       </div>
@@ -217,12 +221,12 @@ export function EleveApp({
   const renderContent = () => {
     if (!anneeId && (tab === "accueil" || tab === "notes" || tab === "absences" || tab === "emploi")) {
       return (
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-          <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+          <Calendar size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
+          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
             Veuillez contacter l'administration pour activer une année scolaire.
           </p>
         </div>
@@ -232,32 +236,32 @@ export function EleveApp({
     switch (tab) {
       case "accueil":
         return (
-          <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
-            <div style={{ marginBottom: 32 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+            <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+              <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
                 👋 Bonjour, {eleve.nom}
               </h2>
-              <p style={{ color: dark ? "#94A3B8" : "#64748B", marginTop: 4, fontSize: 14 }}>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
                 Classe {eleve.classe} · {anneeActive?.nom}
               </p>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 32 }}>
-              <StatCard icon={<BookOpen size={24} />} value={totalNotes} label="Notes" color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
-              <StatCard icon={<Award size={24} />} value={matieresAvecNotes} label="Matières" color="#10B981" dark={dark} />
-              <StatCard icon={<AlertTriangle size={24} />} value={absencesCount} label="Absences" color="#EF4444" dark={dark} />
-              <StatCard icon={<Clock size={24} />} value={retardsCount} label="Retards" color="#F59E0B" dark={dark} />
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))", gap: isMobile ? 12 : 16, marginBottom: isMobile ? 20 : 32 }}>
+              <StatCard icon={<BookOpen size={isMobile ? 20 : 24} />} value={totalNotes} label="Notes" color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
+              <StatCard icon={<Award size={isMobile ? 20 : 24} />} value={matieresAvecNotes} label="Matières" color="#10B981" dark={dark} />
+              <StatCard icon={<AlertTriangle size={isMobile ? 20 : 24} />} value={absencesCount} label="Absences" color="#EF4444" dark={dark} />
+              <StatCard icon={<Clock size={isMobile ? 20 : 24} />} value={retardsCount} label="Retards" color="#F59E0B" dark={dark} />
               {moyenneGenerale !== "-" && (
-                <StatCard icon={<TrendingUp size={24} />} value={`${moyenneGenerale}/20`} label="Moyenne générale" color="#6366F1" dark={dark} />
+                <StatCard icon={<TrendingUp size={isMobile ? 20 : 24} />} value={`${moyenneGenerale}/20`} label="Moyenne générale" color="#6366F1" dark={dark} />
               )}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
-              <QuickAccessCard icon={<BookOpen size={28} />} title="Notes" subtitle="Consulter vos résultats" onClick={() => setTab("notes")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
-              <QuickAccessCard icon={<Calendar size={28} />} title="Emploi du temps" subtitle="Voir les horaires" onClick={() => setTab("emploi")} color="#10B981" dark={dark} />
-              <QuickAccessCard icon={<DollarSign size={28} />} title="Frais" subtitle="Suivre vos paiements" onClick={() => setTab("frais")} color="#F59E0B" dark={dark} />
-              <QuickAccessCard icon={<FileText size={28} />} title="Bulletin" subtitle="Votre bulletin scolaire" onClick={() => setTab("bulletin")} color="#6366F1" dark={dark} />
-              <QuickAccessCard icon={<Award size={28} />} title="Classement" subtitle="Voir votre rang" onClick={() => setTab("classement")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))", gap: isMobile ? 12 : 16, marginBottom: isMobile ? 20 : 32 }}>
+              <QuickAccessCard icon={<BookOpen size={isMobile ? 24 : 28} />} title="Notes" subtitle="Consulter vos résultats" onClick={() => setTab("notes")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
+              <QuickAccessCard icon={<Calendar size={isMobile ? 24 : 28} />} title="Emploi du temps" subtitle="Voir les horaires" onClick={() => setTab("emploi")} color="#10B981" dark={dark} />
+              <QuickAccessCard icon={<DollarSign size={isMobile ? 24 : 28} />} title="Frais" subtitle="Suivre vos paiements" onClick={() => setTab("frais")} color="#F59E0B" dark={dark} />
+              <QuickAccessCard icon={<FileText size={isMobile ? 24 : 28} />} title="Bulletin" subtitle="Votre bulletin scolaire" onClick={() => setTab("bulletin")} color="#6366F1" dark={dark} />
+              <QuickAccessCard icon={<Award size={isMobile ? 24 : 28} />} title="Classement" subtitle="Voir votre rang" onClick={() => setTab("classement")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
             </div>
           </div>
         );
@@ -265,20 +269,20 @@ export function EleveApp({
       case "notes":
         if (notes.length === 0) {
           return (
-            <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-              <BookOpen size={48} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 16 }} />
-              <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+            <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+              <BookOpen size={isMobile ? 40 : 48} color={dark ? "#94A3B8" : "#94A3B8"} style={{ marginBottom: 16 }} />
+              <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
                 Aucune note disponible
               </h2>
-              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
                 Vos notes seront affichées ici dès qu'elles seront saisies par vos enseignants.
               </p>
             </div>
           );
         }
         return (
-          <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
-            <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 24 }}>Mes notes</h2>
+          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+            <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: isMobile ? 16 : 24 }}>Mes notes</h2>
             {Array.from(new Set(notes.map((n) => n.periode)))
               .sort()
               .map((periode) => {
@@ -291,24 +295,24 @@ export function EleveApp({
                       ).toFixed(2)
                     : "-";
                 return (
-                  <div key={periode} style={{ marginBottom: 24 }}>
+                  <div key={periode} style={{ marginBottom: isMobile ? 16 : 24 }}>
                     <div style={{
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      padding: "12px 16px",
+                      padding: isMobile ? "10px 12px" : "12px 16px",
                       background: dark ? "#0F172A" : "#F8FAFC",
                       borderRadius: 8,
-                      marginBottom: 12,
+                      marginBottom: isMobile ? 8 : 12,
                     }}>
-                      <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+                      <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
                         {periode}
                       </h3>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: dark ? "#818CF8" : "#4F46E5" }}>
+                      <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: dark ? "#818CF8" : "#4F46E5" }}>
                         Moyenne {moyennePeriode}/20
                       </span>
                     </div>
-                    <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ display: "grid", gap: isMobile ? 6 : 8 }}>
                       {notesPeriode.map((n) => (
                         <div
                           key={n._id}
@@ -316,7 +320,7 @@ export function EleveApp({
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
-                            padding: "10px 14px",
+                            padding: isMobile ? "8px 12px" : "10px 14px",
                             background: dark ? "#1E293B" : "#FFFFFF",
                             borderRadius: 8,
                             boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.04)" : "0 1px 2px rgba(0,0,0,0.04)",
@@ -324,14 +328,14 @@ export function EleveApp({
                           }}
                         >
                           <div>
-                            <div style={{ fontWeight: 500, fontSize: 15, color: dark ? "#F1F5F9" : "#1E293B" }}>{n.matiere}</div>
-                            <div style={{ fontSize: 12, color: dark ? "#94A3B8" : "#64748B" }}>Coeff. {n.coefficient}</div>
+                            <div style={{ fontWeight: 500, fontSize: isMobile ? 14 : 15, color: dark ? "#F1F5F9" : "#1E293B" }}>{n.matiere}</div>
+                            <div style={{ fontSize: isMobile ? 11 : 12, color: dark ? "#94A3B8" : "#64748B" }}>Coeff. {n.coefficient}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             {n.appreciation && (
-                              <span style={{ fontSize: 12, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>{n.appreciation}</span>
+                              <span style={{ fontSize: isMobile ? 11 : 12, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>{n.appreciation}</span>
                             )}
-                            <span style={{ fontWeight: 700, fontSize: 16, color: dark ? "#F1F5F9" : "#1E293B" }}>{n.note}/20</span>
+                            <span style={{ fontWeight: 700, fontSize: isMobile ? 14 : 16, color: dark ? "#F1F5F9" : "#1E293B" }}>{n.note}/20</span>
                           </div>
                         </div>
                       ))}
@@ -345,23 +349,23 @@ export function EleveApp({
       case "absences":
         if (absences.length === 0) {
           return (
-            <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-              <AlertTriangle size={48} color="#10B981" style={{ marginBottom: 16 }} />
-              <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+            <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+              <AlertTriangle size={isMobile ? 40 : 48} color="#10B981" style={{ marginBottom: 16 }} />
+              <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
                 Aucune absence ou retard
               </h2>
-              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
                 Félicitations ! Vous êtes assidu(e).
               </p>
             </div>
           );
         }
         return (
-          <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
-            <h2 style={{ fontSize: 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 24 }}>
+          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+            <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: isMobile ? 16 : 24 }}>
               Absences & Retards
             </h2>
-            <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: isMobile ? 6 : 8 }}>
               {absences
                 .sort((a, b) => new Date(b.date) - new Date(a.date))
                 .map((a) => (
@@ -371,7 +375,7 @@ export function EleveApp({
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      padding: "12px 16px",
+                      padding: isMobile ? "8px 12px" : "12px 16px",
                       background: dark ? "#1E293B" : "#FFFFFF",
                       borderRadius: 8,
                       boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.04)" : "0 1px 2px rgba(0,0,0,0.04)",
@@ -383,7 +387,7 @@ export function EleveApp({
                         style={{
                           padding: "4px 10px",
                           borderRadius: 12,
-                          fontSize: 12,
+                          fontSize: isMobile ? 11 : 12,
                           fontWeight: 600,
                           background: a.type === "absence" ? (dark ? "#7F1D1D" : "#FEE2E2") : (dark ? "#78350F" : "#FEF3C7"),
                           color: a.type === "absence" ? (dark ? "#F87171" : "#B91C1C") : (dark ? "#FBBF24" : "#92400E"),
@@ -391,10 +395,10 @@ export function EleveApp({
                       >
                         {a.type === "absence" ? "Absence" : "Retard"}
                       </span>
-                      <span style={{ fontSize: 14, fontWeight: 500, color: dark ? "#F1F5F9" : "#1E293B" }}>{a.date}</span>
+                      <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 500, color: dark ? "#F1F5F9" : "#1E293B" }}>{a.date}</span>
                     </div>
                     {a.commentaire && (
-                      <span style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>
+                      <span style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>
                         {a.commentaire}
                       </span>
                     )}
@@ -478,12 +482,12 @@ export function EleveApp({
         <div style={{
           background: dark ? "#78350F" : "#FEF3C7",
           color: dark ? "#FBBF24" : "#92400E",
-          padding: "10px 20px",
-          fontSize: 13,
+          padding: isMobile ? "10px 12px" : "10px 20px",
+          fontSize: isMobile ? 12 : 13,
           fontWeight: 500,
           textAlign: "center",
           borderRadius: "0 0 12px 12px",
-          margin: "0 24px 16px",
+          margin: isMobile ? "0 12px 12px" : "0 24px 16px",
         }}>
           ⚠️ Aucune année scolaire active. Certaines données sont indisponibles.
         </div>
@@ -495,20 +499,22 @@ export function EleveApp({
 
 // ---- Composants utilitaires adaptatifs ----
 function StatCard({ icon, value, label, color, dark }) {
+  const isMobile = useIsMobile(); // <-- Hook mobile
+
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 16,
-      padding: 20,
+      padding: isMobile ? 14 : 20,
       display: "flex",
       alignItems: "center",
-      gap: 16,
+      gap: isMobile ? 12 : 16,
       boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
       border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     }}>
       <div style={{
-        width: 48,
-        height: 48,
+        width: isMobile ? 40 : 48,
+        height: isMobile ? 40 : 48,
         background: `${color}${dark ? "33" : "15"}`,
         borderRadius: 12,
         display: "flex",
@@ -519,21 +525,23 @@ function StatCard({ icon, value, label, color, dark }) {
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
-        <div style={{ fontSize: 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
+        <div style={{ fontSize: isMobile ? 18 : 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
+        <div style={{ fontSize: isMobile ? 12 : 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
       </div>
     </div>
   );
 }
 
 function QuickAccessCard({ icon, title, subtitle, onClick, color, dark }) {
+  const isMobile = useIsMobile(); // <-- Hook mobile
+
   return (
     <div
       onClick={onClick}
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 16,
-        padding: 20,
+        padding: isMobile ? 14 : 20,
         textAlign: "center",
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
@@ -550,8 +558,8 @@ function QuickAccessCard({ icon, title, subtitle, onClick, color, dark }) {
       }}
     >
       <div style={{
-        width: 56,
-        height: 56,
+        width: isMobile ? 48 : 56,
+        height: isMobile ? 48 : 56,
         borderRadius: 14,
         background: `${color}${dark ? "33" : "15"}`,
         display: "flex",
@@ -562,10 +570,10 @@ function QuickAccessCard({ icon, title, subtitle, onClick, color, dark }) {
       }}>
         {icon}
       </div>
-      <div style={{ fontWeight: 600, fontSize: 16, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 4 }}>
+      <div style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 4 }}>
         {title}
       </div>
-      <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>
+      <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>
         {subtitle}
       </div>
     </div>

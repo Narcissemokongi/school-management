@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 
 export function Skeleton({
   width = "100%",
@@ -15,6 +16,8 @@ export function Skeleton({
   className,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -27,6 +30,11 @@ export function Skeleton({
 
   const shouldAnimate = animated && !reduceMotion;
 
+  // Ajustements automatiques pour mobile
+  const effectiveGap = isMobile ? Math.min(gap, 6) : gap;
+  const effectivePadding = isMobile ? 10 : 12;
+  const effectiveBorderRadius = isMobile ? 6 : borderRadius;
+
   const baseColor = dark ? "#334155" : "#E2E8F0";
   const highlightColor = dark ? "#475569" : "#F1F5F9";
 
@@ -34,7 +42,7 @@ export function Skeleton({
     background: `linear-gradient(90deg, ${baseColor} 25%, ${highlightColor} 50%, ${baseColor} 75%)`,
     backgroundSize: "200% 100%",
     animation: shouldAnimate ? `shimmer ${speed}s infinite` : "none",
-    borderRadius,
+    borderRadius: effectiveBorderRadius,
   };
 
   // Rendu d'un rectangle simple
@@ -52,7 +60,7 @@ export function Skeleton({
 
   // Rendu d'une ligne de texte (width par défaut 100%, dernière plus courte)
   const renderTextLines = () => (
-    <div style={{ display: "flex", flexDirection: "column", gap, width }} role="status" aria-busy="true">
+    <div style={{ display: "flex", flexDirection: "column", gap: effectiveGap, width }} role="status" aria-busy="true">
       {Array.from({ length: lines }).map((_, index) => (
         <div
           key={index}
@@ -74,9 +82,9 @@ export function Skeleton({
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: 12,
-        padding: 16,
-        borderRadius: 12,
+        gap: effectiveGap,
+        padding: effectivePadding,
+        borderRadius: effectiveBorderRadius + 4,
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         background: dark ? "#1E293B" : "#FFFFFF",
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
@@ -87,7 +95,7 @@ export function Skeleton({
       aria-busy="true"
     >
       <div style={{ width: "100%", height: height * 3, ...shimmerStyle }} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: effectiveGap }}>
         <div style={{ width: "80%", height: height * 0.7, ...shimmerStyle }} />
         <div style={{ width: "60%", height: height * 0.7, ...shimmerStyle }} />
       </div>
@@ -96,22 +104,22 @@ export function Skeleton({
 
   // Rendu d'une liste d'éléments
   const renderList = () => (
-    <div style={{ display: "flex", flexDirection: "column", gap, width }} role="status" aria-busy="true">
+    <div style={{ display: "flex", flexDirection: "column", gap: effectiveGap, width }} role="status" aria-busy="true">
       {Array.from({ length: count }).map((_, idx) => (
         <div
           key={idx}
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            padding: 12,
-            borderRadius,
+            gap: effectiveGap,
+            padding: effectivePadding,
+            borderRadius: effectiveBorderRadius,
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             background: dark ? "#1E293B" : "#FFFFFF",
             ...style,
           }}
         >
-          <div style={{ width: 32, height: 32, borderRadius: "50%", ...shimmerStyle }} />
+          <div style={{ width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, borderRadius: "50%", ...shimmerStyle }} />
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ width: "70%", height: height * 0.6, ...shimmerStyle }} />
             <div style={{ width: "40%", height: height * 0.5, ...shimmerStyle }} />
@@ -128,7 +136,7 @@ export function Skeleton({
         <thead>
           <tr>
             {Array.from({ length: lines }).map((_, idx) => (
-              <th key={idx} style={{ padding: 8, borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
+              <th key={idx} style={{ padding: effectivePadding, borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
                 <div style={{ width: "80%", height: height * 0.6, ...shimmerStyle }} />
               </th>
             ))}
@@ -138,7 +146,7 @@ export function Skeleton({
           {Array.from({ length: count }).map((_, rowIdx) => (
             <tr key={rowIdx}>
               {Array.from({ length: lines }).map((_, colIdx) => (
-                <td key={colIdx} style={{ padding: 8, borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
+                <td key={colIdx} style={{ padding: effectivePadding, borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
                   <div style={{ width: colIdx === lines - 1 ? "60%" : "90%", height: height * 0.6, ...shimmerStyle }} />
                 </td>
               ))}
@@ -170,9 +178,9 @@ export function Skeleton({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 12,
-        padding: 12,
-        borderRadius,
+        gap: effectiveGap,
+        padding: effectivePadding,
+        borderRadius: effectiveBorderRadius,
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         background: dark ? "#1E293B" : "#FFFFFF",
         width,
@@ -181,7 +189,7 @@ export function Skeleton({
       role="status"
       aria-busy="true"
     >
-      <div style={{ width: 32, height: 32, borderRadius: "50%", ...shimmerStyle }} />
+      <div style={{ width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, borderRadius: "50%", ...shimmerStyle }} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ width: "70%", height: height * 0.6, ...shimmerStyle }} />
         <div style={{ width: "40%", height: height * 0.5, ...shimmerStyle }} />
@@ -191,7 +199,7 @@ export function Skeleton({
 
   switch (variant) {
     case "circle":
-      return renderAvatar(); // cercle simple
+      return renderAvatar();
     case "text":
       return renderTextLines();
     case "card":

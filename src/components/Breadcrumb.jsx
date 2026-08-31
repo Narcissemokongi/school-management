@@ -1,26 +1,32 @@
 import { ChevronRight, Home, MoreHorizontal } from "lucide-react";
 import { useStyles } from "../styles/theme";
 import { useState, useEffect } from "react";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 
 export function Breadcrumb({
   items = [],
   onNavigate,
   onNavigateHome,
   separator = <ChevronRight size={14} />,
-  maxItems = 6,             // nombre max d'items avant troncature
+  maxItems = 6,
   homeIcon = <Home size={16} />,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const mutedColor = dark ? "#94A3B8" : "#64748B";
   const activeColor = dark ? "#F1F5F9" : "#1E293B";
   const hoverColor = dark ? "#CBD5E1" : "#334155";
 
-  // Normaliser les items : chaîne ou objet
+  // Tailles adaptatives
+  const fontSize = isMobile ? 12 : 14;
+  const iconSize = isMobile ? 13 : 14;
+  const homeIconSize = isMobile ? 14 : 16;
+  const gap = isMobile ? 4 : 6;
+
+  // Normaliser les items
   const normalized = items.map((item) =>
-    typeof item === "string"
-      ? { label: item }
-      : item
+    typeof item === "string" ? { label: item } : item
   );
 
   // Troncature
@@ -43,13 +49,13 @@ export function Breadcrumb({
       border: "none",
       color: isLast ? activeColor : mutedColor,
       cursor: clickable ? "pointer" : "default",
-      fontSize: 14,
+      fontSize,
       fontWeight: isLast ? 600 : 400,
       whiteSpace: "nowrap",
       padding: 0,
       display: "inline-flex",
       alignItems: "center",
-      gap: 6,
+      gap: isMobile ? 4 : 6,
       transition: "color 0.2s",
       textDecoration: "none",
     };
@@ -64,7 +70,7 @@ export function Breadcrumb({
     if (item.truncateOnly) {
       return (
         <span style={{ color: mutedColor, display: "inline-flex", alignItems: "center" }}>
-          <MoreHorizontal size={14} />
+          <MoreHorizontal size={iconSize} />
         </span>
       );
     }
@@ -123,7 +129,8 @@ export function Breadcrumb({
           whiteSpace: "nowrap",
           display: "inline-flex",
           alignItems: "center",
-          gap: 6,
+          gap: isMobile ? 4 : 6,
+          fontSize,
         }}
         aria-current="page"
       >
@@ -134,13 +141,13 @@ export function Breadcrumb({
   };
 
   return (
-    <nav aria-label="Fil d'ariane" style={{ marginBottom: 16 }}>
+    <nav aria-label="Fil d'ariane" style={{ marginBottom: isMobile ? 12 : 16 }}>
       <ol
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 6,
-          fontSize: 14,
+          gap,
+          fontSize,
           color: mutedColor,
           flexWrap: "wrap",
           listStyle: "none",
@@ -176,8 +183,8 @@ export function Breadcrumb({
         {visibleItems.map((item, idx) => {
           const isLast = idx === visibleItems.length - 1;
           return (
-            <li key={idx} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span aria-hidden="true">{separator}</span>
+            <li key={idx} style={{ display: "flex", alignItems: "center", gap }}>
+              <span aria-hidden="true" style={{ fontSize: iconSize }}>{separator}</span>
               {renderItemContent(item, isLast)}
             </li>
           );

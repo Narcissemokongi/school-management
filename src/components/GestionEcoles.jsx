@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback, useDeferredValue } from "react";
+import { useState, useMemo, useCallback, useDeferredValue, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
@@ -15,7 +16,6 @@ import {
 } from "lucide-react";
 
 // ─── Sous-composants existants (StatutBadge, SearchBar, SortButton, EcoleCard modifiée, etc.) ───
-// (StatutBadge, SearchBar, SortButton inchangés – inclus pour compacité)
 const StatutBadge = ({ statut, dark }) => {
   const isActive = statut !== "suspendue";
   const badgeActiveBg = dark ? "#064E3B" : "#D1FAE5";
@@ -35,11 +35,12 @@ const StatutBadge = ({ statut, dark }) => {
   );
 };
 
-const SearchBar = ({ searchTerm, setSearchTerm, textSecondary, cardBg, cardBorder, textPrimary }) => (
+const SearchBar = ({ searchTerm, setSearchTerm, textSecondary, cardBg, cardBorder, textPrimary, isMobile }) => (
   <div style={{
     background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12,
-    padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
-    flex: 1, minWidth: 200,
+    padding: isMobile ? "10px 12px" : "8px 12px",
+    display: "flex", alignItems: "center", gap: 8,
+    flex: 1, minWidth: isMobile ? "100%" : 200,
   }}>
     <Search size={16} color={textSecondary} />
     <input
@@ -47,7 +48,7 @@ const SearchBar = ({ searchTerm, setSearchTerm, textSecondary, cardBg, cardBorde
       onChange={(e) => setSearchTerm(e.target.value)}
       placeholder="Rechercher une école..."
       aria-label="Rechercher une école"
-      style={{ border: "none", outline: "none", background: "transparent", color: textPrimary, fontSize: 14, width: "100%" }}
+      style={{ border: "none", outline: "none", background: "transparent", color: textPrimary, fontSize: isMobile ? 16 : 14, width: "100%" }}
     />
     {searchTerm && (
       <button onClick={() => setSearchTerm("")} aria-label="Effacer la recherche" style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}>
@@ -57,18 +58,20 @@ const SearchBar = ({ searchTerm, setSearchTerm, textSecondary, cardBg, cardBorde
   </div>
 );
 
-const SortButton = ({ label, field, currentSort, currentOrder, onClick, activeBg, activeText, textSecondary, cardBg, cardBorder }) => {
+const SortButton = ({ label, field, currentSort, currentOrder, onClick, activeBg, activeText, textSecondary, cardBg, cardBorder, isMobile }) => {
   const isActive = currentSort === field;
   return (
     <button
       onClick={() => onClick(field)}
       aria-label={`Trier par ${label}`}
       style={{
-        display: "flex", alignItems: "center", gap: 4,
-        padding: "8px 12px", background: isActive ? activeBg : cardBg,
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+        padding: isMobile ? "8px 10px" : "8px 12px",
+        background: isActive ? activeBg : cardBg,
         color: isActive ? activeText : textSecondary,
         border: `1px solid ${cardBorder}`, borderRadius: 8,
-        cursor: "pointer", fontSize: 13, fontWeight: isActive ? 600 : 400,
+        cursor: "pointer", fontSize: isMobile ? 13 : 13, fontWeight: isActive ? 600 : 400,
+        flex: isMobile ? 1 : "none",
       }}
     >
       {label}
@@ -77,19 +80,17 @@ const SortButton = ({ label, field, currentSort, currentOrder, onClick, activeBg
   );
 };
 
-// ─── Carte école (modifiée pour afficher le code et la sélection) ───
 const EcoleCard = ({
   ecole, editingId, editNom, setEditNom, startEdit, cancelEdit, handleUpdate,
   handleToggleStatus, handleDelete, onSelectEcole, togglingId, deletingId,
   dark, textPrimary, textSecondary, cardBg, cardBorder, inputBg,
-  accentColor, successColor, warningColor, dangerColor, badgeActiveBg, badgeActiveText,
-  selected, onToggleSelect,
+  accentColor, successColor, warningColor, dangerColor, selected, onToggleSelect, isMobile,
 }) => {
   const isEditing = editingId === ecole._id;
   return (
     <div
       style={{
-        background: cardBg, borderRadius: 16, padding: 20,
+        background: cardBg, borderRadius: 16, padding: isMobile ? 14 : 20,
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         border: `1px solid ${selected ? accentColor : cardBorder}`,
         transition: "box-shadow 0.2s, transform 0.1s, border-color 0.2s",
@@ -99,7 +100,6 @@ const EcoleCard = ({
       onMouseEnter={(e) => { e.currentTarget.style.boxShadow = dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.boxShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)"; e.currentTarget.style.transform = "translateY(0)"; }}
     >
-      {/* Case à cocher */}
       <button
         onClick={(e) => { e.stopPropagation(); onToggleSelect(ecole._id); }}
         style={{
@@ -135,10 +135,10 @@ const EcoleCard = ({
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingRight: 28 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingRight: isMobile ? 24 : 28, gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
               <Building2 size={20} color={accentColor} />
-              <span style={{ fontWeight: 700, fontSize: 16, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ecole.nom}</span>
+              <span style={{ fontWeight: 700, fontSize: isMobile ? 15 : 16, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ecole.nom}</span>
             </div>
             <StatutBadge statut={ecole.statut} dark={dark} />
           </div>
@@ -154,34 +154,36 @@ const EcoleCard = ({
             <span>{ecole.userCount ?? 0} utilisateur(s)</span>
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
+          <div style={{ display: "flex", gap: 8, marginTop: "auto", flexDirection: isMobile ? "column" : "row" }}>
             <button
               onClick={(e) => { e.stopPropagation(); onSelectEcole(ecole._id); }}
               aria-label={`Ouvrir ${ecole.nom}`}
-              style={{ flex: 1, padding: "8px 12px", background: accentColor, color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+              style={{ flex: 1, padding: isMobile ? "12px 12px" : "8px 12px", background: accentColor, color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
             >
               Ouvrir <ArrowRight size={14} />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); startEdit(ecole); }} aria-label="Modifier" title="Modifier" style={{ background: "transparent", border: "none", color: accentColor, cursor: "pointer", padding: 8, borderRadius: 8 }}>
-              <Edit2 size={16} />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleToggleStatus(ecole); }}
-              disabled={togglingId === ecole._id}
-              aria-label={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
-              title={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
-              style={{ background: "transparent", border: "none", color: ecole.statut === "suspendue" ? successColor : warningColor, cursor: togglingId === ecole._id ? "not-allowed" : "pointer", padding: 8, borderRadius: 8, opacity: togglingId === ecole._id ? 0.6 : 1 }}
-            >
-              {togglingId === ecole._id ? <Loader size={16} className="animate-spin" /> : ecole.statut === "suspendue" ? <Power size={16} /> : <Ban size={16} />}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDelete(ecole); }}
-              disabled={deletingId === ecole._id}
-              aria-label="Supprimer" title="Supprimer"
-              style={{ background: "transparent", border: "none", color: dangerColor, cursor: deletingId === ecole._id ? "not-allowed" : "pointer", padding: 8, borderRadius: 8, opacity: deletingId === ecole._id ? 0.6 : 1 }}
-            >
-              {deletingId === ecole._id ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
-            </button>
+            <div style={{ display: "flex", gap: 8, justifyContent: isMobile ? "space-between" : "flex-start" }}>
+              <button onClick={(e) => { e.stopPropagation(); startEdit(ecole); }} aria-label="Modifier" title="Modifier" style={{ background: "transparent", border: "none", color: accentColor, cursor: "pointer", padding: 8, borderRadius: 8 }}>
+                <Edit2 size={16} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleToggleStatus(ecole); }}
+                disabled={togglingId === ecole._id}
+                aria-label={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
+                title={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
+                style={{ background: "transparent", border: "none", color: ecole.statut === "suspendue" ? successColor : warningColor, cursor: togglingId === ecole._id ? "not-allowed" : "pointer", padding: 8, borderRadius: 8, opacity: togglingId === ecole._id ? 0.6 : 1 }}
+              >
+                {togglingId === ecole._id ? <Loader size={16} className="animate-spin" /> : ecole.statut === "suspendue" ? <Power size={16} /> : <Ban size={16} />}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDelete(ecole); }}
+                disabled={deletingId === ecole._id}
+                aria-label="Supprimer" title="Supprimer"
+                style={{ background: "transparent", border: "none", color: dangerColor, cursor: deletingId === ecole._id ? "not-allowed" : "pointer", padding: 8, borderRadius: 8, opacity: deletingId === ecole._id ? 0.6 : 1 }}
+              >
+                {deletingId === ecole._id ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -189,13 +191,12 @@ const EcoleCard = ({
   );
 };
 
-// ─── Vue liste (extraite) ───
 const EcoleListView = ({
   ecoles, editingId, editNom, setEditNom, startEdit, cancelEdit, handleUpdate,
   handleToggleStatus, handleDelete, onSelectEcole, togglingId, deletingId,
   dark, textPrimary, textSecondary, cardBg, cardBorder, inputBg,
   accentColor, successColor, warningColor, dangerColor,
-  selectedIds, onToggleSelect,
+  selectedIds, onToggleSelect, isMobile,
 }) => (
   <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
     {ecoles.map((ecole) => (
@@ -206,9 +207,10 @@ const EcoleListView = ({
           borderRadius: 12, padding: 12,
           display: "flex", alignItems: "center", justifyContent: "space-between",
           flexWrap: "wrap", gap: 8, width: "100%",
+          flexDirection: isMobile ? "column" : "row",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: isMobile ? "100%" : 200 }}>
           <button
             onClick={() => onToggleSelect(ecole._id)}
             style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: selectedIds.has(ecole._id) ? accentColor : textSecondary }}
@@ -217,11 +219,11 @@ const EcoleListView = ({
             {selectedIds.has(ecole._id) ? <CheckSquare size={18} /> : <Square size={18} />}
           </button>
           <Building2 size={18} color={accentColor} />
-          <span style={{ fontWeight: 600, color: textPrimary }}>{ecole.nom}</span>
+          <span style={{ fontWeight: 600, color: textPrimary, fontSize: isMobile ? 15 : 16 }}>{ecole.nom}</span>
           {ecole.code && <span style={{ fontFamily: "monospace", fontSize: 12, color: textSecondary }}>({ecole.code})</span>}
           <StatutBadge statut={ecole.statut} dark={dark} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: isMobile ? "center" : "flex-start" }}>
           <span style={{ color: textSecondary, fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
             <Users size={14} /> {ecole.userCount ?? 0}
           </span>
@@ -270,14 +272,13 @@ const EcoleListView = ({
   </div>
 );
 
-// ─── Composant de pagination ───
-const PaginationControls = ({ currentPage, totalPages, onPageChange, textPrimary, textSecondary, borderColor }) => (
+const PaginationControls = ({ currentPage, totalPages, onPageChange, textPrimary, textSecondary, borderColor, isMobile }) => (
   <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16, width: "100%" }}>
     <button
       onClick={() => onPageChange(Math.max(1, currentPage - 1))}
       disabled={currentPage === 1}
       aria-label="Page précédente"
-      style={{ padding: "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === 1 ? "not-allowed" : "pointer", color: textPrimary }}
+      style={{ padding: isMobile ? "8px 12px" : "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === 1 ? "not-allowed" : "pointer", color: textPrimary }}
     >
       <ChevronLeft size={16} />
     </button>
@@ -288,16 +289,16 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange, textPrimary
       onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
       disabled={currentPage === totalPages}
       aria-label="Page suivante"
-      style={{ padding: "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === totalPages ? "not-allowed" : "pointer", color: textPrimary }}
+      style={{ padding: isMobile ? "8px 12px" : "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === totalPages ? "not-allowed" : "pointer", color: textPrimary }}
     >
       <ChevronRight size={16} />
     </button>
   </div>
 );
 
-// ─── Composant principal enrichi ───
 export function GestionEcoles({ onSelectEcole, user }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // <-- Hook mobile
   const { confirm, dialogProps } = useConfirm();
 
   // États existants
@@ -320,7 +321,6 @@ export function GestionEcoles({ onSelectEcole, user }) {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const pageSize = 10;
 
-  // Recherche différée
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
   const ecolesQuery = useQuery(api.ecoles.listWithUserCount);
@@ -372,12 +372,10 @@ export function GestionEcoles({ onSelectEcole, user }) {
   const safeCurrentPage = Math.min(currentPage, totalPages || 1);
   const paginatedEcoles = ecolesTriees.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
 
-  // Réinitialiser la page quand les filtres changent
   useEffect(() => {
     setCurrentPage(1);
   }, [deferredSearchTerm, filterStatut]);
 
-  // Sélection multiple
   const toggleSelectOne = useCallback((id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -403,7 +401,6 @@ export function GestionEcoles({ onSelectEcole, user }) {
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-  // Actions groupées
   const bulkSuspend = async () => {
     if (selectedIds.size === 0) return;
     const ok = await confirm("Suspendre les écoles sélectionnées", `Voulez-vous suspendre ${selectedIds.size} école(s) ?`);
@@ -452,7 +449,6 @@ export function GestionEcoles({ onSelectEcole, user }) {
     }
   };
 
-  // Handlers existants (inchangés, mais adaptés pour utiliser les callbacks)
   const toggleSort = useCallback((field) => {
     setSortBy((prevField) => {
       if (prevField === field) {
@@ -521,7 +517,6 @@ export function GestionEcoles({ onSelectEcole, user }) {
     } finally { setDeletingId(null); }
   }, [confirm, removeEcole, user._id]);
 
-  // Export Excel
   const handleExportExcel = useCallback(() => {
     if (ecolesTriees.length === 0) { toast.error("Aucune donnée à exporter"); return; }
     const data = ecolesTriees.map((e) => ({
@@ -552,12 +547,12 @@ export function GestionEcoles({ onSelectEcole, user }) {
   const badgeActiveText = dark ? "#34D399" : "#065F46";
 
   return (
-    <div style={{ width: "100%", maxWidth: "100%", margin: 0, padding: 0 }}>
+    <div style={{ width: "100%", maxWidth: "100%", margin: 0, padding: isMobile ? "16px 12px" : 0 }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ ...S.h2, color: textPrimary }}>Gestion des écoles</h2>
-        <p style={{ ...S.muted, color: textSecondary }}>
+        <h2 style={{ ...S.h2, color: textPrimary, fontSize: isMobile ? 20 : 24 }}>Gestion des écoles</h2>
+        <p style={{ ...S.muted, color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
           {isLoading ? "Chargement..." : `${ecolesTriees.length} école(s) affichée(s) sur ${stats.total} au total`}
         </p>
         <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
@@ -568,11 +563,11 @@ export function GestionEcoles({ onSelectEcole, user }) {
       </div>
 
       {/* Formulaire de création */}
-      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}`, transition: "background-color 0.3s" }}>
-        <div style={{ fontWeight: 700, marginBottom: 12, color: accentColor }}>➕ Créer une nouvelle école</div>
-        <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}`, transition: "background-color 0.3s", padding: isMobile ? 14 : 20 }}>
+        <div style={{ fontWeight: 700, marginBottom: 12, color: accentColor, fontSize: isMobile ? 15 : 16 }}>➕ Créer une nouvelle école</div>
+        <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
           <input
-            style={{ ...S.input, marginBottom: 0, flex: 1, minWidth: 180, background: inputBg, border: `1px solid ${cardBorder}`, color: textPrimary }}
+            style={{ ...S.input, marginBottom: 0, flex: 1, minWidth: isMobile ? "100%" : 180, background: inputBg, border: `1px solid ${cardBorder}`, color: textPrimary, padding: isMobile ? "12px 14px" : "10px 14px", fontSize: isMobile ? 16 : 14 }}
             placeholder="Nom de l'école"
             value={nouveauNom}
             onChange={(e) => setNouveauNom(e.target.value)}
@@ -582,7 +577,7 @@ export function GestionEcoles({ onSelectEcole, user }) {
           <button
             type="submit"
             disabled={adding || !nouveauNom.trim()}
-            style={{ ...S.btn(buttonBg), width: "auto", padding: "10px 20px", cursor: adding ? "not-allowed" : "pointer", opacity: adding ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}
+            style={{ ...S.btn(buttonBg), width: isMobile ? "100%" : "auto", padding: isMobile ? "12px 20px" : "10px 20px", cursor: adding ? "not-allowed" : "pointer", opacity: adding ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: isMobile ? 16 : 14 }}
           >
             {adding ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
             {adding ? "Création..." : success ? "✅ Créée" : "Créer"}
@@ -591,32 +586,29 @@ export function GestionEcoles({ onSelectEcole, user }) {
       </div>
 
       {/* Barre d'outils */}
-      <div style={{ margin: "16px 0", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-        <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} textPrimary={textPrimary} />
+      <div style={{ margin: "16px 0", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "stretch", flexDirection: isMobile ? "column" : "row" }}>
+        <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} textPrimary={textPrimary} isMobile={isMobile} />
 
-        {/* Filtre statut */}
-        <div style={{ display: "flex", gap: 4 }}>
+        <div style={{ display: "flex", gap: 4, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
           {[{ value: "all", label: "Toutes" }, { value: "active", label: "Actives" }, { value: "suspendue", label: "Suspendues" }].map((f) => (
             <button
               key={f.value}
               onClick={() => setFilterStatut(f.value)}
               aria-pressed={filterStatut === f.value}
-              style={{ padding: "6px 12px", borderRadius: 20, border: `1px solid ${cardBorder}`, background: filterStatut === f.value ? accentColor : cardBg, color: filterStatut === f.value ? "white" : textSecondary, cursor: "pointer", fontSize: 12, fontWeight: filterStatut === f.value ? 600 : 400 }}
+              style={{ padding: isMobile ? "10px 12px" : "6px 12px", borderRadius: 20, border: `1px solid ${cardBorder}`, background: filterStatut === f.value ? accentColor : cardBg, color: filterStatut === f.value ? "white" : textSecondary, cursor: "pointer", fontSize: isMobile ? 14 : 12, fontWeight: filterStatut === f.value ? 600 : 400, width: isMobile ? "100%" : "auto", textAlign: "center" }}
             >
               {f.label}
             </button>
           ))}
         </div>
 
-        {/* Tri */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <SortButton label="Nom" field="nom" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} activeBg={badgeActiveBg} activeText={badgeActiveText} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} />
-          <SortButton label="Utilisateurs" field="users" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} activeBg={badgeActiveBg} activeText={badgeActiveText} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} />
-          <SortButton label="Statut" field="statut" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} activeBg={badgeActiveBg} activeText={badgeActiveText} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} />
+        <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
+          <SortButton label="Nom" field="nom" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} activeBg={badgeActiveBg} activeText={badgeActiveText} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} isMobile={isMobile} />
+          <SortButton label="Utilisateurs" field="users" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} activeBg={badgeActiveBg} activeText={badgeActiveText} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} isMobile={isMobile} />
+          <SortButton label="Statut" field="statut" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} activeBg={badgeActiveBg} activeText={badgeActiveText} textSecondary={textSecondary} cardBg={cardBg} cardBorder={cardBorder} isMobile={isMobile} />
         </div>
 
-        {/* Bascule vue + export */}
-        <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
+        <div style={{ display: "flex", gap: 4, marginLeft: isMobile ? "0" : "auto", justifyContent: isMobile ? "space-between" : "flex-start" }}>
           <button onClick={() => setViewMode("grid")} aria-label="Vue en grille" title="Vue en grille" style={{ padding: 8, background: viewMode === "grid" ? accentColor : cardBg, color: viewMode === "grid" ? "white" : textSecondary, border: `1px solid ${cardBorder}`, borderRadius: 8, cursor: "pointer" }}>
             <LayoutGrid size={16} />
           </button>
@@ -631,18 +623,18 @@ export function GestionEcoles({ onSelectEcole, user }) {
 
       {/* Actions groupées */}
       {selectedIds.size > 0 && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16, flexDirection: isMobile ? "column" : "row", width: "100%" }}>
           <span style={{ fontSize: 13, color: textSecondary }}>{selectedIds.size} sélectionnée(s)</span>
-          <button onClick={bulkActivate} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", background: "#10B981", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13 }}>
+          <button onClick={bulkActivate} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#10B981", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}>
             <UserPlus size={14} /> Activer
           </button>
-          <button onClick={bulkSuspend} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", background: "#F59E0B", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13 }}>
+          <button onClick={bulkSuspend} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#F59E0B", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}>
             <UserMinus size={14} /> Suspendre
           </button>
-          <button onClick={bulkDelete} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", background: "#EF4444", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13 }}>
+          <button onClick={bulkDelete} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#EF4444", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}>
             <Trash2 size={14} /> Supprimer
           </button>
-          <button onClick={clearSelection} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", background: "transparent", border: `1px solid ${cardBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 13, color: textPrimary }}>
+          <button onClick={clearSelection} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "transparent", border: `1px solid ${cardBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 13, color: textPrimary, width: isMobile ? "100%" : "auto" }}>
             <X size={14} /> Annuler
           </button>
         </div>
@@ -659,7 +651,7 @@ export function GestionEcoles({ onSelectEcole, user }) {
         </div>
       ) : viewMode === "grid" ? (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, marginTop: 12, width: "100%" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, marginTop: 12, width: "100%" }}>
             {paginatedEcoles.map((ecole) => (
               <EcoleCard
                 key={ecole._id}
@@ -689,10 +681,11 @@ export function GestionEcoles({ onSelectEcole, user }) {
                 badgeActiveText={badgeActiveText}
                 selected={selectedIds.has(ecole._id)}
                 onToggleSelect={toggleSelectOne}
+                isMobile={isMobile}
               />
             ))}
           </div>
-          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} />
+          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} isMobile={isMobile} />
         </>
       ) : (
         <>
@@ -721,8 +714,9 @@ export function GestionEcoles({ onSelectEcole, user }) {
             dangerColor={dangerColor}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelectOne}
+            isMobile={isMobile}
           />
-          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} />
+          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} isMobile={isMobile} />
         </>
       )}
 

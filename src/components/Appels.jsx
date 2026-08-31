@@ -6,10 +6,12 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { HistoriqueAppels } from "./HistoriqueAppels";
 
 export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const cleanupCalls = useMutation(api.appels.cleanupExpiredCalls);
 
   useEffect(() => {
@@ -115,12 +117,30 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
     );
   };
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 16;
+  const headerMargin = isMobile ? 20 : 32;
+  const tabPadding = isMobile ? "10px 12px" : "12px 20px";
+  const tabFontSize = isMobile ? 14 : 16;
+  const groupButtonPadding = isMobile ? "10px 12px" : "8px 16px";
+  const groupButtonFontSize = isMobile ? 14 : 13;
+  const cardPadding = isMobile ? "12px 14px" : "14px 18px";
+  const contactNameSize = isMobile ? 15 : 15;
+  const actionButtonPadding = isMobile ? "6px 8px" : "8px 12px";
+  const actionButtonFontSize = isMobile ? 12 : 13;
+  const inputPadding = isMobile ? "10px 12px" : "8px 12px";
+  const inputFontSize = isMobile ? 16 : 14; // 16px pour éviter le zoom iOS
+  const selectPadding = isMobile ? "10px 14px" : "10px 14px";
+  const selectFontSize = isMobile ? 16 : 14;
+
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: containerPadding }}>
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: headerMargin }}>
         <h2 style={{
-          fontSize: 28,
+          fontSize: titleSize,
           fontWeight: 700,
           color: textPrimary,
           margin: 0,
@@ -128,18 +148,18 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
           alignItems: "center",
           gap: 8,
         }}>
-          <Phone size={24} color={accent} /> Appels
+          <Phone size={isMobile ? 20 : 24} color={accent} /> Appels
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Gérez vos appels audio, vidéo et de groupe
         </p>
       </div>
 
       {/* Onglets */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${borderColor}`, marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${borderColor}`, marginBottom: isMobile ? 16 : 24 }}>
         {[
-          { id: "contacts", label: "Contacts", icon: <Phone size={18} /> },
-          { id: "historique", label: "Historique", icon: <Clock size={18} /> },
+          { id: "contacts", label: "Contacts", icon: <Phone size={isMobile ? 16 : 18} /> },
+          { id: "historique", label: "Historique", icon: <Clock size={isMobile ? 16 : 18} /> },
         ].map((t) => (
           <button
             key={t.id}
@@ -148,7 +168,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: "12px 20px",
+              padding: tabPadding,
               border: "none",
               background: "transparent",
               color: tab === t.id ? accent : textSecondary,
@@ -156,6 +176,8 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               borderBottom: tab === t.id ? `3px solid ${accent}` : "3px solid transparent",
               cursor: "pointer",
               transition: "all 0.2s",
+              fontSize: tabFontSize,
+              whiteSpace: "nowrap",
             }}
           >
             {t.icon}
@@ -170,17 +192,18 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: "8px 16px",
+              padding: groupButtonPadding,
               background: groupCallMode ? accent : "transparent",
               color: groupCallMode ? "#FFF" : accent,
               border: `1px solid ${accent}`,
               borderRadius: 8,
               cursor: "pointer",
               fontWeight: 600,
-              fontSize: 13,
+              fontSize: groupButtonFontSize,
+              whiteSpace: "nowrap",
             }}
           >
-            <Users size={16} /> Appel de groupe
+            <Users size={isMobile ? 14 : 16} /> Appel de groupe
           </button>
         )}
       </div>
@@ -190,24 +213,25 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
         <div style={{
           background: cardBg,
           borderRadius: 16,
-          padding: 20,
-          marginBottom: 24,
+          padding: isMobile ? 14 : 20,
+          marginBottom: isMobile ? 16 : 24,
           boxShadow: shadow,
           border: `1px solid ${borderColor}`,
         }}>
-          <h3 style={{ marginTop: 0, color: textPrimary }}>Nouvel appel de groupe</h3>
-          <label style={{ display: "block", marginBottom: 6, color: textSecondary }}>Groupe</label>
+          <h3 style={{ marginTop: 0, color: textPrimary, fontSize: isMobile ? 18 : 20 }}>Nouvel appel de groupe</h3>
+          <label style={{ display: "block", marginBottom: 6, color: textSecondary, fontSize: isMobile ? 14 : 16 }}>Groupe</label>
           <select
             value={selectedGroupId}
             onChange={(e) => setSelectedGroupId(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 14px",
+              padding: selectPadding,
               borderRadius: 8,
               border: `1px solid ${borderColor}`,
               background: dark ? "#0F172A" : "#F9FAFB",
               color: textPrimary,
               marginBottom: 16,
+              fontSize: selectFontSize,
             }}
           >
             <option value="">-- Choisir un groupe --</option>
@@ -216,23 +240,24 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             ))}
           </select>
 
-          <label style={{ display: "block", marginBottom: 6, color: textSecondary }}>Participants</label>
+          <label style={{ display: "block", marginBottom: 6, color: textSecondary, fontSize: isMobile ? 14 : 16 }}>Participants</label>
           <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 16 }}>
             {visibleContacts.map((c) => (
               <label key={c._id} style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                padding: "6px 8px",
+                padding: isMobile ? "8px 6px" : "6px 8px",
                 borderRadius: 6,
                 cursor: "pointer",
                 color: textPrimary,
+                fontSize: isMobile ? 14 : 16,
               }}>
                 <input
                   type="checkbox"
                   checked={selectedParticipants.includes(c._id)}
                   onChange={() => toggleParticipant(c._id)}
-                  style={{ accentColor: accent }}
+                  style={{ accentColor: accent, width: isMobile ? 18 : 16, height: isMobile ? 18 : 16 }}
                 />
                 {c.nom} ({c.role})
               </label>
@@ -243,7 +268,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             disabled={!selectedGroupId || selectedParticipants.length === 0}
             style={{
               width: "100%",
-              padding: "10px 20px",
+              padding: isMobile ? "12px 20px" : "10px 20px",
               background: accent,
               color: "white",
               border: "none",
@@ -251,6 +276,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               fontWeight: 600,
               cursor: "pointer",
               opacity: !selectedGroupId || selectedParticipants.length === 0 ? 0.6 : 1,
+              fontSize: isMobile ? 16 : 14,
             }}
           >
             Lancer l'appel de groupe
@@ -262,24 +288,26 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
       {tab === "contacts" ? (
         <div>
           {/* Barre de recherche */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <Search size={16} color={textSecondary} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: isMobile ? 12 : 16 }}>
+            <Search size={isMobile ? 14 : 16} color={textSecondary} />
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Rechercher un contact..."
               style={{
                 flex: 1,
-                padding: "8px 12px",
+                padding: inputPadding,
                 borderRadius: 8,
                 border: `1px solid ${borderColor}`,
                 background: dark ? "#0F172A" : "#F9FAFB",
                 color: textPrimary,
+                fontSize: inputFontSize,
+                outline: "none",
               }}
             />
             {searchTerm && (
               <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer" }}>
-                <X size={16} color={textSecondary} />
+                <X size={isMobile ? 14 : 16} color={textSecondary} />
               </button>
             )}
           </div>
@@ -288,17 +316,17 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             <div style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 48,
+              padding: isMobile ? 32 : 48,
               textAlign: "center",
               boxShadow: shadow,
               color: textSecondary,
               border: `1px solid ${borderColor}`,
             }}>
-              <Phone size={32} style={{ marginBottom: 8 }} />
-              <p>Aucun contact disponible</p>
+              <Phone size={isMobile ? 28 : 32} style={{ marginBottom: 8 }} />
+              <p style={{ fontSize: isMobile ? 14 : 16 }}>Aucun contact disponible</p>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
               {visibleContacts.map((contact) => (
                 <div
                   key={contact._id}
@@ -306,23 +334,25 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    padding: "14px 18px",
+                    padding: cardPadding,
                     background: cardBg,
                     borderRadius: 12,
                     border: `1px solid ${borderColor}`,
                     boxShadow: shadow,
                     transition: "box-shadow 0.15s, background-color 0.3s",
+                    flexWrap: isMobile ? "wrap" : "nowrap",
+                    gap: isMobile ? 8 : 0,
                   }}
                 >
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: 15, color: textPrimary }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? "100%" : 0 }}>
+                    <span style={{ fontWeight: 600, fontSize: contactNameSize, color: textPrimary }}>
                       {contact.nom}
                     </span>
-                    <span style={{ color: textSecondary, fontSize: 13, marginLeft: 8 }}>
+                    <span style={{ color: textSecondary, fontSize: isMobile ? 12 : 13, marginLeft: 8 }}>
                       ({contact.role})
                     </span>
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: isMobile ? 6 : 8 }}>
                     <button
                       onClick={() => handleMessage(contact._id)}
                       style={{
@@ -330,7 +360,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                         border: "none",
                         cursor: "pointer",
                         color: textSecondary,
-                        padding: 8,
+                        padding: isMobile ? 8 : 8,
                         borderRadius: 8,
                         transition: "background 0.15s",
                       }}
@@ -338,19 +368,19 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                       onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                     >
-                      <MessageCircle size={20} />
+                      <MessageCircle size={isMobile ? 18 : 20} />
                     </button>
                     <button
                       onClick={() => handleCall(contact, "audio")}
                       style={{
-                        padding: "8px 12px",
+                        padding: actionButtonPadding,
                         background: accent,
                         color: "#FFFFFF",
                         border: "none",
                         borderRadius: 8,
                         cursor: "pointer",
                         fontWeight: 600,
-                        fontSize: 13,
+                        fontSize: actionButtonFontSize,
                         display: "flex",
                         alignItems: "center",
                         gap: 6,
@@ -359,19 +389,19 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                       }}
                       title="Appel audio"
                     >
-                      <PhoneOutgoing size={16} />
+                      <PhoneOutgoing size={isMobile ? 16 : 16} />
                     </button>
                     <button
                       onClick={() => handleCall(contact, "video")}
                       style={{
-                        padding: "8px 12px",
+                        padding: actionButtonPadding,
                         background: accent,
                         color: "#FFFFFF",
                         border: "none",
                         borderRadius: 8,
                         cursor: "pointer",
                         fontWeight: 600,
-                        fontSize: 13,
+                        fontSize: actionButtonFontSize,
                         display: "flex",
                         alignItems: "center",
                         gap: 6,
@@ -380,7 +410,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                       }}
                       title="Appel vidéo"
                     >
-                      <Video size={16} />
+                      <Video size={isMobile ? 16 : 16} />
                     </button>
                   </div>
                 </div>

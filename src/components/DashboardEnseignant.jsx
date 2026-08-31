@@ -2,6 +2,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line
@@ -14,6 +15,7 @@ const COLORS = ["#ef4444", "#f59e0b", "#10b981", "#6366f1"];
 
 export function DashboardEnseignant({ ecoleId, classe, anneeId, anneeActive, onNavigate }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile();
 
   // Récupérer les élèves de la classe
   const elevesClasse = useQuery(
@@ -33,7 +35,7 @@ export function DashboardEnseignant({ ecoleId, classe, anneeId, anneeActive, onN
     ecoleId && anneeId && classe ? { ecoleId, anneeId, classe } : "skip"
   ) ?? [];
 
-  // Couleurs pour les graphiques (axes, légendes, texte)
+  // Couleurs pour les graphiques
   const axisColor = dark ? "#94a3b8" : "#64748b";
   const gridColor = dark ? "#334155" : "#e2e8f0";
   const tooltipStyle = {
@@ -100,12 +102,12 @@ export function DashboardEnseignant({ ecoleId, classe, anneeId, anneeActive, onN
     .map(([mois, counts]) => ({ mois, ...counts }))
     .sort((a, b) => a.mois.localeCompare(b.mois));
 
-  // Carte de statistique réutilisable
+  // Composant carte de statistique adaptatif
   const StatCard = ({ icon, label, value, color }) => (
     <div style={{
       background: dark ? "#1e293b" : "#ffffff",
       borderRadius: 16,
-      padding: 20,
+      padding: isMobile ? 14 : 20,
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -115,24 +117,24 @@ export function DashboardEnseignant({ ecoleId, classe, anneeId, anneeActive, onN
       textAlign: "center",
       transition: "background-color 0.3s",
     }}>
-      <div style={{ color, marginBottom: 4 }}>{icon}</div>
-      <div style={{ fontSize: 24, fontWeight: 800, color: dark ? "#f1f5f9" : "#1e293b" }}>
+      <div style={{ color, marginBottom: 4, display: "flex", justifyContent: "center" }}>{icon}</div>
+      <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: dark ? "#f1f5f9" : "#1e293b" }}>
         {value}
       </div>
-      <div style={{ fontSize: 13, color: dark ? "#94a3b8" : "#64748b" }}>{label}</div>
+      <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94a3b8" : "#64748b" }}>{label}</div>
     </div>
   );
 
-  // Lien rapide
+  // Lien rapide adaptatif
   const QuickLink = ({ icon, label, tab }) => (
     <button
       onClick={() => onNavigate && onNavigate(tab)}
       style={{
         flex: 1,
-        minWidth: 120,
+        minWidth: isMobile ? 100 : 120,
         background: dark ? "#1e293b" : "#ffffff",
         borderRadius: 12,
-        padding: "16px 12px",
+        padding: isMobile ? "12px 8px" : "16px 12px",
         textAlign: "center",
         cursor: "pointer",
         border: `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
@@ -140,43 +142,59 @@ export function DashboardEnseignant({ ecoleId, classe, anneeId, anneeActive, onN
         transition: "background-color 0.3s, transform 0.1s",
       }}
     >
-      <div style={{ color: dark ? "#818cf8" : "#4f46e5", marginBottom: 8 }}>{icon}</div>
-      <div style={{ fontWeight: 600, fontSize: 14, color: dark ? "#f1f5f9" : "#1e293b" }}>{label}</div>
+      <div style={{ color: dark ? "#818cf8" : "#4f46e5", marginBottom: 8, display: "flex", justifyContent: "center" }}>{icon}</div>
+      <div style={{ fontWeight: 600, fontSize: isMobile ? 12 : 14, color: dark ? "#f1f5f9" : "#1e293b" }}>{label}</div>
     </button>
   );
 
+  // Styles de grille adaptatifs
+  const statGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: isMobile ? 12 : 16,
+    marginBottom: isMobile ? 20 : 24,
+  };
+  const graphGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(400px, 1fr))",
+    gap: isMobile ? 16 : 20,
+  };
+  const graphHeight = isMobile ? 200 : 250;
+
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ ...S.h2, color: dark ? "#f1f5f9" : "#1e293b" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+      <div style={{ marginBottom: isMobile ? 16 : 20 }}>
+        <h2 style={{ ...S.h2, color: dark ? "#f1f5f9" : "#1e293b", fontSize: isMobile ? 20 : 24 }}>
           Tableau de bord — Classe {classe}
         </h2>
-        <p style={{ ...S.muted, color: dark ? "#94a3b8" : "#64748b" }}>
+        <p style={{ ...S.muted, color: dark ? "#94a3b8" : "#64748b", fontSize: isMobile ? 13 : 14 }}>
           {totalEleves} élève(s) · {anneeActive ? anneeActive.nom : "Année active"}
         </p>
       </div>
 
       {/* Liens rapides */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-        <QuickLink icon={<BookOpen size={24} />} label="Notes" tab="cours" />
-        <QuickLink icon={<AlertTriangle size={24} />} label="Absences" tab="absences" />
-        <QuickLink icon={<Calendar size={24} />} label="Emploi du temps" tab="emploi" />
+      <div style={{ display: "flex", gap: isMobile ? 8 : 16, marginBottom: isMobile ? 16 : 20, flexWrap: "wrap" }}>
+        <QuickLink icon={<BookOpen size={isMobile ? 20 : 24} />} label="Notes" tab="cours" />
+        <QuickLink icon={<AlertTriangle size={isMobile ? 20 : 24} />} label="Absences" tab="absences" />
+        <QuickLink icon={<Calendar size={isMobile ? 20 : 24} />} label="Emploi du temps" tab="emploi" />
       </div>
 
       {/* Cartes de statistiques */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 16, marginBottom: 24 }}>
-        <StatCard icon={<Users size={24} />} label="Élèves" value={totalEleves} color="#4f46e5" />
-        <StatCard icon={<BookOpen size={24} />} label="Notes saisies" value={totalNotes} color="#10b981" />
-        <StatCard icon={<AlertTriangle size={24} />} label="Absences" value={totalAbsences} color="#ef4444" />
-        <StatCard icon={<TrendingUp size={24} />} label="Moy. générale" value={moyenneGenerale} color="#f59e0b" />
+      <div style={statGridStyle}>
+        <StatCard icon={<Users size={isMobile ? 20 : 24} />} label="Élèves" value={totalEleves} color="#4f46e5" />
+        <StatCard icon={<BookOpen size={isMobile ? 20 : 24} />} label="Notes saisies" value={totalNotes} color="#10b981" />
+        <StatCard icon={<AlertTriangle size={isMobile ? 20 : 24} />} label="Absences" value={totalAbsences} color="#ef4444" />
+        <StatCard icon={<TrendingUp size={isMobile ? 20 : 24} />} label="Moy. générale" value={moyenneGenerale} color="#f59e0b" />
       </div>
 
       {/* Graphiques */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 20 }}>
+      <div style={graphGridStyle}>
         {/* Moyennes par matière */}
         <div style={{ ...S.card, background: dark ? "#1e293b" : "#ffffff" }}>
-          <h3 style={{ ...S.h3, color: dark ? "#f1f5f9" : "#1e293b" }}>📚 Moyennes par matière</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <h3 style={{ ...S.h3, color: dark ? "#f1f5f9" : "#1e293b", fontSize: isMobile ? 16 : 18 }}>
+            📚 Moyennes par matière
+          </h3>
+          <ResponsiveContainer width="100%" height={graphHeight}>
             <BarChart data={dataMatieres}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
               <XAxis dataKey="matiere" tick={{ fill: axisColor, fontSize: 12 }} />
@@ -189,30 +207,34 @@ export function DashboardEnseignant({ ecoleId, classe, anneeId, anneeActive, onN
 
         {/* Répartition des notes */}
         <div style={{ ...S.card, background: dark ? "#1e293b" : "#ffffff" }}>
-          <h3 style={{ ...S.h3, color: dark ? "#f1f5f9" : "#1e293b" }}>📊 Répartition des notes</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <h3 style={{ ...S.h3, color: dark ? "#f1f5f9" : "#1e293b", fontSize: isMobile ? 16 : 18 }}>
+            📊 Répartition des notes
+          </h3>
+          <ResponsiveContainer width="100%" height={graphHeight}>
             <PieChart>
-              <Pie data={dataTranches} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+              <Pie data={dataTranches} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={isMobile ? 60 : 80} label>
                 {dataTranches.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip contentStyle={tooltipStyle} />
-              <Legend wrapperStyle={{ color: axisColor }} />
+              <Legend wrapperStyle={{ color: axisColor, fontSize: isMobile ? 12 : 14 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
         {/* Évolution absences/retards */}
         <div style={{ ...S.card, background: dark ? "#1e293b" : "#ffffff" }}>
-          <h3 style={{ ...S.h3, color: dark ? "#f1f5f9" : "#1e293b" }}>📈 Évolution absences & retards</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <h3 style={{ ...S.h3, color: dark ? "#f1f5f9" : "#1e293b", fontSize: isMobile ? 16 : 18 }}>
+            📈 Évolution absences & retards
+          </h3>
+          <ResponsiveContainer width="100%" height={graphHeight}>
             <LineChart data={dataEvolution}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
               <XAxis dataKey="mois" tick={{ fill: axisColor, fontSize: 12 }} />
               <YAxis allowDecimals={false} tick={{ fill: axisColor, fontSize: 12 }} />
               <Tooltip contentStyle={tooltipStyle} />
-              <Legend wrapperStyle={{ color: axisColor }} />
+              <Legend wrapperStyle={{ color: axisColor, fontSize: isMobile ? 12 : 14 }} />
               <Line type="monotone" dataKey="absences" stroke="#ef4444" strokeWidth={2} />
               <Line type="monotone" dataKey="retards" stroke="#f59e0b" strokeWidth={2} />
             </LineChart>

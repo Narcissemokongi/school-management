@@ -1,10 +1,12 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Trophy, Medal, Star, Loader } from "lucide-react";
 
 export function TableauHonneur({ ecoleId, anneeId, classe }) {
-  const { dark } = useStyles(); // ✅ seul dark est nécessaire
+  const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const classement = useQuery(
     api.classement.getClassement,
@@ -42,7 +44,6 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
 
   const top3 = classement.slice(0, 3);
 
-  // Fonction pour déterminer la mention
   const getMention = (moy) => {
     if (ecole?.seuilFelicitations && moy >= ecole.seuilFelicitations) return "Félicitations";
     if (ecole?.seuilEncouragement && moy >= ecole.seuilEncouragement) return "Encouragement";
@@ -50,26 +51,45 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
   };
 
   const couleurs = [gold, silver, bronze];
-  const icones = [<Trophy size={28} />, <Medal size={28} />, <Star size={28} />];
+  const icones = [
+    <Trophy size={isMobile ? 22 : 28} />,
+    <Medal size={isMobile ? 22 : 28} />,
+    <Star size={isMobile ? 22 : 28} />
+  ];
+
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 20 : 24;
+  const iconSize = isMobile ? 22 : 28;
+  const top3CardPadding = isMobile ? 14 : 20;
+  const top3Gap = isMobile ? 8 : 16;
+  const top3IconContainerSize = isMobile ? 40 : 48;
+  const top3NameSize = isMobile ? 16 : 18;
+  const top3SecondarySize = isMobile ? 13 : 14;
+  const top3RankFontSize = isMobile ? 26 : 32;
+  const fullListTitleSize = isMobile ? 18 : 20;
+  const fullListPadding = isMobile ? 12 : 16;
+  const fullListRowPadding = isMobile ? "8px 0" : "10px 0";
+  const fullListFontSize = isMobile ? 14 : 16;
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       <h2 style={{
-        fontSize: 24,
+        fontSize: titleSize,
         fontWeight: 700,
-        marginBottom: 24,
+        marginBottom: isMobile ? 16 : 24,
         display: "flex",
         alignItems: "center",
         gap: 8,
         color: textPrimary,
       }}>
-        <Trophy size={28} color={gold} /> Tableau d'honneur – {classe}
+        <Trophy size={iconSize} color={gold} /> Tableau d'honneur – {classe}
       </h2>
 
       {/* Top 3 */}
-      <div style={{ display: "grid", gap: 16, marginBottom: 32 }}>
+      <div style={{ display: "grid", gap: top3Gap, marginBottom: isMobile ? 24 : 32 }}>
         {top3.map((eleve, idx) => {
           const mention = getMention(eleve.moyenneGenerale);
           return (
@@ -78,10 +98,10 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
               style={{
                 background: cardBg,
                 borderRadius: 16,
-                padding: 20,
+                padding: top3CardPadding,
                 display: "flex",
                 alignItems: "center",
-                gap: 16,
+                gap: isMobile ? 10 : 16,
                 boxShadow: shadow,
                 border: `1px solid ${cardBorder}`,
                 borderLeft: `6px solid ${couleurs[idx]}`,
@@ -101,18 +121,19 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 48,
-                height: 48,
+                width: top3IconContainerSize,
+                height: top3IconContainerSize,
                 background: `${couleurs[idx]}${dark ? "33" : "15"}`,
                 borderRadius: 12,
+                flexShrink: 0,
               }}>
                 {icones[idx]}
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 18, color: textPrimary }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: top3NameSize, color: textPrimary }}>
                   {eleve.nom} {eleve.postnom}
                 </div>
-                <div style={{ color: textSecondary, fontSize: 14 }}>
+                <div style={{ color: textSecondary, fontSize: top3SecondarySize }}>
                   Moyenne : {eleve.moyenneGenerale.toFixed(1)}%
                 </div>
                 {mention && (
@@ -123,7 +144,7 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
                     color: accent,
                     padding: "2px 10px",
                     borderRadius: 20,
-                    fontSize: 12,
+                    fontSize: isMobile ? 11 : 12,
                     fontWeight: 600,
                   }}>
                     {mention}
@@ -131,10 +152,11 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
                 )}
               </div>
               <div style={{
-                fontSize: 32,
+                fontSize: top3RankFontSize,
                 fontWeight: 800,
                 color: couleurs[idx],
                 fontFamily: "'Inter', sans-serif",
+                flexShrink: 0,
               }}>
                 #{eleve.rang}
               </div>
@@ -144,13 +166,13 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
       </div>
 
       {/* Classement complet */}
-      <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
+      <h3 style={{ fontSize: fullListTitleSize, fontWeight: 600, marginBottom: isMobile ? 12 : 16, color: textPrimary }}>
         Classement complet
       </h3>
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 16,
+        padding: fullListPadding,
         boxShadow: shadow,
         border: `1px solid ${cardBorder}`,
       }}>
@@ -161,17 +183,17 @@ export function TableauHonneur({ ecoleId, anneeId, classe }) {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              padding: "10px 0",
+              padding: fullListRowPadding,
               borderBottom: idx < classement.length - 1 ? `1px solid ${cardBorder}` : "none",
               background: idx % 2 === 0 ? "transparent" : (dark ? "#26334D" : "#F8FAFC"),
               borderRadius: 4,
               color: textPrimary,
             }}
           >
-            <span style={{ fontWeight: idx < 3 ? 700 : 500 }}>
+            <span style={{ fontWeight: idx < 3 ? 700 : 500, fontSize: fullListFontSize }}>
               {idx + 1}. {eleve.nom} {eleve.postnom}
             </span>
-            <span style={{ fontWeight: 600, color: accent }}>
+            <span style={{ fontWeight: 600, color: accent, fontSize: fullListFontSize }}>
               {eleve.moyenneGenerale.toFixed(1)}%
             </span>
           </div>

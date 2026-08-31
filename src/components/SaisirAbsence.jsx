@@ -2,15 +2,17 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Search, Calendar, Check, X, Loader, RotateCcw, CalendarDays } from "lucide-react";
 import toast from "react-hot-toast";
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { trierEleves } from "../utils/tri";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useAppStore } from "../store/appStore";
 
 export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
   const addAbsence = useMutation(api.absences.add);
 
@@ -131,28 +133,47 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
   const secondaryBtnText = dark ? "#F1F5F9" : "#1E293B";
   const accent = dark ? "#818CF8" : "#4F46E5";
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 13 : 14;
+  const cardPadding = isMobile ? 14 : 24;
+  const cardMarginBottom = isMobile ? 16 : 24;
+  const labelFontSize = isMobile ? 15 : 14;
+  const inputPadding = isMobile ? "12px 14px 12px 42px" : "10px 14px 10px 42px";
+  const inputFontSize = isMobile ? 16 : 14;
+  const selectPadding = isMobile ? "12px 14px" : "10px 14px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const suggestionItemPadding = isMobile ? "12px 14px" : "10px 14px";
+  const selectedElevePadding = isMobile ? "12px 14px" : "10px 14px";
+  const todayButtonPadding = isMobile ? "10px 12px" : "8px 10px";
+  const actionButtonsFlexDirection = isMobile ? "column" : "row";
+  const actionButtonsGap = isMobile ? 8 : 12;
+
   const inputStyle = (field) => ({
     width: "100%",
-    padding: "10px 14px 10px 42px",
+    padding: inputPadding,
     border: `1.5px solid ${errors[field] ? errorText : cardBorder}`,
     borderRadius: 10,
-    fontSize: 14,
+    fontSize: inputFontSize,
     outline: "none",
     background: errors[field] ? errorBg : inputBg,
     color: inputText,
     transition: "border-color 0.2s, background-color 0.3s",
+    boxSizing: "border-box",
   });
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Saisir une absence ou un retard
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           {eleves.length} élève(s) {anneeActive ? `· ${anneeActive.nom}` : ""}
         </p>
       </div>
@@ -161,12 +182,12 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 24,
+        padding: cardPadding,
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         border: `1px solid ${cardBorder}`,
-        marginBottom: 24,
+        marginBottom: cardMarginBottom,
       }}>
-        <label htmlFor="recherche-eleve" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+        <label htmlFor="recherche-eleve" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
           <Search size={16} style={{ marginRight: 4, verticalAlign: "middle" }} />
           Rechercher un élève
         </label>
@@ -206,7 +227,7 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
                   key={e._id}
                   onClick={() => selectEleve(e)}
                   style={{
-                    padding: "10px 14px",
+                    padding: suggestionItemPadding,
                     cursor: "pointer",
                     display: "flex",
                     justifyContent: "space-between",
@@ -218,7 +239,7 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
                   onMouseLeave={ev => ev.currentTarget.style.background = "transparent"}
                 >
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
+                    <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 14, color: textPrimary }}>
                       {e.nom} {e.postnom} {e.prenom}
                     </div>
                     <div style={{ fontSize: 12, color: textSecondary }}>Classe {e.classe}</div>
@@ -234,16 +255,16 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
         {selectedEleve && (
           <div style={{
             marginTop: 12,
-            padding: "10px 14px",
+            padding: selectedElevePadding,
             background: badgeBg,
             borderRadius: 8,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <Check size={16} color={badgeText} />
-              <span style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
+              <span style={{ fontWeight: 600, fontSize: isMobile ? 15 : 14, color: textPrimary }}>
                 {selectedEleve.nom} {selectedEleve.postnom} {selectedEleve.prenom}
               </span>
               <span style={{ color: textSecondary, fontSize: 13 }}>({selectedEleve.classe})</span>
@@ -259,13 +280,13 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
       <div style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 24,
+        padding: cardPadding,
         boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         border: `1px solid ${cardBorder}`,
-        marginBottom: 24,
+        marginBottom: cardMarginBottom,
       }}>
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="type" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+          <label htmlFor="type" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
             Type
           </label>
           <select
@@ -274,10 +295,10 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
             onChange={(e) => setType(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 14px",
+              padding: selectPadding,
               border: `1.5px solid ${cardBorder}`,
               borderRadius: 10,
-              fontSize: 14,
+              fontSize: selectFontSize,
               outline: "none",
               background: inputBg,
               color: inputText,
@@ -289,11 +310,11 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="date" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+          <label htmlFor="date" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
             Date
           </label>
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ position: "relative", flex: 1 }}>
+          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
+            <div style={{ position: "relative", flex: 1, width: "100%" }}>
               <Calendar size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
               <input
                 id="date"
@@ -313,12 +334,14 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
                 background: "none",
                 border: `1px solid ${cardBorder}`,
                 borderRadius: 8,
-                padding: "8px 10px",
+                padding: todayButtonPadding,
                 cursor: "pointer",
                 color: textSecondary,
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 4,
+                fontSize: isMobile ? 14 : 14,
+                whiteSpace: "nowrap",
               }}
             >
               <CalendarDays size={16} /> Aujourd'hui
@@ -328,7 +351,7 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="commentaire" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: textSecondary }}>
+          <label htmlFor="commentaire" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
             Commentaire (optionnel)
           </label>
           <textarea
@@ -338,34 +361,35 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
             placeholder="Raison de l'absence ou du retard..."
             style={{
               width: "100%",
-              padding: "10px 14px",
+              padding: selectPadding,
               border: `1.5px solid ${cardBorder}`,
               borderRadius: 10,
-              fontSize: 14,
+              fontSize: selectFontSize,
               outline: "none",
               background: inputBg,
               color: inputText,
-              height: 100,
+              height: isMobile ? 120 : 100,
               resize: "vertical",
               fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           />
         </div>
       </div>
 
       {/* Boutons d'action */}
-      <div style={{ display: "flex", gap: 12 }}>
+      <div style={{ display: "flex", gap: actionButtonsGap, flexDirection: actionButtonsFlexDirection }}>
         <button
           onClick={handleSubmit}
           disabled={!selectedEleve || !date || submitting}
           style={{
             flex: 1,
-            padding: "12px 0",
+            padding: isMobile ? "14px 0" : "12px 0",
             background: !selectedEleve || !date || submitting ? "#A5B4FC" : buttonBg,
             color: "#FFFFFF",
             border: "none",
             borderRadius: 10,
-            fontSize: 16,
+            fontSize: isMobile ? 16 : 16,
             fontWeight: 600,
             cursor: !selectedEleve || !date || submitting ? "not-allowed" : "pointer",
             display: "flex",
@@ -389,16 +413,17 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
           onClick={resetForm}
           disabled={submitting}
           style={{
-            padding: "12px 20px",
+            padding: isMobile ? "14px 20px" : "12px 20px",
             background: secondaryBtnBg,
             color: secondaryBtnText,
             border: "none",
             borderRadius: 10,
-            fontSize: 16,
+            fontSize: isMobile ? 16 : 16,
             fontWeight: 500,
             cursor: submitting ? "not-allowed" : "pointer",
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 6,
           }}
         >

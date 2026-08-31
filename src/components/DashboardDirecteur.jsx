@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile";
 import {
   ClipboardList, AlertTriangle, Users, Building, Loader,
   BarChart3, GraduationCap, UserCheck, Activity,
@@ -8,6 +9,7 @@ import { getFaute, getTopDerangeurs, getPunitionsParClasse } from "../utils";
 
 export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile();
 
   // ========== Calculs disciplinaires ==========
   const top = useMemo(() => getTopDerangeurs(punitions, eleves, 3), [punitions, eleves]);
@@ -73,25 +75,50 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
     );
   }
 
+  // Styles responsives
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const gridStats = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: isMobile ? 12 : 16,
+    marginBottom: isMobile ? 24 : 32,
+  };
+  const gridPedago = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: isMobile ? 12 : 16,
+    marginBottom: isMobile ? 24 : 32,
+  };
+  const gridRepartition = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))",
+    gap: isMobile ? 16 : 24,
+    marginBottom: isMobile ? 24 : 32,
+  };
+  const cardPadding = isMobile ? "14px" : "20px";
+  const titleSize = isMobile ? 20 : 28;
+  const sectionTitleSize = isMobile ? 16 : 18;
+  const statValueSize = isMobile ? 24 : 28;
+
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Tableau de bord du directeur
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
           Vue globale de l'établissement – discipline et pédagogie
         </p>
       </div>
 
       {/* Section 1 : Indicateurs clés disciplinaires */}
-      <h3 style={{ fontSize: 18, fontWeight: 600, color: textPrimary, marginBottom: 16 }}>
+      <h3 style={{ fontSize: sectionTitleSize, fontWeight: 600, color: textPrimary, marginBottom: isMobile ? 12 : 16 }}>
         Indicateurs disciplinaires
       </h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 16, marginBottom: 32 }}>
+      <div style={gridStats}>
         {[
           { label: "Total punitions", value: totalPunitions, color: accent, Icon: ClipboardList },
           { label: "Fautes graves", value: graves.length, color: danger, Icon: AlertTriangle },
@@ -103,52 +130,52 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
             style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 20,
+              padding: cardPadding,
               textAlign: "center",
               boxShadow: shadow,
               border: `1px solid ${cardBorder}`,
               transition: "background-color 0.3s",
             }}
           >
-            <Icon size={28} color={color} style={{ marginBottom: 6 }} />
-            <div style={{ fontSize: 28, fontWeight: 900, color }}>{value}</div>
-            <div style={{ fontSize: 12, color: textSecondary }}>{label}</div>
+            <Icon size={isMobile ? 24 : 28} color={color} style={{ marginBottom: 6 }} />
+            <div style={{ fontSize: statValueSize, fontWeight: 900, color }}>{value}</div>
+            <div style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>{label}</div>
           </div>
         ))}
       </div>
 
       {/* Section 2 : Indicateurs pédagogiques */}
-      <h3 style={{ fontSize: 18, fontWeight: 600, color: textPrimary, marginBottom: 16 }}>
+      <h3 style={{ fontSize: sectionTitleSize, fontWeight: 600, color: textPrimary, marginBottom: isMobile ? 12 : 16 }}>
         Indicateurs pédagogiques
       </h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 16, marginBottom: 32 }}>
-        <div style={{ ...cardStyle(cardBg, cardBorder, shadow), textAlign: "center" }}>
-          <GraduationCap size={28} color={info} style={{ marginBottom: 6 }} />
-          <div style={{ fontSize: 28, fontWeight: 900, color: info }}>{totalEleves}</div>
-          <div style={{ fontSize: 12, color: textSecondary }}>Élèves</div>
+      <div style={gridPedago}>
+        <div style={{ ...cardStyle(cardBg, cardBorder, shadow, cardPadding), textAlign: "center" }}>
+          <GraduationCap size={isMobile ? 24 : 28} color={info} style={{ marginBottom: 6 }} />
+          <div style={{ fontSize: statValueSize, fontWeight: 900, color: info }}>{totalEleves}</div>
+          <div style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>Élèves</div>
         </div>
-        <div style={{ ...cardStyle(cardBg, cardBorder, shadow), textAlign: "center" }}>
-          <Building size={28} color={success} style={{ marginBottom: 6 }} />
-          <div style={{ fontSize: 28, fontWeight: 900, color: success }}>{totalClasses}</div>
-          <div style={{ fontSize: 12, color: textSecondary }}>Classes</div>
+        <div style={{ ...cardStyle(cardBg, cardBorder, shadow, cardPadding), textAlign: "center" }}>
+          <Building size={isMobile ? 24 : 28} color={success} style={{ marginBottom: 6 }} />
+          <div style={{ fontSize: statValueSize, fontWeight: 900, color: success }}>{totalClasses}</div>
+          <div style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>Classes</div>
         </div>
-        <div style={{ ...cardStyle(cardBg, cardBorder, shadow), textAlign: "center" }}>
-          <UserCheck size={28} color={accent} style={{ marginBottom: 6 }} />
-          <div style={{ fontSize: 28, fontWeight: 900, color: accent }}>{totalEnseignants}</div>
-          <div style={{ fontSize: 12, color: textSecondary }}>Enseignants</div>
+        <div style={{ ...cardStyle(cardBg, cardBorder, shadow, cardPadding), textAlign: "center" }}>
+          <UserCheck size={isMobile ? 24 : 28} color={accent} style={{ marginBottom: 6 }} />
+          <div style={{ fontSize: statValueSize, fontWeight: 900, color: accent }}>{totalEnseignants}</div>
+          <div style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>Enseignants</div>
         </div>
-        <div style={{ ...cardStyle(cardBg, cardBorder, shadow), textAlign: "center" }}>
-          <Activity size={28} color={warning} style={{ marginBottom: 6 }} />
-          <div style={{ fontSize: 28, fontWeight: 900, color: warning }}>{tauxElevesAvecPunitions}%</div>
-          <div style={{ fontSize: 12, color: textSecondary }}>Taux d'élèves punis</div>
+        <div style={{ ...cardStyle(cardBg, cardBorder, shadow, cardPadding), textAlign: "center" }}>
+          <Activity size={isMobile ? 24 : 28} color={warning} style={{ marginBottom: 6 }} />
+          <div style={{ fontSize: statValueSize, fontWeight: 900, color: warning }}>{tauxElevesAvecPunitions}%</div>
+          <div style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>Taux d'élèves punis</div>
         </div>
       </div>
 
       {/* Section 3 : Répartition des élèves par classe */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24, marginBottom: 32 }}>
-        <div style={cardStyle(cardBg, cardBorder, shadow)}>
-          <h4 style={{ fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <Users size={18} color={info} />
+      <div style={gridRepartition}>
+        <div style={cardStyle(cardBg, cardBorder, shadow, cardPadding)}>
+          <h4 style={{ fontSize: isMobile ? 14 : 16, fontWeight: 600, color: textPrimary, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <Users size={isMobile ? 16 : 18} color={info} />
             Effectifs par classe
           </h4>
           {effectifsParClasse.length === 0 ? (
@@ -160,8 +187,8 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
               return (
                 <div key={classe} style={{ marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, color: textPrimary }}>{classe}</span>
-                    <span style={{ fontSize: 12, color: textSecondary }}>{effectif} élève(s)</span>
+                    <span style={{ fontSize: isMobile ? 12 : 13, color: textPrimary }}>{classe}</span>
+                    <span style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>{effectif} élève(s)</span>
                   </div>
                   <div style={{ height: 8, background: dark ? "#334155" : "#F1F5F9", borderRadius: 4, overflow: "hidden" }}>
                     <div style={{
@@ -179,9 +206,9 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
         </div>
 
         {/* Section 4 : Répartition des fautes par gravité */}
-        <div style={cardStyle(cardBg, cardBorder, shadow)}>
-          <h4 style={{ fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <AlertTriangle size={18} color={warning} />
+        <div style={cardStyle(cardBg, cardBorder, shadow, cardPadding)}>
+          <h4 style={{ fontSize: isMobile ? 14 : 16, fontWeight: 600, color: textPrimary, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <AlertTriangle size={isMobile ? 16 : 18} color={warning} />
             Fautes par gravité
           </h4>
           {Object.values(fautesParGravite).every((v) => v === 0) ? (
@@ -194,8 +221,8 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
               return (
                 <div key={gravite} style={{ marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, color: textPrimary }}>{gravite}</span>
-                    <span style={{ fontSize: 12, color: textSecondary }}>{count}</span>
+                    <span style={{ fontSize: isMobile ? 12 : 13, color: textPrimary }}>{gravite}</span>
+                    <span style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>{count}</span>
                   </div>
                   <div style={{ height: 8, background: dark ? "#334155" : "#F1F5F9", borderRadius: 4, overflow: "hidden" }}>
                     <div style={{
@@ -215,9 +242,9 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
 
       {/* Section 5 : Alertes récentes */}
       {notifs.length > 0 && (
-        <div style={{ ...cardStyle(cardBg, cardBorder, shadow), marginBottom: 24 }}>
-          <div style={{ fontWeight: 700, color: danger, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
-            <AlertTriangle size={18} />
+        <div style={{ ...cardStyle(cardBg, cardBorder, shadow, cardPadding), marginBottom: 24 }}>
+          <div style={{ fontWeight: 700, color: danger, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontSize: isMobile ? 14 : 16 }}>
+            <AlertTriangle size={isMobile ? 16 : 18} />
             Alertes récentes
           </div>
           {notifs.slice(-3).map((n, i) => (
@@ -226,7 +253,7 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
               style={{
                 padding: "8px 0",
                 borderBottom: i < Math.min(notifs.length, 3) - 1 ? `1px solid ${cardBorder}` : "none",
-                fontSize: 13,
+                fontSize: isMobile ? 12 : 13,
                 color: textPrimary,
               }}
             >
@@ -237,8 +264,8 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
       )}
 
       {/* Section 6 : Top 3 des élèves les plus sanctionnés */}
-      <div style={{ ...cardStyle(cardBg, cardBorder, shadow) }}>
-        <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 16, color: textPrimary }}>
+      <div style={{ ...cardStyle(cardBg, cardBorder, shadow, cardPadding) }}>
+        <div style={{ fontWeight: 700, marginBottom: 12, fontSize: isMobile ? 14 : 16, color: textPrimary }}>
           🔥 Cerveaux moteurs
         </div>
         {top.length === 0 ? (
@@ -257,24 +284,24 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
             >
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{
-                  width: 32,
-                  height: 32,
+                  width: isMobile ? 28 : 32,
+                  height: isMobile ? 28 : 32,
                   borderRadius: "50%",
                   background: i === 0 ? danger : i === 1 ? warning : accent,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 14,
+                  fontSize: isMobile ? 12 : 14,
                   fontWeight: 800,
                   color: "#fff",
                 }}>
                   {i + 1}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
+                  <div style={{ fontWeight: 600, fontSize: isMobile ? 13 : 14, color: textPrimary }}>
                     {t.eleve?.nom} {t.eleve?.postnom}
                   </div>
-                  <div style={{ fontSize: 12, color: textSecondary }}>
+                  <div style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>
                     Classe {t.eleve?.classe}
                   </div>
                 </div>
@@ -284,7 +311,7 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
                 color: "#fff",
                 padding: "2px 10px",
                 borderRadius: 20,
-                fontSize: 12,
+                fontSize: isMobile ? 11 : 12,
                 fontWeight: 600,
               }}>
                 {t.count} faute(s)
@@ -298,11 +325,11 @@ export function DashboardDirecteur({ punitions, eleves, classes, fautes, notifs 
 }
 
 // Fonction utilitaire pour éviter la répétition des styles de carte
-function cardStyle(bg, border, shadow) {
+function cardStyle(bg, border, shadow, padding = "20px") {
   return {
     background: bg,
     borderRadius: 16,
-    padding: 20,
+    padding: padding,
     boxShadow: shadow,
     border: `1px solid ${border}`,
     transition: "background-color 0.3s",

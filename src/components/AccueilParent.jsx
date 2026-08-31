@@ -1,8 +1,10 @@
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Users, ClipboardList, ArrowRight, AlertTriangle } from "lucide-react";
 
 export function AccueilParent({ user, eleves, punitions }) {
-  const { S, dark } = useStyles(); // ✅ mode sombre/clair
+  const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const totalPunitions = eleves.reduce(
     (acc, e) => acc + punitions.filter((p) => p.idEleve === e._id).length,
@@ -18,68 +20,96 @@ export function AccueilParent({ user, eleves, punitions }) {
   const warning = dark ? "#FBBF24" : "#F59E0B";
   const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 16;
+  const statGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: isMobile ? 12 : 16,
+    marginBottom: isMobile ? 20 : 32,
+  };
+  const cardPadding = isMobile ? 14 : 20;
+  const statIconSize = isMobile ? 28 : 32;
+  const statValueSize = isMobile ? 24 : 28;
+  const statLabelSize = isMobile ? 13 : 14;
+  const childCardPadding = isMobile ? "12px 14px" : "16px 20px";
+  const childNameSize = isMobile ? 15 : 16;
+  const childClassSize = isMobile ? 12 : 13;
+  const badgeSize = isMobile ? 11 : 12;
+  const arrowSize = isMobile ? 16 : 18;
+
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: containerPadding }}>
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           👋 Bienvenue, {user.nom}
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Résumé concernant vos enfants.
         </p>
       </div>
 
       {/* Cartes statistiques */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
+      <div style={statGridStyle}>
         <div style={{
           background: cardBg,
           borderRadius: 16,
-          padding: 20,
+          padding: cardPadding,
           textAlign: "center",
           boxShadow: shadow,
           border: `1px solid ${cardBorder}`,
           transition: "background-color 0.3s",
         }}>
-          <Users size={32} color={accent} />
-          <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginTop: 8 }}>{eleves.length}</div>
-          <div style={{ color: textSecondary, fontSize: 14, marginTop: 4 }}>Enfants suivis</div>
+          <Users size={statIconSize} color={accent} />
+          <div style={{ fontSize: statValueSize, fontWeight: 900, color: accent, marginTop: 8 }}>
+            {eleves.length}
+          </div>
+          <div style={{ color: textSecondary, fontSize: statLabelSize, marginTop: 4 }}>
+            Enfants suivis
+          </div>
         </div>
         <div style={{
           background: cardBg,
           borderRadius: 16,
-          padding: 20,
+          padding: cardPadding,
           textAlign: "center",
           boxShadow: shadow,
           border: `1px solid ${cardBorder}`,
           transition: "background-color 0.3s",
         }}>
-          <ClipboardList size={32} color={warning} />
-          <div style={{ fontSize: 28, fontWeight: 900, color: warning, marginTop: 8 }}>{totalPunitions}</div>
-          <div style={{ color: textSecondary, fontSize: 14, marginTop: 4 }}>Total punitions</div>
+          <ClipboardList size={statIconSize} color={warning} />
+          <div style={{ fontSize: statValueSize, fontWeight: 900, color: warning, marginTop: 8 }}>
+            {totalPunitions}
+          </div>
+          <div style={{ color: textSecondary, fontSize: statLabelSize, marginTop: 4 }}>
+            Total punitions
+          </div>
         </div>
       </div>
 
       {/* Liste des enfants */}
       <div>
-        <h3 style={{ fontSize: 20, fontWeight: 600, color: textPrimary, marginBottom: 16 }}>
+        <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, color: textPrimary, marginBottom: isMobile ? 12 : 16 }}>
           Mes enfants
         </h3>
         {eleves.length === 0 ? (
           <div style={{
             background: cardBg,
             borderRadius: 16,
-            padding: 48,
+            padding: isMobile ? 32 : 48,
             textAlign: "center",
             boxShadow: shadow,
             border: `1px solid ${cardBorder}`,
             color: textSecondary,
           }}>
-            <Users size={48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 12 }} />
-            <p style={{ margin: 0 }}>Aucun enfant enregistré.</p>
+            <Users size={isMobile ? 36 : 48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 12 }} />
+            <p style={{ margin: 0, fontSize: subtitleSize }}>Aucun enfant enregistré.</p>
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
             {eleves.map((e) => {
               const nbPunitions = punitions.filter((p) => p.idEleve === e._id).length;
               return (
@@ -88,24 +118,26 @@ export function AccueilParent({ user, eleves, punitions }) {
                   style={{
                     background: cardBg,
                     borderRadius: 12,
-                    padding: "16px 20px",
+                    padding: childCardPadding,
                     boxShadow: shadow,
                     border: `1px solid ${cardBorder}`,
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
                     transition: "background-color 0.3s",
+                    flexWrap: isMobile ? "wrap" : "nowrap",
+                    gap: isMobile ? 8 : 0,
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? "100%" : 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: childNameSize, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {e.nom} {e.postnom} {e.prenom && <span style={{ fontWeight: 400, color: textSecondary }}>{e.prenom}</span>}
                     </div>
-                    <div style={{ color: textSecondary, fontSize: 13, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ color: textSecondary, fontSize: childClassSize, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       Classe {e.classe}
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: 8, flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, marginLeft: isMobile ? 0 : 8, flexShrink: 0 }}>
                     {nbPunitions > 0 && (
                       <span style={{
                         display: "inline-flex",
@@ -115,14 +147,14 @@ export function AccueilParent({ user, eleves, punitions }) {
                         color: nbPunitions > 0 ? (dark ? "#FBBF24" : "#92400E") : textSecondary,
                         padding: "2px 8px",
                         borderRadius: 12,
-                        fontSize: 12,
+                        fontSize: badgeSize,
                         fontWeight: 600,
                       }}>
-                        <AlertTriangle size={14} />
+                        <AlertTriangle size={isMobile ? 12 : 14} />
                         {nbPunitions} punition{nbPunitions > 1 ? "s" : ""}
                       </span>
                     )}
-                    <ArrowRight size={18} color={accent} />
+                    <ArrowRight size={arrowSize} color={accent} />
                   </div>
                 </div>
               );

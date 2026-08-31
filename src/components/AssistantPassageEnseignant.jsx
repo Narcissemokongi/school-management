@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
@@ -22,6 +23,7 @@ const STATUS_OPTIONS = [
 // ==================== COMPOSANT PRINCIPAL ====================
 export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // <-- Hook mobile
   const { confirm, dialogProps } = useConfirm();
 
   // ----- État local -----
@@ -29,9 +31,9 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
   const [decisions, setDecisions] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filter, setFilter] = useState("sans_decision"); // "sans_decision" | "avec_decision"
+  const [filter, setFilter] = useState("sans_decision");
   const [classeParDefaut, setClasseParDefaut] = useState("");
-  const [activeTab, setActiveTab] = useState("a_traiter"); // "a_traiter" | "soumis"
+  const [activeTab, setActiveTab] = useState("a_traiter");
 
   // ----- Requêtes Convex -----
   const inscriptions = useQuery(
@@ -71,12 +73,10 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     return new Set(propositionsExistantes.map((p) => p.eleveId));
   }, [propositionsExistantes]);
 
-  // Élèves à traiter (non soumis)
   const elevesATraiter = useMemo(() => {
     return inscriptionsDeMaClasse.filter((insc) => !elevesDejaSoumis.has(insc.eleveId));
   }, [inscriptionsDeMaClasse, elevesDejaSoumis]);
 
-  // Élèves soumis (avec propositions)
   const elevesSoumis = useMemo(() => {
     return propositionsExistantes.map((prop) => {
       const inscription = inscriptionsDeMaClasse.find((i) => i.eleveId === prop.eleveId);
@@ -90,23 +90,19 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     });
   }, [propositionsExistantes, inscriptionsDeMaClasse]);
 
-  // Recherche et filtre pour l'onglet "À traiter"
   const filteredATraiter = useMemo(() => {
     let list = elevesATraiter;
-
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       list = list.filter((insc) =>
         `${insc.nom} ${insc.postnom} ${insc.prenom || ''}`.toLowerCase().includes(q)
       );
     }
-
     if (filter === "sans_decision") {
       list = list.filter((insc) => !decisions[insc.eleveId]);
     } else if (filter === "avec_decision") {
       list = list.filter((insc) => decisions[insc.eleveId]);
     }
-
     return list;
   }, [elevesATraiter, searchTerm, filter, decisions]);
 
@@ -185,12 +181,10 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
         decisions: decisionsArray,
         userId: user._id,
       });
-      // Nettoyer les décisions soumises
       const newDecisions = { ...decisions };
       elevesASoumettre.forEach((insc) => delete newDecisions[insc.eleveId]);
       setDecisions(newDecisions);
       toast.success(`${elevesASoumettre.length} proposition(s) soumise(s).`);
-      // Basculer vers l'onglet "Soumis" pour voir le résultat
       setActiveTab("soumis");
     } catch (err) {
       toast.error(err.message);
@@ -227,47 +221,54 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
   };
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <h2 style={{ fontSize: 28, fontWeight: 700, color: colors.textPrimary, marginBottom: 8 }}>
+      <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: colors.textPrimary, marginBottom: 8 }}>
         Assistant de passage — {classeEnseignant}
       </h2>
-      <p style={{ color: colors.textSecondary, marginBottom: 24 }}>
+      <p style={{ color: colors.textSecondary, marginBottom: isMobile ? 16 : 24, fontSize: isMobile ? 14 : 16 }}>
         Traitez les élèves progressivement. Soumettez d'abord ceux déjà décidés, puis revenez pour les autres.
       </p>
 
       {/* Onglets principaux */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${colors.cardBorder}`, marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${colors.cardBorder}`, marginBottom: isMobile ? 16 : 24 }}>
         <TabButton
           label={`À traiter (${nbATraiter})`}
           active={activeTab === "a_traiter"}
           onClick={() => setActiveTab("a_traiter")}
           colors={colors}
+          isMobile={isMobile}
         />
         <TabButton
           label={`Soumis (${nbSoumis})`}
           active={activeTab === "soumis"}
           onClick={() => setActiveTab("soumis")}
           colors={colors}
+          isMobile={isMobile}
         />
       </div>
 
-      {/* Contenu de l'onglet "À traiter" */}
       {activeTab === "a_traiter" && (
         <>
           {/* Barre d'outils */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24, alignItems: "center" }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flexWrap: "wrap", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 16 : 24, alignItems: "stretch" }}>
             {/* Sélection année */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-              <Calendar size={18} color={colors.textSecondary} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: isMobile ? "none" : 1, minWidth: isMobile ? "100%" : 200 }}>
+              <Calendar size={isMobile ? 16 : 18} color={colors.textSecondary} />
               <select
                 value={nouvelleAnneeId}
                 onChange={(e) => setNouvelleAnneeId(e.target.value)}
                 style={{
-                  padding: "8px 12px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8,
-                  fontSize: 14, background: colors.selectBg, color: colors.selectText, outline: "none", flex: 1,
+                  padding: isMobile ? "10px 12px" : "8px 12px",
+                  border: `1px solid ${colors.cardBorder}`,
+                  borderRadius: 8,
+                  fontSize: isMobile ? 16 : 14,
+                  background: colors.selectBg,
+                  color: colors.selectText,
+                  outline: "none",
+                  flex: 1,
                 }}
               >
                 <option value="">-- Année de destination --</option>
@@ -280,45 +281,47 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
             </div>
 
             {/* Recherche */}
-            <div style={{ display: "flex", alignItems: "center", background: colors.cardBg, border: `1px solid ${colors.cardBorder}`, borderRadius: 8, padding: "8px 12px", flex: 2, minWidth: 200 }}>
-              <Search size={16} color={colors.textSecondary} />
+            <div style={{ display: "flex", alignItems: "center", background: colors.cardBg, border: `1px solid ${colors.cardBorder}`, borderRadius: 8, padding: isMobile ? "10px 12px" : "8px 12px", flex: isMobile ? "none" : 2, minWidth: isMobile ? "100%" : 200 }}>
+              <Search size={isMobile ? 14 : 16} color={colors.textSecondary} />
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Rechercher un élève..."
-                style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: 14, color: colors.textPrimary, marginLeft: 8 }}
+                style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: isMobile ? 16 : 14, color: colors.textPrimary, marginLeft: 8 }}
               />
-              {searchTerm && <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textSecondary }}><X size={16} /></button>}
+              {searchTerm && <button onClick={() => setSearchTerm("")} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textSecondary }}><X size={isMobile ? 14 : 16} /></button>}
             </div>
 
             {/* Filtres secondaires */}
-            <div style={{ display: "flex", gap: 4 }}>
+            <div style={{ display: "flex", gap: 4, flexDirection: isMobile ? "column" : "row" }}>
               <FilterButton
                 label={`Sans décision (${nbSansDecision})`}
                 active={filter === "sans_decision"}
                 onClick={() => setFilter("sans_decision")}
                 colors={colors}
+                isMobile={isMobile}
               />
               <FilterButton
                 label={`Avec décision (${nbAvecDecision})`}
                 active={filter === "avec_decision"}
                 onClick={() => setFilter("avec_decision")}
                 colors={colors}
+                isMobile={isMobile}
               />
             </div>
           </div>
 
           {/* Résumé et action groupée */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16, alignItems: "center" }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flexWrap: "wrap", gap: isMobile ? 8 : 16, marginBottom: 16, alignItems: "stretch" }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Badge text={`Passant : ${Object.values(decisions).filter(d => d.statut === "passant").length}`} bg={colors.badgePassant} color={colors.badgePassantText} />
               <Badge text={`Redoublant : ${Object.values(decisions).filter(d => d.statut === "redoublant").length}`} bg={colors.badgeRedoublant} color={colors.badgeRedoublantText} />
             </div>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexDirection: isMobile ? "column" : "row", marginLeft: isMobile ? "0" : "auto" }}>
               <select
                 value={classeParDefaut}
                 onChange={(e) => setClasseParDefaut(e.target.value)}
-                style={{ padding: "6px 10px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: 13, background: colors.selectBg, color: colors.selectText }}
+                style={{ padding: isMobile ? "10px 12px" : "6px 10px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: isMobile ? 16 : 13, background: colors.selectBg, color: colors.selectText, width: isMobile ? "100%" : "auto" }}
               >
                 <option value="">-- Classe par défaut --</option>
                 {classesTriees.map((c) => <option key={c._id} value={c.nom} style={{ background: colors.cardBg }}>{c.nom}</option>)}
@@ -326,9 +329,9 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
               <button
                 onClick={marquerTousPassants}
                 disabled={!classeParDefaut || nbSansDecision === 0}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", background: colors.accent, color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500, opacity: !classeParDefaut || nbSansDecision === 0 ? 0.6 : 1 }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: isMobile ? "10px 12px" : "6px 12px", background: colors.accent, color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500, opacity: !classeParDefaut || nbSansDecision === 0 ? 0.6 : 1, width: isMobile ? "100%" : "auto" }}
               >
-                <ListChecks size={16} /> Marquer tous passants
+                <ListChecks size={isMobile ? 16 : 16} /> Marquer tous passants
               </button>
             </div>
           </div>
@@ -341,15 +344,16 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
             classesTriees={classesTriees}
             updateDecision={updateDecision}
             colors={colors}
+            isMobile={isMobile}
           />
 
           {/* Bouton de soumission */}
-          <div style={{ marginTop: 24, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ marginTop: isMobile ? 16 : 24, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
             <button
               onClick={handleSoumettre}
               disabled={submitting || !nouvelleAnneeId || elevesASoumettre.length === 0}
               style={{
-                padding: "12px 24px",
+                padding: isMobile ? "12px 16px" : "12px 24px",
                 background: colors.accent,
                 color: "white",
                 border: "none",
@@ -358,26 +362,29 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
                 opacity: submitting || elevesASoumettre.length === 0 ? 0.7 : 1,
+                width: isMobile ? "100%" : "auto",
+                fontSize: isMobile ? 16 : 14,
               }}
             >
-              {submitting ? <Loader size={18} className="animate-spin" /> : <Send size={18} />}
+              {submitting ? <Loader size={18} className="animate-spin" /> : <Send size={isMobile ? 16 : 18} />}
               Soumettre {elevesASoumettre.length > 0 ? `(${elevesASoumettre.length})` : ""}
             </button>
-            <span style={{ color: colors.textSecondary, fontSize: 13 }}>
+            <span style={{ color: colors.textSecondary, fontSize: isMobile ? 13 : 13, textAlign: isMobile ? "center" : "left" }}>
               📋 Vous pourrez soumettre le reste plus tard.
             </span>
           </div>
         </>
       )}
 
-      {/* Contenu de l'onglet "Soumis" */}
       {activeTab === "soumis" && (
         <StudentListSubmitted
           propositions={elevesSoumis}
           colors={colors}
           classesTriees={classesTriees}
+          isMobile={isMobile}
         />
       )}
 
@@ -388,12 +395,12 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
 
 // ==================== SOUS-COMPOSANTS ====================
 
-function TabButton({ label, active, onClick, colors }) {
+function TabButton({ label, active, onClick, colors, isMobile }) {
   return (
     <button
       onClick={onClick}
       style={{
-        padding: "12px 20px",
+        padding: isMobile ? "10px 12px" : "12px 20px",
         border: "none",
         background: "transparent",
         color: active ? colors.accent : colors.textSecondary,
@@ -402,6 +409,7 @@ function TabButton({ label, active, onClick, colors }) {
         cursor: "pointer",
         transition: "all 0.2s",
         whiteSpace: "nowrap",
+        fontSize: isMobile ? 14 : 16,
       }}
     >
       {label}
@@ -409,19 +417,20 @@ function TabButton({ label, active, onClick, colors }) {
   );
 }
 
-function FilterButton({ label, active, onClick, colors }) {
+function FilterButton({ label, active, onClick, colors, isMobile }) {
   return (
     <button
       onClick={onClick}
       style={{
-        padding: "6px 10px",
+        padding: isMobile ? "10px 12px" : "6px 10px",
         background: active ? colors.accent : "transparent",
         color: active ? "#FFF" : colors.textSecondary,
         border: `1px solid ${colors.cardBorder}`,
         borderRadius: 6,
         cursor: "pointer",
-        fontSize: 12,
+        fontSize: isMobile ? 14 : 12,
         whiteSpace: "nowrap",
+        width: isMobile ? "100%" : "auto",
       }}
     >
       {label}
@@ -429,13 +438,13 @@ function FilterButton({ label, active, onClick, colors }) {
   );
 }
 
-function StudentListToTreat({ inscriptions, decisions, elevesDejaSoumis, classesTriees, updateDecision, colors }) {
+function StudentListToTreat({ inscriptions, decisions, elevesDejaSoumis, classesTriees, updateDecision, colors, isMobile }) {
   if (inscriptions.length === 0) {
     return <div style={{ textAlign: "center", padding: 40, color: colors.textSecondary }}>Aucun élève à traiter.</div>;
   }
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
+    <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
       {inscriptions.map((insc) => {
         const decision = decisions[insc.eleveId] || {};
         const hasDecision = !!decision.statut;
@@ -445,18 +454,18 @@ function StudentListToTreat({ inscriptions, decisions, elevesDejaSoumis, classes
             style={{
               background: colors.cardBg,
               borderRadius: 12,
-              padding: "14px 16px",
+              padding: isMobile ? "12px 14px" : "14px 16px",
               border: `1px solid ${hasDecision ? colors.cardBorder : "#F59E0B"}`,
               boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
               transition: "background-color 0.3s",
             }}
           >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontWeight: 600, color: colors.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flexWrap: "wrap", gap: isMobile ? 8 : 12, alignItems: isMobile ? "stretch" : "center" }}>
+              <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200 }}>
+                <div style={{ fontWeight: 600, color: colors.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: isMobile ? 15 : 16 }}>
                   {insc.nom} {insc.postnom} {insc.prenom}
                 </div>
-                <div style={{ fontSize: 13, color: colors.textSecondary }}>
+                <div style={{ fontSize: isMobile ? 13 : 13, color: colors.textSecondary }}>
                   Matricule : {insc.code || "—"}
                 </div>
               </div>
@@ -464,7 +473,7 @@ function StudentListToTreat({ inscriptions, decisions, elevesDejaSoumis, classes
               <select
                 value={decision.statut || ""}
                 onChange={(e) => updateDecision(insc.eleveId, "statut", e.target.value)}
-                style={{ minWidth: 150, padding: "8px 12px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: 14, background: colors.selectBg, color: colors.selectText, outline: "none" }}
+                style={{ minWidth: isMobile ? "100%" : 150, padding: isMobile ? "10px 12px" : "8px 12px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: isMobile ? 16 : 14, background: colors.selectBg, color: colors.selectText, outline: "none" }}
               >
                 <option value="">-- Choisir --</option>
                 <option value="passant">Passant</option>
@@ -478,7 +487,7 @@ function StudentListToTreat({ inscriptions, decisions, elevesDejaSoumis, classes
                 <select
                   value={decision.classeDestination || ""}
                   onChange={(e) => updateDecision(insc.eleveId, "classeDestination", e.target.value)}
-                  style={{ minWidth: 150, padding: "8px 12px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: 14, background: colors.selectBg, color: colors.selectText }}
+                  style={{ minWidth: isMobile ? "100%" : 150, padding: isMobile ? "10px 12px" : "8px 12px", border: `1px solid ${colors.cardBorder}`, borderRadius: 8, fontSize: isMobile ? 16 : 14, background: colors.selectBg, color: colors.selectText }}
                 >
                   <option value="">-- Classe --</option>
                   {classesTriees.map((c) => <option key={c._id} value={c.nom} style={{ background: colors.cardBg }}>{c.nom}</option>)}
@@ -486,12 +495,12 @@ function StudentListToTreat({ inscriptions, decisions, elevesDejaSoumis, classes
               )}
 
               {hasDecision ? (
-                <span style={{ background: colors.badgeDefault, color: colors.textSecondary, padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                <span style={{ background: colors.badgeDefault, color: colors.textSecondary, padding: "4px 10px", borderRadius: 20, fontSize: isMobile ? 12 : 12, fontWeight: 600, textAlign: "center" }}>
                   Prêt à soumettre
                 </span>
               ) : (
-                <span style={{ color: "#F59E0B", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600 }}>
-                  <AlertTriangle size={14} /> À décider
+                <span style={{ color: "#F59E0B", display: "inline-flex", alignItems: "center", gap: 4, fontSize: isMobile ? 12 : 12, fontWeight: 600 }}>
+                  <AlertTriangle size={isMobile ? 14 : 14} /> À décider
                 </span>
               )}
             </div>
@@ -502,31 +511,31 @@ function StudentListToTreat({ inscriptions, decisions, elevesDejaSoumis, classes
   );
 }
 
-function StudentListSubmitted({ propositions, colors, classesTriees }) {
+function StudentListSubmitted({ propositions, colors, classesTriees, isMobile }) {
   if (propositions.length === 0) {
     return <div style={{ textAlign: "center", padding: 40, color: colors.textSecondary }}>Aucune proposition soumise.</div>;
   }
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
+    <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
       {propositions.map((prop) => (
         <div
           key={prop._id}
           style={{
             background: colors.cardBg,
             borderRadius: 12,
-            padding: "14px 16px",
+            padding: isMobile ? "12px 14px" : "14px 16px",
             border: `1px solid ${colors.cardBorder}`,
             boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
             opacity: 0.85,
           }}
         >
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontWeight: 600, color: colors.textPrimary }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flexWrap: "wrap", gap: isMobile ? 8 : 12, alignItems: isMobile ? "stretch" : "center" }}>
+            <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200 }}>
+              <div style={{ fontWeight: 600, color: colors.textPrimary, fontSize: isMobile ? 15 : 16 }}>
                 {prop.nom} {prop.postnom} {prop.prenom}
               </div>
-              <div style={{ fontSize: 13, color: colors.textSecondary }}>
+              <div style={{ fontSize: isMobile ? 13 : 13, color: colors.textSecondary }}>
                 Matricule : {prop.code || "—"}
               </div>
             </div>
@@ -538,13 +547,13 @@ function StudentListSubmitted({ propositions, colors, classesTriees }) {
             />
 
             {prop.classeDestinationPropose && (
-              <span style={{ fontSize: 13, color: colors.textSecondary }}>
+              <span style={{ fontSize: isMobile ? 13 : 13, color: colors.textSecondary }}>
                 → {prop.classeDestinationPropose}
               </span>
             )}
 
-            <span style={{ fontSize: 12, color: colors.textSecondary, display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <CheckCircle2 size={14} color={colors.badgeSoumisText} /> Soumis
+            <span style={{ fontSize: isMobile ? 12 : 12, color: colors.textSecondary, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <CheckCircle2 size={isMobile ? 14 : 14} color={colors.badgeSoumisText} /> Soumis
             </span>
           </div>
         </div>

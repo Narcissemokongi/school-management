@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useStyles } from "../../styles/theme";
-import { MessageSquarePlus, Megaphone, Search, X } from "lucide-react";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook (si non passé en prop)
+import { MessageSquarePlus, Megaphone, Search, X, ArrowLeft } from "lucide-react";
 import { VIEW } from "./MessagerieApp";
 
 export function ConversationList({
@@ -13,10 +14,13 @@ export function ConversationList({
   navigateTo,
   getUserName,
   currentView,
-  isMobile,
+  isMobile: isMobileProp, // prop éventuelle
   goBack,
 }) {
   const { dark } = useStyles();
+  const hookIsMobile = useIsMobile(); // Détection automatique
+  const isMobile = isMobileProp !== undefined ? isMobileProp : hookIsMobile; // Priorité à la prop
+
   const [searchTerm, setSearchTerm] = useState("");
   const showNewChat = currentView?.view === VIEW.NEW_CHAT;
 
@@ -47,6 +51,18 @@ export function ConversationList({
     return list;
   }, [showNewChat, utilisateurs, user, searchTerm]);
 
+  // Styles adaptatifs
+  const headerPadding = isMobile ? 12 : 16;
+  const headerTitleSize = isMobile ? 18 : 20;
+  const headerButtonSize = isMobile ? 40 : 36;
+  const searchInputPadding = isMobile ? "10px 12px" : "8px 12px";
+  const searchInputFontSize = isMobile ? 16 : 14;
+  const listItemPadding = isMobile ? "12px 14px" : "10px 16px";
+  const listItemFontSize = isMobile ? 15 : 14;
+  const groupLabelPadding = isMobile ? "10px 14px" : "12px 16px 6px";
+  const groupLabelFontSize = isMobile ? 11 : 12;
+  const groupItemPadding = isMobile ? "10px 14px" : "10px 16px";
+
   return (
     <div style={{
       display: "flex",
@@ -58,16 +74,37 @@ export function ConversationList({
     }}>
       {/* En-tête */}
       <div style={{
-        padding: 16,
+        padding: headerPadding,
         borderBottom: `1px solid ${borderColor}`,
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
+        gap: 8,
       }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: textPrimary }}>
-          Messages
-        </h2>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {isMobile && goBack && (
+            <button
+              onClick={goBack}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: textSecondary,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 4,
+              }}
+              aria-label="Retour"
+            >
+              <ArrowLeft size={22} />
+            </button>
+          )}
+          <h2 style={{ margin: 0, fontSize: headerTitleSize, fontWeight: 700, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            Messages
+          </h2>
+        </div>
+        <div style={{ display: "flex", gap: isMobile ? 4 : 8, flexShrink: 0 }}>
           {["admin", "directeur", "disciplinaire"].includes(user.role) && (
             <button
               onClick={() => navigateTo(VIEW.BROADCAST)}
@@ -79,14 +116,14 @@ export function ConversationList({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 36,
-                height: 36,
+                width: headerButtonSize,
+                height: headerButtonSize,
                 borderRadius: 8,
                 transition: "background 0.2s",
               }}
               title="Diffusion"
             >
-              <Megaphone size={20} />
+              <Megaphone size={isMobile ? 22 : 20} />
             </button>
           )}
           <button
@@ -99,21 +136,21 @@ export function ConversationList({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 36,
-              height: 36,
+              width: headerButtonSize,
+              height: headerButtonSize,
               borderRadius: 8,
               transition: "background 0.2s",
             }}
             title={showNewChat ? "Retour" : "Nouvelle conversation"}
           >
-            <MessageSquarePlus size={20} />
+            <MessageSquarePlus size={isMobile ? 22 : 20} />
           </button>
         </div>
       </div>
 
       {/* Contenu */}
       {showNewChat ? (
-        <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 8 : 8 }}>
           {/* Barre de recherche */}
           <div style={{
             display: "flex",
@@ -121,17 +158,17 @@ export function ConversationList({
             background: inputBg,
             border: `1px solid ${borderColor}`,
             borderRadius: 8,
-            padding: "8px 12px",
+            padding: searchInputPadding,
             marginBottom: 8,
           }}>
-            <Search size={16} color={textSecondary} />
+            <Search size={isMobile ? 18 : 16} color={textSecondary} />
             <input
               style={{
                 border: "none",
                 outline: "none",
                 background: "transparent",
                 color: textPrimary,
-                fontSize: 14,
+                fontSize: searchInputFontSize,
                 width: "100%",
                 marginLeft: 8,
               }}
@@ -144,14 +181,14 @@ export function ConversationList({
                 onClick={() => setSearchTerm("")}
                 style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}
               >
-                <X size={16} />
+                <X size={isMobile ? 18 : 16} />
               </button>
             )}
           </div>
 
           {/* Liste des utilisateurs filtrés */}
           {filteredUsers.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 24, color: textSecondary }}>
+            <div style={{ textAlign: "center", padding: 24, color: textSecondary, fontSize: isMobile ? 14 : 14 }}>
               Aucun utilisateur trouvé
             </div>
           ) : (
@@ -160,11 +197,12 @@ export function ConversationList({
                 key={u._id}
                 onClick={() => navigateTo(VIEW.CHAT, { userId: u._id })}
                 style={{
-                  padding: "12px 16px",
+                  padding: listItemPadding,
                   cursor: "pointer",
                   borderRadius: 8,
                   borderBottom: `1px solid ${borderColor}`,
                   color: textPrimary,
+                  fontSize: listItemFontSize,
                   transition: "background 0.15s",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
@@ -181,8 +219,8 @@ export function ConversationList({
           {availableGroups.length > 0 && (
             <div style={{ borderBottom: `1px solid ${borderColor}`, paddingBottom: 8 }}>
               <div style={{
-                padding: "12px 16px 6px",
-                fontSize: 12,
+                padding: groupLabelPadding,
+                fontSize: groupLabelFontSize,
                 fontWeight: 700,
                 color: textSecondary,
                 textTransform: "uppercase",
@@ -194,11 +232,12 @@ export function ConversationList({
                   key={group.id}
                   onClick={() => navigateTo(VIEW.GROUP, { groupId: group.id })}
                   style={{
-                    padding: "10px 16px",
+                    padding: groupItemPadding,
                     cursor: "pointer",
                     background: activeGroupId === group.id ? activeBg : "transparent",
                     borderBottom: `1px solid ${borderColor}`,
                     color: textPrimary,
+                    fontSize: listItemFontSize,
                     transition: "background 0.15s",
                   }}
                   onMouseEnter={(e) => {
@@ -216,7 +255,7 @@ export function ConversationList({
 
           {/* Conversations privées */}
           {conversations.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", color: textSecondary }}>
+            <div style={{ padding: 24, textAlign: "center", color: textSecondary, fontSize: isMobile ? 14 : 14 }}>
               Aucune conversation
             </div>
           ) : (
@@ -225,11 +264,12 @@ export function ConversationList({
                 key={conv.userId}
                 onClick={() => navigateTo(VIEW.CHAT, { userId: conv.userId })}
                 style={{
-                  padding: "12px 16px",
+                  padding: listItemPadding,
                   cursor: "pointer",
                   background: selectedUserId === conv.userId ? activeBg : "transparent",
                   borderBottom: `1px solid ${borderColor}`,
                   color: textPrimary,
+                  fontSize: listItemFontSize,
                   transition: "background 0.15s",
                 }}
                 onMouseEnter={(e) => {

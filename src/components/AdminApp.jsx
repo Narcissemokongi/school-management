@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
@@ -18,7 +19,8 @@ import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AnneeSelector } from "./AnneeSelector";
 import { ParentLinkRequests } from "./ParentLinkRequests";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useAppStore } from "../store/appStore";
+import { useIsMobile } from "../hooks/useIsMobile";
 import {
   Home,
   Users,
@@ -63,6 +65,7 @@ export function AdminApp({
   handleLogout,
 }) {
   const { S } = useStyles();
+  const isMobile = useIsMobile();
 
   // ✅ Onglet actif et contact de messagerie depuis le store
   const tab = useAppStore((state) => state.adminTab);
@@ -256,7 +259,18 @@ export function AdminApp({
         onToggleTheme={toggle}
         onLogout={handleLogout}
       >
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px 24px 0", display: "flex", justifyContent: "flex-end" }}>
+        <div
+          style={{
+            maxWidth: 1280,
+            margin: "0 auto",
+            padding: isMobile ? "16px 16px 0" : "16px 24px 0",
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            justifyContent: isMobile ? "flex-start" : "flex-end",
+            alignItems: isMobile ? "stretch" : "center",
+            gap: isMobile ? 8 : 0,
+          }}
+        >
           <AnneeSelector
             ecoleId={ecoleId}
             anneeId={anneeId}

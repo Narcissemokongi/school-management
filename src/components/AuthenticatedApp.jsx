@@ -222,7 +222,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
         <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
           <div style={{
             width: "100%",
-            padding: "12px 24px",
+            padding: isMobile ? "12px 16px" : "12px 24px",
             background: dark ? "#0F172A" : "#FFFFFF",
             borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             display: "flex",
@@ -230,8 +230,8 @@ export function AuthenticatedApp({ user, handleLogout }) {
             justifyContent: "space-between",
             boxSizing: "border-box",
           }}>
-            <div style={S.navbarBrand}>School Management</div>
-            <div style={{ fontWeight: 600, color: S.textMuted }}>Super Admin</div>
+            <div style={{ ...S.navbarBrand, fontSize: isMobile ? 16 : 18 }}>School Management</div>
+            <div style={{ fontWeight: 600, color: S.textMuted, fontSize: isMobile ? 13 : 14 }}>Super Admin</div>
           </div>
 
           <div style={{ flex: 1, width: "100%", overflow: "hidden" }}>
@@ -241,7 +241,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
                 pushScreen("ecole");
               }}
               user={user}
-              onLogout={handleLogout}   // ✅ Correction ici
+              onLogout={handleLogout}
             />
           </div>
         </div>
@@ -262,10 +262,10 @@ export function AuthenticatedApp({ user, handleLogout }) {
         frais === undefined)
     ) {
       return (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: dark ? "#0F172A" : "#F5F7FB", fontFamily: "'Inter', sans-serif", color: dark ? "#CBD5E1" : "#64748B" }}>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: dark ? "#0F172A" : "#F5F7FB", fontFamily: "'Inter', sans-serif", color: dark ? "#CBD5E1" : "#64748B", padding: isMobile ? "16px" : "0" }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ width: 40, height: 40, border: `3px solid ${dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"}`, borderTopColor: dark ? "#818CF8" : "#4F46E5", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
-            Chargement...
+            <p style={{ fontSize: isMobile ? 14 : 16 }}>Chargement...</p>
           </div>
         </div>
       );
@@ -276,13 +276,27 @@ export function AuthenticatedApp({ user, handleLogout }) {
         <NotifBanner notifs={notifs} />
 
         {isSuperAdmin && (
-          <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px 24px 0", display: isMobile ? "none" : "block" }}>
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px 0" : "16px 24px 0", display: isMobile ? "block" : "block" }}>
             <button
               onClick={() => {
                 setSelectedEcoleId(null);
                 popScreen();
               }}
-              style={{ background: dark ? "#1E293B" : "#FFFFFF", border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "#E2E8F0"}`, color: "#4F46E5", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+              style={{
+                background: dark ? "#1E293B" : "#FFFFFF",
+                border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "#E2E8F0"}`,
+                color: "#4F46E5",
+                borderRadius: 8,
+                padding: isMobile ? "8px 12px" : "8px 16px",
+                fontSize: isMobile ? 13 : 14,
+                fontWeight: 500,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                width: isMobile ? "100%" : "auto",
+                justifyContent: isMobile ? "center" : "flex-start",
+              }}
             >
               ← Retour aux écoles
             </button>

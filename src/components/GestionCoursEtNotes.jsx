@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { GestionCours } from "./GestionCours";
 import { GestionNotes } from "./GestionNotes";
 import { BookOpen, BarChart3, Loader } from "lucide-react";
@@ -15,6 +16,7 @@ export function GestionCoursEtNotes({
   anneeActive,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [subTab, setSubTab] = useState("cours");
 
   // ✅ Récupération des cours disponibles pour le barème dans GestionNotes
@@ -23,12 +25,11 @@ export function GestionCoursEtNotes({
     anneeId ? { ecoleId, anneeId } : { ecoleId }
   );
 
-  // Compter les cours
   const nbCours = coursDisponibles?.length ?? 0;
 
   const tabs = [
-    { id: "cours", label: "Cours", icon: <BookOpen size={18} />, badge: nbCours },
-    { id: "notes", label: "Notes", icon: <BarChart3 size={18} /> },
+    { id: "cours", label: "Cours", icon: <BookOpen size={isMobile ? 16 : 18} />, badge: nbCours },
+    { id: "notes", label: "Notes", icon: <BarChart3 size={isMobile ? 16 : 18} /> },
   ];
 
   // Couleurs adaptatives
@@ -40,16 +41,25 @@ export function GestionCoursEtNotes({
   const badgeBg = dark ? "#312E81" : "#EEF2FF";
   const badgeText = dark ? "#A5B4FC" : "#4F46E5";
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 16;
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const tabsMarginBottom = isMobile ? 16 : 24;
+  const tabPadding = isMobile ? "10px 12px" : "12px 20px";
+  const tabFontSize = isMobile ? 14 : 16;
+
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Évaluations & Cours
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Gérez les matières, notes et résultats des élèves
         </p>
       </div>
@@ -59,9 +69,10 @@ export function GestionCoursEtNotes({
         display: "flex",
         gap: 0,
         borderBottom: `2px solid ${borderColor}`,
-        marginBottom: 24,
+        marginBottom: tabsMarginBottom,
         overflowX: "auto",
         whiteSpace: "nowrap",
+        WebkitOverflowScrolling: "touch", // Défilement fluide sur mobile
       }}>
         {tabs.map((t) => (
           <button
@@ -73,7 +84,7 @@ export function GestionCoursEtNotes({
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: "12px 20px",
+              padding: tabPadding,
               border: "none",
               background: "transparent",
               color: subTab === t.id ? accentColor : inactiveTabColor,
@@ -83,21 +94,22 @@ export function GestionCoursEtNotes({
               transition: "all 0.2s",
               position: "relative",
               flexShrink: 0,
+              fontSize: tabFontSize,
             }}
           >
             {t.icon}
             <span>{t.label}</span>
             {t.badge !== undefined && t.badge > 0 && (
               <span style={{
-                minWidth: 18,
-                height: 18,
+                minWidth: isMobile ? 16 : 18,
+                height: isMobile ? 16 : 18,
                 background: badgeBg,
                 color: badgeText,
                 borderRadius: "50%",
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 11,
+                fontSize: isMobile ? 10 : 11,
                 fontWeight: 700,
                 padding: "0 4px",
               }}>

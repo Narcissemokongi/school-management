@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Layout } from "./Layout";
 import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { MessagerieApp } from "./messagerie/MessagerieApp";
@@ -13,7 +14,7 @@ import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { AssistantPassageEnseignant } from "./AssistantPassageEnseignant";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useAppStore } from "../store/appStore";
 import {
   BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, ArrowLeft, BarChart3, GraduationCap,
@@ -26,10 +27,11 @@ export function EnseignantApp({
   dark, toggle, handleLogout,
 }) {
   const { S } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
   const classe = user.classe;
   const elevesDeMaClasse = eleves.filter((e) => e.classe === classe);
 
-  // ✅ Onglet actif, cours sélectionné et contact de messagerie depuis le store
   const tab = useAppStore((state) => state.enseignantTab);
   const setTab = useAppStore((state) => state.setEnseignantTab);
   const selectedCours = useAppStore((state) => state.enseignantSelectedCours);
@@ -104,12 +106,17 @@ export function EnseignantApp({
   const renderContent = () => {
     if (!anneeId && (tab === "dashboard" || tab === "cours" || tab === "absences")) {
       return (
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-          <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
+        <div style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "24px 16px" : "32px 24px",
+          textAlign: "center",
+        }}>
+          <Calendar size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
+          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: textSecondary, fontSize: 14 }}>
+          <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
             Veuillez demander à l'administrateur d'activer une année scolaire.
           </p>
         </div>
@@ -119,25 +126,30 @@ export function EnseignantApp({
     switch (tab) {
       case "dashboard":
         return (
-          <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
-            <div style={{ marginBottom: 32 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+            <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+              <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
                 Tableau de bord enseignant
               </h2>
-              <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+              <p style={{ color: textSecondary, marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
                 Classe {classe} · {anneeActive?.nom}
               </p>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
-              <StatCard icon={<GraduationCap size={24} />} value={elevesDeMaClasse.length} label="Élèves" color="#4F46E5" dark={dark} />
-              <StatCard icon={<BookOpen size={24} />} value={coursDisponibles.length} label="Cours" color="#10B981" dark={dark} />
-              <StatCard icon={<AlertTriangle size={24} />} value={absencesAujourdhui.length} label="Absences aujourd'hui" color="#F59E0B" dark={dark} />
-              <StatCard icon={<Clock size={24} />} value={coursStats.reduce((sum, c) => sum + c.nbNotes, 0)} label="Notes saisies" color="#6366F1" dark={dark} />
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: isMobile ? 12 : 16,
+              marginBottom: isMobile ? 20 : 32,
+            }}>
+              <StatCard icon={<GraduationCap size={isMobile ? 20 : 24} />} value={elevesDeMaClasse.length} label="Élèves" color="#4F46E5" dark={dark} />
+              <StatCard icon={<BookOpen size={isMobile ? 20 : 24} />} value={coursDisponibles.length} label="Cours" color="#10B981" dark={dark} />
+              <StatCard icon={<AlertTriangle size={isMobile ? 20 : 24} />} value={absencesAujourdhui.length} label="Absences aujourd'hui" color="#F59E0B" dark={dark} />
+              <StatCard icon={<Clock size={isMobile ? 20 : 24} />} value={coursStats.reduce((sum, c) => sum + c.nbNotes, 0)} label="Notes saisies" color="#6366F1" dark={dark} />
             </div>
 
-            <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: textPrimary }}>Mes cours</h3>
-            <div style={{ display: "grid", gap: 12 }}>
+            <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: isMobile ? 12 : 16, color: textPrimary }}>Mes cours</h3>
+            <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
               {coursStats.map((cours) => (
                 <div
                   key={cours._id}
@@ -145,7 +157,7 @@ export function EnseignantApp({
                   style={{
                     background: cardBg,
                     borderRadius: 12,
-                    padding: "16px 20px",
+                    padding: isMobile ? "12px 14px" : "16px 20px",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
@@ -157,18 +169,18 @@ export function EnseignantApp({
                   onMouseEnter={(e) => { e.currentTarget.style.boxShadow = hoverShadow; e.currentTarget.style.transform = "translateY(-1px)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardShadow; e.currentTarget.style.transform = "translateY(0)"; }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ width: 44, height: 44, borderRadius: 12, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", color: iconColor }}>
-                      <BookOpen size={22} />
+                  <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12 }}>
+                    <div style={{ width: isMobile ? 36 : 44, height: isMobile ? 36 : 44, borderRadius: 12, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", color: iconColor }}>
+                      <BookOpen size={isMobile ? 18 : 22} />
                     </div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>{cours.nom}</div>
-                      <div style={{ fontSize: 13, color: textSecondary }}>{cours.nbNotes} notes · Moy. {cours.moyenne}/20</div>
+                      <div style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16, color: textPrimary }}>{cours.nom}</div>
+                      <div style={{ fontSize: isMobile ? 12 : 13, color: textSecondary }}>{cours.nbNotes} notes · Moy. {cours.moyenne}/20</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, color: iconColor }}>
-                    <TrendingUp size={18} />
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>Notes</span>
+                    <TrendingUp size={isMobile ? 16 : 18} />
+                    <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 500 }}>Notes</span>
                   </div>
                 </div>
               ))}
@@ -188,16 +200,16 @@ export function EnseignantApp({
       case "cours":
         if (!selectedCours) {
           return (
-            <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
-              <div style={{ marginBottom: 32 }}>
-                <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+            <div style={{ maxWidth: 960, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+              <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+                <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
                   Sélectionnez un cours
                 </h2>
-                <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+                <p style={{ color: textSecondary, marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
                   Choisissez un cours pour saisir ou consulter les notes.
                 </p>
               </div>
-              <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
                 {coursDisponibles.map((cours) => (
                   <div
                     key={cours._id}
@@ -205,7 +217,7 @@ export function EnseignantApp({
                     style={{
                       background: cardBg,
                       borderRadius: 16,
-                      padding: "20px",
+                      padding: isMobile ? "14px 16px" : "20px",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
@@ -217,16 +229,16 @@ export function EnseignantApp({
                     onMouseEnter={(e) => { e.currentTarget.style.boxShadow = hoverShadow; e.currentTarget.style.transform = "translateY(-1px)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.boxShadow = cardShadow; e.currentTarget.style.transform = "translateY(0)"; }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", color: iconColor }}>
-                        <BookOpen size={22} />
+                    <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12 }}>
+                      <div style={{ width: isMobile ? 36 : 44, height: isMobile ? 36 : 44, borderRadius: 12, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", color: iconColor }}>
+                        <BookOpen size={isMobile ? 18 : 22} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>{cours.nom}</div>
-                        <div style={{ fontSize: 13, color: textSecondary }}>Classe {cours.classe}</div>
+                        <div style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16, color: textPrimary }}>{cours.nom}</div>
+                        <div style={{ fontSize: isMobile ? 12 : 13, color: textSecondary }}>Classe {cours.classe}</div>
                       </div>
                     </div>
-                    <BarChart3 size={20} color={iconColor} />
+                    <BarChart3 size={isMobile ? 18 : 20} color={iconColor} />
                   </div>
                 ))}
               </div>
@@ -234,23 +246,24 @@ export function EnseignantApp({
           );
         }
         return (
-          <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 16 : 24, flexDirection: isMobile ? "column" : "row" }}>
               <button
                 onClick={() => setSelectedCours(null)}
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 8,
-                  padding: "8px 16px", cursor: "pointer", color: iconColor, fontWeight: 500,
+                  padding: isMobile ? "6px 12px" : "8px 16px", cursor: "pointer", color: iconColor, fontWeight: 500,
+                  fontSize: isMobile ? 13 : 14,
                 }}
               >
-                <ArrowLeft size={16} /> Retour aux cours
+                <ArrowLeft size={isMobile ? 14 : 16} /> Retour aux cours
               </button>
-              <div>
-                <h2 style={{ fontSize: 24, fontWeight: 700, color: textPrimary, margin: 0 }}>
+              <div style={{ textAlign: isMobile ? "center" : "left" }}>
+                <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: textPrimary, margin: 0 }}>
                   {selectedCours.nom}
                 </h2>
-                <p style={{ color: textSecondary, fontSize: 14 }}>
+                <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
                   Classe {classe} · {anneeActive?.nom}
                 </p>
               </div>
@@ -314,12 +327,12 @@ export function EnseignantApp({
         <div style={{
           background: warningBg,
           color: warningText,
-          padding: "10px 20px",
-          fontSize: 13,
+          padding: isMobile ? "10px 12px" : "10px 20px",
+          fontSize: isMobile ? 12 : 13,
           fontWeight: 500,
           textAlign: "center",
           borderRadius: "0 0 12px 12px",
-          margin: "0 24px 16px",
+          margin: isMobile ? "0 12px 12px" : "0 24px 16px",
         }}>
           ⚠️ Aucune année scolaire active. Certaines fonctionnalités sont limitées.
         </div>
@@ -330,24 +343,26 @@ export function EnseignantApp({
 }
 
 function StatCard({ icon, value, label, color, dark }) {
+  const isMobile = useIsMobile(); // <-- Hook mobile
+
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 16,
-      padding: 20,
+      padding: isMobile ? 14 : 20,
       display: "flex",
       alignItems: "center",
-      gap: 16,
+      gap: isMobile ? 12 : 16,
       boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
       border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
       transition: "background-color 0.3s",
     }}>
-      <div style={{ width: 48, height: 48, background: `${color}${dark ? "33" : "15"}`, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color }}>
+      <div style={{ width: isMobile ? 40 : 48, height: isMobile ? 40 : 48, background: `${color}${dark ? "33" : "15"}`, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color }}>
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
-        <div style={{ fontSize: 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
+        <div style={{ fontSize: isMobile ? 18 : 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
+        <div style={{ fontSize: isMobile ? 12 : 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
       </div>
     </div>
   );

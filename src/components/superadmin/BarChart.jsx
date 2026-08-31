@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 import { Download } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -20,11 +21,12 @@ export function BarChart({
   idKey = "_id",
   showRanking = true,
   animated = true,
-  onBarClick,          // callback(item)
-  exportable = false,  // affiche un bouton export CSV
+  onBarClick,
+  exportable = false,
   exportFileName = "bar-chart.csv",
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [isAnimating, setIsAnimating] = useState(false);
 
   const sortedData = useMemo(() => {
@@ -56,11 +58,23 @@ export function BarChart({
     toast.success("Export CSV généré");
   }, [sortedData, labelKey, valueKey, exportFileName]);
 
+  // Styles adaptatifs
+  const labelFontSize = isMobile ? 12 : 13;
+  const labelWidthEffective = isMobile ? Math.min(labelWidth, 100) : labelWidth;
+  const rankingSize = isMobile ? 20 : 24;
+  const rankingFontSize = isMobile ? 10 : 12;
+  const barHeight = isMobile ? Math.max(height, 16) : height;
+  const valueFontSize = isMobile ? 11 : 13;
+  const valueWidth = isMobile ? 45 : 60;
+  const gap = isMobile ? 6 : 10;
+  const showPercentInside = showPercentage && (!isMobile || !showValues); // Sur mobile, si les valeurs sont affichées, on masque le pourcentage interne pour éviter la surcharge
+  const showExternalValues = showValues && !isMobile;
+
   if (sortedData.length === 0) {
     return (
       <div role="status" aria-live="polite" style={{
         display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        padding: 24, color: dark ? "#94A3B8" : "#64748B", fontSize: 13,
+        padding: isMobile ? 16 : 24, color: dark ? "#94A3B8" : "#64748B", fontSize: 13,
         background: dark ? "#1E293B" : "#F9FAFB", borderRadius: 12,
         border: `1px dashed ${dark ? "#334155" : "#E2E8F0"}`,
       }}>
@@ -76,15 +90,16 @@ export function BarChart({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 8 : 12 }}>
       {exportable && (
         <button onClick={handleExport} style={{
           alignSelf: "flex-end", display: "flex", alignItems: "center", gap: 6,
-          padding: "6px 10px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+          padding: isMobile ? "8px 10px" : "6px 10px",
+          border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
           borderRadius: 6, background: "transparent", cursor: "pointer",
-          color: dark ? "#94A3B8" : "#64748B", fontSize: 12,
+          color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 12,
         }}>
-          <Download size={14} /> Export CSV
+          <Download size={isMobile ? 14 : 14} /> Export CSV
         </button>
       )}
 
@@ -98,25 +113,25 @@ export function BarChart({
           <div
             key={itemId}
             style={{
-              display: "flex", alignItems: "center", gap: 10,
+              display: "flex", alignItems: "center", gap: gap,
               animation: animated ? `bar-fade-in 0.4s ease ${index * 0.05}s both` : "none",
             }}
           >
             {showRanking && (
               <div style={{
-                width: 24, height: 24, borderRadius: "50%",
+                width: rankingSize, height: rankingSize, borderRadius: "50%",
                 background: index < 3 ? (dark ? "#312E81" : "#EEF2FF") : "transparent",
                 color: index < 3 ? (dark ? "#A5B4FC" : "#4F46E5") : dark ? "#64748B" : "#94A3B8",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 12, fontWeight: 700, flexShrink: 0,
+                fontSize: rankingFontSize, fontWeight: 700, flexShrink: 0,
               }}>
                 {index + 1}
               </div>
             )}
 
             <div title={label} style={{
-              width: `clamp(80px, ${labelWidth}px, 200px)`,
-              fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              width: isMobile ? `calc(35% - 20px)` : `clamp(80px, ${labelWidthEffective}px, 200px)`,
+              fontSize: labelFontSize, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               color: dark ? "#E2E8F0" : "#1E293B", fontWeight: 500,
             }}>
               {label}
@@ -130,7 +145,7 @@ export function BarChart({
               aria-label={`${label}: ${formatter(value)}`}
               style={{
                 flex: 1, background: dark ? "#334155" : "#F1F5F9", borderRadius: 6,
-                height: `${height}px`, overflow: "hidden", position: "relative",
+                height: `${barHeight}px`, overflow: "hidden", position: "relative",
                 cursor: onBarClick ? "pointer" : "default",
                 transition: "box-shadow 0.2s",
               }}
@@ -153,7 +168,7 @@ export function BarChart({
                 }}
                 title={`${label} : ${formatter(value)} (${Math.round(percent)}%)`}
               >
-                {showPercentage && percent > 20 && (
+                {showPercentInside && percent > 20 && (
                   <span style={{
                     position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
                     fontSize: 11, fontWeight: 700, color: "white",
@@ -165,9 +180,9 @@ export function BarChart({
               </div>
             </div>
 
-            {showValues && (
+            {showExternalValues && (
               <div style={{
-                width: 60, textAlign: "right", fontSize: 13, fontWeight: 600,
+                width: valueWidth, textAlign: "right", fontSize: valueFontSize, fontWeight: 600,
                 color: dark ? "#F1F5F9" : "#1E293B", fontVariantNumeric: "tabular-nums",
               }}>
                 {formatter(value)}

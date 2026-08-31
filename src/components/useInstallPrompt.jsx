@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Share, Plus, MonitorSmartphone } from "lucide-react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 
 // Hook personnalisé pour gérer l'invite d'installation PWA
 export function useInstallPrompt() {
@@ -40,8 +41,9 @@ export function useInstallPrompt() {
 // Bannière d'installation adaptée au thème et responsive
 export function InstallBanner({ onInstall, onDismiss }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [platform, setPlatform] = useState(null);
-  const [visible, setVisible] = useState(true); // pour animation de sortie
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     const ua = window.navigator.userAgent.toLowerCase();
@@ -59,7 +61,7 @@ export function InstallBanner({ onInstall, onDismiss }) {
   // Fermeture avec animation
   const handleDismiss = () => {
     setVisible(false);
-    setTimeout(() => onDismiss?.(), 300); // attendre l'animation
+    setTimeout(() => onDismiss?.(), 300);
   };
 
   const handleInstall = () => {
@@ -75,23 +77,24 @@ export function InstallBanner({ onInstall, onDismiss }) {
   const closeButtonColor = "rgba(255,255,255,0.8)";
   const installButtonBg = dark ? "#818CF8" : "#4F46E5";
 
+  // Style de base
   const bannerStyle = {
     position: "fixed",
-    bottom: 24,
-    right: 24,
-    left: "auto",
+    bottom: isMobile ? 16 : 24,
+    right: isMobile ? 16 : 24,
+    left: isMobile ? 16 : "auto",
     zIndex: 9999,
     background: bannerBackground,
     color: textColor,
     borderRadius: 16,
-    padding: "16px 20px",
+    padding: isMobile ? "14px 16px" : "16px 20px",
     display: "flex",
     alignItems: "center",
     gap: 12,
     boxShadow: dark ? "0 8px 24px rgba(0,0,0,0.5)" : "0 8px 24px rgba(0,0,0,0.25)",
-    maxWidth: 420,
-    width: "calc(100% - 48px)",
-    fontSize: 14,
+    maxWidth: isMobile ? "none" : 420,
+    width: isMobile ? "auto" : "calc(100% - 48px)",
+    fontSize: isMobile ? 13 : 14,
     fontWeight: 500,
     border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.2)"}`,
     transition: "transform 0.3s ease, opacity 0.3s ease",
@@ -99,16 +102,6 @@ export function InstallBanner({ onInstall, onDismiss }) {
     opacity: visible ? 1 : 0,
     animation: visible ? "slideUp 0.3s ease" : "none",
   };
-
-  // Style adapté au mobile
-  const isMobile = window.innerWidth < 600;
-  if (isMobile) {
-    bannerStyle.left = 16;
-    bannerStyle.right = 16;
-    bannerStyle.bottom = 16;
-    bannerStyle.width = "auto";
-    bannerStyle.maxWidth = "none";
-  }
 
   const closeButtonStyle = {
     background: "transparent",
@@ -158,10 +151,10 @@ export function InstallBanner({ onInstall, onDismiss }) {
               border: "none",
               color: "#FFFFFF",
               borderRadius: 8,
-              padding: "6px 14px",
+              padding: isMobile ? "8px 14px" : "6px 14px",
               fontWeight: 600,
               cursor: "pointer",
-              fontSize: 13,
+              fontSize: isMobile ? 13 : 13,
               transition: "background 0.2s, transform 0.1s",
               flexShrink: 0,
             }}

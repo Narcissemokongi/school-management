@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Skeleton } from "./Skeleton";
 import { Calendar, Clock, School } from "lucide-react";
 
@@ -9,6 +10,7 @@ const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
 export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   // Si anneeId est fourni, on l'utilise ; sinon on ne filtre pas par année (compatibilité)
   const emploi = useQuery(
@@ -64,7 +66,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
     return (
       <div style={{
         textAlign: "center",
-        padding: 40,
+        padding: isMobile ? 24 : 40,
         color: textSecondary,
         background: cardBg,
         borderRadius: 16,
@@ -72,7 +74,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
         border: `1px solid ${cardBorder}`,
         marginTop: 20,
       }}>
-        <Calendar size={40} style={{ marginBottom: 12 }} />
+        <Calendar size={isMobile ? 32 : 40} style={{ marginBottom: 12 }} />
         <p>
           {emploiActif
             ? "L'emploi du temps est vide ou mal formaté."
@@ -82,8 +84,16 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
     );
   }
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "12px" : "16px";
+  const titleSize = isMobile ? 20 : 24;
+  const subtitleSize = isMobile ? 13 : 14;
+  const tableFontSize = isMobile ? 12 : 13;
+  const cellPadding = isMobile ? 8 : 10;
+  const headerPadding = isMobile ? 10 : 12;
+
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
       {/* En-tête */}
       <div
         style={{
@@ -92,22 +102,22 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
           justifyContent: "space-between",
           flexWrap: "wrap",
           gap: 12,
-          marginBottom: 20,
+          marginBottom: isMobile ? 16 : 20,
         }}
       >
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: textPrimary, margin: 0 }}>
+          <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
             Emploi du temps
           </h2>
-          <p style={{ color: textSecondary, fontSize: 14, margin: "4px 0 0" }}>
+          <p style={{ color: textSecondary, fontSize: subtitleSize, margin: "4px 0 0" }}>
             Classe {classe}
             {anneeId ? ` · Année ${anneeId}` : ""}
             {datePublication ? ` · Publié le ${new Date(datePublication).toLocaleDateString("fr-FR")}` : ""}
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <Calendar size={16} color={dark ? "#818CF8" : "#4F46E5"} />
-          <span style={{ fontWeight: 600, fontSize: 15, color: textPrimary }}>
+          <Calendar size={isMobile ? 14 : 16} color={dark ? "#818CF8" : "#4F46E5"} />
+          <span style={{ fontWeight: 600, fontSize: isMobile ? 14 : 15, color: textPrimary }}>
             Annuel
           </span>
         </div>
@@ -129,18 +139,18 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
           style={{
             width: "100%",
             borderCollapse: "collapse",
-            fontSize: 13,
-            minWidth: 700,
+            fontSize: tableFontSize,
+            minWidth: isMobile ? 600 : 700,
           }}
         >
           <thead>
             <tr style={{ background: tableHeaderBg, color: "white" }}>
-              <th style={{ padding: 12, textAlign: "center" }}>
+              <th style={{ padding: headerPadding, textAlign: "center" }}>
                 <Clock size={16} style={{ marginRight: 4, verticalAlign: "middle" }} />
                 Heures
               </th>
               {JOURS.map((jour) => (
-                <th key={jour} style={{ padding: 12, textAlign: "center" }}>
+                <th key={jour} style={{ padding: headerPadding, textAlign: "center" }}>
                   {jour}
                 </th>
               ))}
@@ -157,7 +167,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
               >
                 <td
                   style={{
-                    padding: 10,
+                    padding: cellPadding,
                     textAlign: "center",
                     fontWeight: 600,
                     background: hourBg,
@@ -173,7 +183,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
                     <td
                       key={jour}
                       style={{
-                        padding: 8,
+                        padding: cellPadding,
                         textAlign: "center",
                         background: hasContent ? cellHasContentBg : "transparent",
                         borderRadius: hasContent ? 6 : 0,
@@ -184,7 +194,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId }) {
                         style={{
                           fontWeight: hasContent ? 500 : 400,
                           color: hasContent ? cellHasContentText : cellEmptyText,
-                          fontSize: hasContent ? 13 : 12,
+                          fontSize: hasContent ? tableFontSize : tableFontSize - 1,
                           display: "block",
                           overflow: "hidden",
                           textOverflow: "ellipsis",

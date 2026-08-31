@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Layout } from "./Layout";
 import { DashboardComptable } from "./DashboardComptable";
 import { GestionFrais } from "./GestionFrais";
@@ -11,7 +12,7 @@ import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useAppStore } from "../store/appStore";
 import {
   DollarSign, BarChart3, MessageCircle, Phone, HelpCircle,
   FileText, Shield, User, Calendar, TrendingUp, AlertCircle,
@@ -31,15 +32,15 @@ export function ComptableApp({
   handleLogout,
 }) {
   const { S } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
-  // Onglet actif et contact de messagerie depuis le store
   const tab = useAppStore((state) => state.comptableTab);
   const setTab = useAppStore((state) => state.setComptableTab);
   const messagingContactId = useAppStore((state) => state.messagingContactId);
   const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatut, setFilterStatut] = useState("all"); // all, paye, impaye, partiel
+  const [filterStatut, setFilterStatut] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -59,14 +60,12 @@ export function ComptableApp({
     { id: "confidentialite", label: "Confidentialité", icon: <Shield size={20} /> },
   ];
 
-  // Query pour les frais
   const fraisQuery = useQuery(api.frais.listByEcole, {
     ecoleId,
     anneeId,
   });
   const frais = fraisQuery ?? [];
 
-  // Statistiques financières
   const stats = useMemo(() => {
     const totalEleves = eleves?.length ?? 0;
     const totalFrais = frais.reduce((sum, f) => sum + (f.montantTotal || 0), 0);
@@ -77,7 +76,6 @@ export function ComptableApp({
     return { totalEleves, totalFrais, totalPaye, totalRestant, tauxRecouvrement, elevesEnRetard };
   }, [frais, eleves]);
 
-  // Filtrage des frais
   const filteredFrais = useMemo(() => {
     let result = frais;
     if (searchTerm.trim()) {
@@ -96,7 +94,6 @@ export function ComptableApp({
   const totalPages = Math.ceil(filteredFrais.length / pageSize);
   const paginatedFrais = filteredFrais.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Export Excel
   const handleExportExcel = () => {
     const data = filteredFrais.map(f => ({
       "Élève": f.eleveNom || "",
@@ -116,12 +113,17 @@ export function ComptableApp({
   const renderContent = () => {
     if ((tab === "dashboard" || tab === "frais") && !anneeId) {
       return (
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-          <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+        <div style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "24px 16px" : "32px 24px",
+          textAlign: "center",
+        }}>
+          <Calendar size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
+          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: "#64748B", fontSize: 14 }}>
+          <p style={{ color: "#64748B", fontSize: isMobile ? 13 : 14 }}>
             Veuillez demander à l'administrateur d'activer une année scolaire pour accéder aux données financières.
           </p>
         </div>
@@ -142,30 +144,72 @@ export function ComptableApp({
       case "frais":
         return (
           <div>
-            {/* Barre d'outils frais */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 16, padding: "0 24px" }}>
-              <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
+            {/* Barre d'outils frais - adaptée mobile */}
+            <div style={{
+              display: "flex",
+              flexDirection: isMobile ? "column" : "row",
+              flexWrap: "wrap",
+              gap: isMobile ? 8 : 12,
+              marginBottom: isMobile ? 12 : 16,
+              padding: isMobile ? "0 12px" : "0 24px",
+            }}>
+              <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200, position: "relative" }}>
                 <Search size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
                 <input
                   placeholder="Rechercher un élève ou un frais..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                  style={{ width: "100%", padding: "8px 12px 8px 34px", borderRadius: 8, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, background: dark ? "#1E293B" : "#FFFFFF", color: dark ? "#F1F5F9" : "#1E293B", fontSize: 14, outline: "none" }}
+                  style={{
+                    width: "100%",
+                    padding: isMobile ? "10px 12px 10px 34px" : "8px 12px 8px 34px",
+                    borderRadius: 8,
+                    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                    background: dark ? "#1E293B" : "#FFFFFF",
+                    color: dark ? "#F1F5F9" : "#1E293B",
+                    fontSize: isMobile ? 16 : 14,
+                    outline: "none",
+                  }}
                 />
               </div>
-              <select
-                value={filterStatut}
-                onChange={(e) => { setFilterStatut(e.target.value); setCurrentPage(1); }}
-                style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, background: dark ? "#1E293B" : "#FFFFFF", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }}
-              >
-                <option value="all">Tous</option>
-                <option value="paye">Payé</option>
-                <option value="impaye">Impayé</option>
-                <option value="partiel">Partiel</option>
-              </select>
-              <button onClick={handleExportExcel} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 8, color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer", fontSize: 13 }}>
-                <Download size={16} /> Exporter Excel
-              </button>
+              <div style={{ display: "flex", gap: isMobile ? 8 : 12, flexDirection: isMobile ? "column" : "row" }}>
+                <select
+                  value={filterStatut}
+                  onChange={(e) => { setFilterStatut(e.target.value); setCurrentPage(1); }}
+                  style={{
+                    padding: isMobile ? "10px 12px" : "8px 12px",
+                    borderRadius: 8,
+                    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                    background: dark ? "#1E293B" : "#FFFFFF",
+                    color: dark ? "#F1F5F9" : "#1E293B",
+                    cursor: "pointer",
+                    fontSize: isMobile ? 16 : 14,
+                  }}
+                >
+                  <option value="all">Tous</option>
+                  <option value="paye">Payé</option>
+                  <option value="impaye">Impayé</option>
+                  <option value="partiel">Partiel</option>
+                </select>
+                <button
+                  onClick={handleExportExcel}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    padding: isMobile ? "10px 12px" : "8px 12px",
+                    background: dark ? "#334155" : "#F1F5F9",
+                    border: "none",
+                    borderRadius: 8,
+                    color: dark ? "#F1F5F9" : "#1E293B",
+                    cursor: "pointer",
+                    fontSize: isMobile ? 15 : 13,
+                    width: isMobile ? "100%" : "auto",
+                  }}
+                >
+                  <Download size={isMobile ? 18 : 16} /> Exporter Excel
+                </button>
+              </div>
             </div>
 
             <GestionFrais
@@ -219,35 +263,41 @@ export function ComptableApp({
         <div style={{
           background: "#FEF3C7",
           color: "#92400E",
-          padding: "10px 20px",
-          fontSize: 13,
+          padding: isMobile ? "10px 12px" : "10px 20px",
+          fontSize: isMobile ? 12 : 13,
           fontWeight: 500,
           textAlign: "center",
           borderRadius: "0 0 12px 12px",
-          margin: "0 24px 16px",
+          margin: isMobile ? "0 12px 12px" : "0 24px 16px",
         }}>
           ⚠️ Aucune année scolaire active. Les données financières sont indisponibles.
         </div>
       )}
 
-      {/* Cartes de résumé financier */}
+      {/* Cartes de résumé financier - adaptées mobile */}
       {anneeId && tab === "dashboard" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, padding: "0 24px", marginBottom: 24 }}>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>Total élèves</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{stats.totalEleves}</div>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: isMobile ? 12 : 16,
+          padding: isMobile ? "0 12px" : "0 24px",
+          marginBottom: isMobile ? 16 : 24,
+        }}>
+          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Total élèves</div>
+            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{stats.totalEleves}</div>
           </div>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>Total facturé</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "#3B82F6" }}>{stats.totalFrais.toLocaleString()} FC</div>
+          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Total facturé</div>
+            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: "#3B82F6" }}>{stats.totalFrais.toLocaleString()} FC</div>
           </div>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>Total payé</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "#10B981" }}>{stats.totalPaye.toLocaleString()} FC</div>
+          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Total payé</div>
+            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: "#10B981" }}>{stats.totalPaye.toLocaleString()} FC</div>
           </div>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>Reste à payer</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "#EF4444" }}>{stats.totalRestant.toLocaleString()} FC</div>
+          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Reste à payer</div>
+            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: "#EF4444" }}>{stats.totalRestant.toLocaleString()} FC</div>
           </div>
         </div>
       )}

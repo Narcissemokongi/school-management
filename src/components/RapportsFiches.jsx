@@ -1,6 +1,7 @@
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useExportPDF } from "../hooks/useExportPDF";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { getFaute } from "../utils";
 import {
   Search, FileText, Download, AlertTriangle,
@@ -12,6 +13,7 @@ import toast from "react-hot-toast";
 
 export function RapportsFiches({ punitions, eleves, fautes }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
   const [classeFilter, setClasseFilter] = useState("");
@@ -24,7 +26,6 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
   const ficheRef = useRef(null);
   const { exportPDF, isExporting } = useExportPDF();
 
-  // Chargement si données non définies
   const isLoading = eleves === undefined || punitions === undefined || fautes === undefined;
   if (isLoading) {
     return (
@@ -49,17 +50,14 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
   const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
   const borderLight = dark ? "rgba(255,255,255,0.05)" : "#F1F5F9";
 
-  // Pré-calcul des fautes par élève pour performance
   const fautesMap = useMemo(() => {
     const map = {};
     fautes.forEach((f) => { map[f._id] = f; });
     return map;
   }, [fautes]);
 
-  // Fonction getFaute optimisée
   const getFauteInfo = (idFaute) => fautesMap[idFaute] || { libelle: "Inconnue", gravite: "Légère" };
 
-  // Statistiques globales avancées
   const stats = useMemo(() => {
     const totalEleves = eleves.length;
     const totalPunitions = punitions.length;
@@ -71,10 +69,8 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
     return { totalEleves, totalPunitions, fautesGraves, avgPunitions, elevesAvecGrave };
   }, [eleves, punitions, fautesMap]);
 
-  // Liste des classes uniques pour le filtre
   const classes = useMemo(() => [...new Set(eleves.map((e) => e.classe))].sort(), [eleves]);
 
-  // Filtrage combiné : recherche textuelle + classe + gravité + présence de faute grave
   const filtered = useMemo(() => {
     let list = eleves.filter((e) => {
       const matchSearch =
@@ -94,7 +90,6 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
     return list;
   }, [eleves, search, classeFilter, graviteFilter, punitions, fautesMap]);
 
-  // Trier la liste
   const sorted = useMemo(() => {
     const list = [...filtered];
     list.sort((a, b) => {
@@ -118,11 +113,9 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
     return list;
   }, [filtered, tri, punitions]);
 
-  // Pagination
   const totalPages = Math.ceil(sorted.length / pageSize);
   const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
-  // Punitions de l'élève sélectionné (filtrées par gravité)
   const eleveP = useMemo(() => {
     if (!selected) return [];
     let list = punitions
@@ -138,7 +131,6 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
     (p) => getFauteInfo(p.idFaute)?.gravite === "Grave"
   );
 
-  // Comptage des fautes par gravité pour l'élève
   const counts = useMemo(() => {
     if (!selected) return { "Légère": 0, "Moyenne": 0, "Grave": 0 };
     const all = punitions.filter(p => p.idEleve === selected._id);
@@ -150,7 +142,6 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
     return c;
   }, [selected, punitions, fautesMap]);
 
-  // Score de conduite
   const conductScore = useMemo(() => {
     if (!selected) return 100;
     const all = punitions.filter(p => p.idEleve === selected._id);
@@ -226,14 +217,44 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
     return tri.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
   };
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 13 : 14;
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const statGridCols = isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(180px, 1fr))";
+  const statGap = isMobile ? 8 : 16;
+  const filterContainerPadding = isMobile ? 14 : 20;
+  const filterFlexDirection = isMobile ? "column" : "row";
+  const filterAlignItems = isMobile ? "stretch" : "center";
+  const filterGap = isMobile ? 8 : 12;
+  const inputPadding = isMobile ? "12px 14px" : "10px 14px";
+  const inputFontSize = isMobile ? 16 : 14;
+  const selectPadding = isMobile ? "12px 14px" : "10px 14px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const tableMinWidth = isMobile ? 500 : 700;
+  const tableFontSize = isMobile ? 12 : 14;
+  const actionButtonPadding = isMobile ? "12px 16px" : "10px 16px";
+  const actionButtonFontSize = isMobile ? 16 : 14;
+  const actionButtonsFlexDirection = isMobile ? "column" : "row";
+  const actionButtonsGap = isMobile ? 8 : 12;
+  const ficheCardPadding = isMobile ? 16 : 24;
+  const ficheInfoGridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))";
+  const ficheTitleSize = isMobile ? 20 : 22;
+  const ficheTextSize = isMobile ? 13 : 14;
+  const paginationButtonPadding = isMobile ? "10px 16px" : "8px 16px";
+  const paginationFontSize = isMobile ? 14 : 14;
+  const backButtonPadding = isMobile ? "10px 12px" : "8px 16px";
+  const backButtonFontSize = isMobile ? 14 : 14;
+
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: containerPadding }}>
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Rapports & Fiches
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Générer les fiches de conduite des élèves
         </p>
       </div>
@@ -243,27 +264,27 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
           {/* Cartes statistiques */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 16,
-            marginBottom: 24,
+            gridTemplateColumns: statGridCols,
+            gap: statGap,
+            marginBottom: isMobile ? 16 : 24,
           }}>
-            <StatCard icon={<Users size={24} />} value={stats.totalEleves} label="Élèves" color={accent} />
-            <StatCard icon={<ClipboardList size={24} />} value={stats.totalPunitions} label="Punitions" color={warning} />
-            <StatCard icon={<AlertTriangle size={24} />} value={stats.fautesGraves} label="Fautes graves" color={danger} />
-            <StatCard icon={<BarChart3 size={24} />} value={stats.avgPunitions} label="Moy. punitions/élève" color={success} />
+            <StatCard icon={<Users size={isMobile ? 20 : 24} />} value={stats.totalEleves} label="Élèves" color={accent} isMobile={isMobile} />
+            <StatCard icon={<ClipboardList size={isMobile ? 20 : 24} />} value={stats.totalPunitions} label="Punitions" color={warning} isMobile={isMobile} />
+            <StatCard icon={<AlertTriangle size={isMobile ? 20 : 24} />} value={stats.fautesGraves} label="Fautes graves" color={danger} isMobile={isMobile} />
+            <StatCard icon={<BarChart3 size={isMobile ? 20 : 24} />} value={stats.avgPunitions} label="Moy. punitions/élève" color={success} isMobile={isMobile} />
           </div>
 
           {/* Filtres et recherche */}
           <div style={{
             background: cardBg,
             borderRadius: 16,
-            padding: 20,
+            padding: filterContainerPadding,
             boxShadow: shadow,
-            marginBottom: 24,
+            marginBottom: isMobile ? 16 : 24,
             border: `1px solid ${cardBorder}`,
           }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+            <div style={{ display: "flex", gap: filterGap, alignItems: filterAlignItems, flexWrap: "wrap", flexDirection: filterFlexDirection }}>
+              <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 200 }}>
                 <Search size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#9CA3AF" }} />
                 <input
                   value={search}
@@ -271,28 +292,28 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                   placeholder="Rechercher un élève..."
                   style={{
                     width: "100%",
-                    padding: "10px 14px 10px 42px",
+                    padding: inputPadding,
                     border: `1px solid ${cardBorder}`,
                     borderRadius: 10,
-                    fontSize: 14,
+                    fontSize: inputFontSize,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
+                    boxSizing: "border-box",
                   }}
                 />
               </div>
 
-              {/* Filtre par classe */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 150 }}>
-                <Filter size={16} color={textSecondary} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: isMobile ? "100%" : 150 }}>
+                <Filter size={isMobile ? 16 : 16} color={textSecondary} />
                 <select
                   value={classeFilter}
                   onChange={(e) => { setClasseFilter(e.target.value); setPage(1); }}
                   style={{
-                    padding: "10px 14px",
+                    padding: selectPadding,
                     border: `1px solid ${cardBorder}`,
                     borderRadius: 8,
-                    fontSize: 14,
+                    fontSize: selectFontSize,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
@@ -304,17 +325,16 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                 </select>
               </div>
 
-              {/* Filtre par gravité */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 150 }}>
-                <Filter size={16} color={textSecondary} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: isMobile ? "100%" : 150 }}>
+                <Filter size={isMobile ? 16 : 16} color={textSecondary} />
                 <select
                   value={graviteFilter}
                   onChange={(e) => { setGraviteFilter(e.target.value); setPage(1); }}
                   style={{
-                    padding: "10px 14px",
+                    padding: selectPadding,
                     border: `1px solid ${cardBorder}`,
                     borderRadius: 8,
-                    fontSize: 14,
+                    fontSize: selectFontSize,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
@@ -328,20 +348,22 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                 </select>
               </div>
 
-              {/* Export CSV */}
               <button
                 onClick={handleExportCSV}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
-                  padding: "10px 16px",
+                  padding: actionButtonPadding,
                   background: dark ? "#334155" : "#F1F5F9",
                   color: textPrimary,
                   border: "none",
                   borderRadius: 10,
                   fontWeight: 500,
                   cursor: "pointer",
+                  fontSize: actionButtonFontSize,
+                  width: isMobile ? "100%" : "auto",
                 }}
               >
                 <FileSpreadsheet size={16} />
@@ -358,31 +380,32 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
             overflow: "auto",
             border: `1px solid ${cardBorder}`,
           }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: tableMinWidth, fontSize: tableFontSize }}>
               <thead>
                 <tr style={{ background: dark ? "#0F172A" : "#F8FAFC" }}>
                   <th
                     onClick={() => handleTri("nom")}
-                    style={{ padding: "12px 16px", textAlign: "left", cursor: "pointer", color: textSecondary, fontSize: 13, fontWeight: 600 }}
+                    style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "left", cursor: "pointer", color: textSecondary, fontSize: isMobile ? 12 : 13, fontWeight: 600 }}
                   >
                     Élève {sortIcon("nom")}
                   </th>
                   <th
                     onClick={() => handleTri("classe")}
-                    style={{ padding: "12px 16px", textAlign: "left", cursor: "pointer", color: textSecondary, fontSize: 13, fontWeight: 600 }}
+                    style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "left", cursor: "pointer", color: textSecondary, fontSize: isMobile ? 12 : 13, fontWeight: 600 }}
+                    className={isMobile ? "hide-on-mobile" : ""}
                   >
                     Classe {sortIcon("classe")}
                   </th>
                   <th
                     onClick={() => handleTri("nbFautes")}
-                    style={{ padding: "12px 16px", textAlign: "center", cursor: "pointer", color: textSecondary, fontSize: 13, fontWeight: 600 }}
+                    style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "center", cursor: "pointer", color: textSecondary, fontSize: isMobile ? 12 : 13, fontWeight: 600 }}
                   >
                     Fautes {sortIcon("nbFautes")}
                   </th>
-                  <th style={{ padding: "12px 16px", textAlign: "center", color: textSecondary, fontSize: 13, fontWeight: 600 }}>
+                  <th style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "center", color: textSecondary, fontSize: isMobile ? 12 : 13, fontWeight: 600 }} className={isMobile ? "hide-on-mobile" : ""}>
                     Gravité
                   </th>
-                  <th style={{ padding: "12px 16px", textAlign: "center", color: textSecondary, fontSize: 13, fontWeight: 600 }}>
+                  <th style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "center", color: textSecondary, fontSize: isMobile ? 12 : 13, fontWeight: 600 }}>
                     Action
                   </th>
                 </tr>
@@ -393,28 +416,28 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                   const grave = punitions.some(p => p.idEleve === e._id && getFauteInfo(p.idFaute)?.gravite === "Grave");
                   return (
                     <tr key={e._id} style={{ borderBottom: `1px solid ${borderLight}` }}>
-                      <td style={{ padding: "12px 16px", fontWeight: 500, color: textPrimary }}>{e.nom} {e.postnom}</td>
-                      <td style={{ padding: "12px 16px", color: textSecondary }}>{e.classe}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", color: textPrimary }}>{nbFautes}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                      <td style={{ padding: isMobile ? "10px 8px" : "12px 16px", fontWeight: 500, color: textPrimary }}>{e.nom} {e.postnom}</td>
+                      <td style={{ padding: isMobile ? "10px 8px" : "12px 16px", color: textSecondary }} className={isMobile ? "hide-on-mobile" : ""}>{e.classe}</td>
+                      <td style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "center", color: textPrimary }}>{nbFautes}</td>
+                      <td style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "center" }} className={isMobile ? "hide-on-mobile" : ""}>
                         {grave ? (
                           <span style={{ background: dark ? "#7F1D1D" : "#FEE2E2", color: dark ? "#F87171" : "#B91C1C", padding: "4px 8px", borderRadius: 12, fontSize: 12, fontWeight: 600 }}>Grave</span>
                         ) : (
                           <span style={{ background: dark ? "#064E3B" : "#D1FAE5", color: dark ? "#34D399" : "#065F46", padding: "4px 8px", borderRadius: 12, fontSize: 12, fontWeight: 600 }}>OK</span>
                         )}
                       </td>
-                      <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                      <td style={{ padding: isMobile ? "10px 8px" : "12px 16px", textAlign: "center" }}>
                         <button
                           onClick={() => { setSelected(e); setPage(1); }}
                           style={{
-                            padding: "6px 12px",
+                            padding: isMobile ? "8px 12px" : "6px 12px",
                             background: accent,
                             color: "white",
                             border: "none",
                             borderRadius: 8,
                             cursor: "pointer",
                             fontWeight: 600,
-                            fontSize: 13,
+                            fontSize: isMobile ? 14 : 13,
                           }}
                         >
                           Fiche
@@ -436,34 +459,36 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 16 }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 style={{
-                  padding: "8px 16px",
+                  padding: paginationButtonPadding,
                   border: `1px solid ${cardBorder}`,
                   borderRadius: 8,
                   background: "transparent",
                   color: textPrimary,
                   cursor: page === 1 ? "not-allowed" : "pointer",
                   opacity: page === 1 ? 0.5 : 1,
+                  fontSize: paginationFontSize,
                 }}
               >
                 Précédent
               </button>
-              <span style={{ color: textSecondary, padding: "8px 0" }}>{page} / {totalPages}</span>
+              <span style={{ color: textSecondary, padding: "8px 0", fontSize: paginationFontSize }}>{page} / {totalPages}</span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 style={{
-                  padding: "8px 16px",
+                  padding: paginationButtonPadding,
                   border: `1px solid ${cardBorder}`,
                   borderRadius: 8,
                   background: "transparent",
                   color: textPrimary,
                   cursor: page === totalPages ? "not-allowed" : "pointer",
                   opacity: page === totalPages ? 0.5 : 1,
+                  fontSize: paginationFontSize,
                 }}
               >
                 Suivant
@@ -473,7 +498,7 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
         </>
       ) : (
         <>
-          <button onClick={handleBack} style={{ marginBottom: 20, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 8, color: accent, fontWeight: 500, cursor: "pointer" }}>
+          <button onClick={handleBack} style={{ marginBottom: 20, display: "inline-flex", alignItems: "center", gap: 6, padding: backButtonPadding, background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 8, color: accent, fontWeight: 500, cursor: "pointer", fontSize: backButtonFontSize }}>
             <ArrowLeft size={16} /> Retour à la liste
           </button>
 
@@ -483,14 +508,16 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                 key={g}
                 onClick={() => setGraviteFilter(g)}
                 style={{
-                  padding: "6px 12px",
+                  padding: isMobile ? "10px 12px" : "6px 12px",
                   border: `1px solid ${graviteFilter === g ? accent : cardBorder}`,
                   borderRadius: 20,
                   background: graviteFilter === g ? (dark ? "#312E81" : "#EEF2FF") : "transparent",
                   color: graviteFilter === g ? accent : textSecondary,
                   fontWeight: 500,
                   cursor: "pointer",
-                  fontSize: 13,
+                  fontSize: isMobile ? 14 : 13,
+                  flex: isMobile ? 1 : "none",
+                  justifyContent: "center",
                 }}
               >
                 {g === "toutes" ? "Toutes" : g}
@@ -504,7 +531,7 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
             style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 24,
+              padding: ficheCardPadding,
               boxShadow: shadow,
               marginBottom: 24,
               border: `1px solid ${dark ? "#334155" : "#EEF2FF"}`,
@@ -513,8 +540,8 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
           >
             {/* En-tête */}
             <div style={{ textAlign: "center", marginBottom: 20, paddingBottom: 16, borderBottom: `2px solid ${dark ? "#334155" : "#EEF2FF"}` }}>
-              <FileText size={28} color={accent} style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 22, fontWeight: 800 }}>FICHE DE CONDUITE</div>
+              <FileText size={isMobile ? 24 : 28} color={accent} style={{ marginBottom: 8 }} />
+              <div style={{ fontSize: ficheTitleSize, fontWeight: 800 }}>FICHE DE CONDUITE</div>
               <div style={{ fontSize: 12, color: textSecondary }}>Conseil de discipline — {new Date().getFullYear()}</div>
             </div>
 
@@ -523,7 +550,7 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
               <div style={{ fontSize: 11, color: textSecondary, textTransform: "uppercase", fontWeight: 600, marginBottom: 8 }}>
                 Informations personnelles
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: ficheInfoGridColumns, gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: textSecondary }}>Nom complet</div>
                   <div style={{ fontWeight: 600, color: textPrimary }}>
@@ -549,7 +576,7 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                 <div style={{ fontSize: 11, color: textSecondary, textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>
                   Élève
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: textPrimary }}>
+                <div style={{ fontWeight: 700, fontSize: isMobile ? 15 : 16, color: textPrimary }}>
                   {selected.nom} {selected.postnom} {selected.prenom || ""}
                 </div>
                 <div style={{ fontSize: 13, color: textSecondary }}>
@@ -561,7 +588,7 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                   Score de conduite
                 </div>
                 <div style={{
-                  fontSize: 32,
+                  fontSize: isMobile ? 28 : 32,
                   fontWeight: 800,
                   color: conductScore >= 80 ? success : conductScore >= 50 ? warning : danger,
                 }}>
@@ -576,13 +603,13 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
               <div style={{ fontSize: 11, color: textSecondary, textTransform: "uppercase", fontWeight: 600, marginBottom: 8 }}>
                 Récapitulatif
               </div>
-              <div style={{ background: mutedBg, borderRadius: 10, padding: "12px 16px" }}>
+              <div style={{ background: mutedBg, borderRadius: 10, padding: isMobile ? "10px 12px" : "12px 16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 14, color: textPrimary }}>Total fautes</span>
+                  <span style={{ fontSize: isMobile ? 13 : 14, color: textPrimary }}>Total fautes</span>
                   <span style={{ fontWeight: 700, color: textPrimary }}>{eleveP.length}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                  <span style={{ fontSize: 14, color: textPrimary }}>Fautes graves</span>
+                  <span style={{ fontSize: isMobile ? 13 : 14, color: textPrimary }}>Fautes graves</span>
                   <span style={{ fontWeight: 700, color: danger }}>
                     {eleveP.filter((p) => getFauteInfo(p.idFaute)?.gravite === "Grave").length}
                   </span>
@@ -613,7 +640,7 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
                   <div
                     key={i}
                     style={{
-                      fontSize: 13,
+                      fontSize: isMobile ? 12 : 13,
                       color: textPrimary,
                       padding: "8px 0",
                       borderTop: `1px solid ${borderLight}`,
@@ -661,24 +688,26 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
           </div>
 
           {/* Boutons d'action */}
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: actionButtonsGap, flexWrap: "wrap", flexDirection: actionButtonsFlexDirection }}>
             <button
               onClick={handleGeneratePDF}
               disabled={isExporting}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
-                padding: "12px 24px",
+                padding: actionButtonPadding,
                 background: isExporting ? (dark ? "#4B5563" : "#A5B4FC") : accent,
                 color: "#FFFFFF",
                 border: "none",
                 borderRadius: 10,
                 fontWeight: 600,
-                fontSize: 14,
+                fontSize: actionButtonFontSize,
                 cursor: isExporting ? "not-allowed" : "pointer",
                 boxShadow: isExporting ? "none" : `0 4px 12px ${dark ? "rgba(129,140,248,0.4)" : "rgba(79,70,229,0.2)"}`,
                 transition: "background 0.2s",
+                width: isMobile ? "100%" : "auto",
               }}
             >
               <Download size={18} />
@@ -689,15 +718,17 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
-                padding: "12px 24px",
+                padding: actionButtonPadding,
                 background: dark ? "#334155" : "#F1F5F9",
                 color: textPrimary,
                 border: "none",
                 borderRadius: 10,
                 fontWeight: 500,
-                fontSize: 14,
+                fontSize: actionButtonFontSize,
                 cursor: "pointer",
+                width: isMobile ? "100%" : "auto",
               }}
             >
               {copied ? <Check size={18} color={success} /> : <Copy size={18} />}
@@ -708,15 +739,17 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
-                padding: "12px 24px",
+                padding: actionButtonPadding,
                 background: dark ? "#334155" : "#F1F5F9",
                 color: textPrimary,
                 border: "none",
                 borderRadius: 10,
                 fontWeight: 500,
-                fontSize: 14,
+                fontSize: actionButtonFontSize,
                 cursor: "pointer",
+                width: isMobile ? "100%" : "auto",
               }}
             >
               <FileSpreadsheet size={18} /> Exporter CSV
@@ -728,23 +761,23 @@ export function RapportsFiches({ punitions, eleves, fautes }) {
   );
 }
 
-// Composant StatCard local
-function StatCard({ icon, value, label, color }) {
+// Composant StatCard local adapté pour mobile
+function StatCard({ icon, value, label, color, isMobile }) {
   const { dark } = useStyles();
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 16,
-      padding: 20,
+      padding: isMobile ? 12 : 20,
       display: "flex",
       alignItems: "center",
-      gap: 16,
+      gap: isMobile ? 10 : 16,
       boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
       border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     }}>
       <div style={{
-        width: 48,
-        height: 48,
+        width: isMobile ? 36 : 48,
+        height: isMobile ? 36 : 48,
         background: `${color}${dark ? "33" : "15"}`,
         borderRadius: 12,
         display: "flex",
@@ -755,10 +788,10 @@ function StatCard({ icon, value, label, color }) {
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>
+        <div style={{ fontSize: isMobile ? 18 : 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>
           {value}
         </div>
-        <div style={{ fontSize: 14, color: dark ? "#94A3B8" : "#64748B" }}>
+        <div style={{ fontSize: isMobile ? 12 : 14, color: dark ? "#94A3B8" : "#64748B" }}>
           {label}
         </div>
       </div>

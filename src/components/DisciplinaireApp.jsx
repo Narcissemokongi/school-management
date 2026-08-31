@@ -12,7 +12,8 @@ import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { Skeleton } from "./Skeleton";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useAppStore } from "../store/appStore";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import {
   Home, Pen, ClipboardList, AlertTriangle, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, Calendar, CheckCircle,
@@ -23,6 +24,7 @@ export function DisciplinaireApp({
   dark, toggle, handleLogout,
 }) {
   const { S } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   // Onglet actif depuis le store
   const tab = useAppStore((state) => state.disciplinaireTab);
@@ -70,7 +72,11 @@ export function DisciplinaireApp({
         onToggleTheme={toggle}
         onLogout={handleLogout}
       >
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+        <div style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "16px 12px" : "24px 16px",
+        }}>
           <Skeleton height={200} />
           <Skeleton height={200} style={{ marginTop: 16 }} />
         </div>
@@ -81,12 +87,25 @@ export function DisciplinaireApp({
   const renderContent = () => {
     if (!anneeId && (tab === "saisir" || tab === "absences")) {
       return (
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-          <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+        <div style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "24px 16px" : "32px 24px",
+          textAlign: "center",
+        }}>
+          <Calendar size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
+          <h2 style={{
+            fontSize: isMobile ? 20 : 24,
+            fontWeight: 600,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            margin: "0 0 8px",
+          }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+          <p style={{
+            color: dark ? "#94A3B8" : "#64748B",
+            fontSize: isMobile ? 13 : 14,
+          }}>
             Veuillez demander à l'administrateur d'activer une année scolaire pour pouvoir saisir des punitions ou absences.
           </p>
         </div>
@@ -129,12 +148,12 @@ export function DisciplinaireApp({
         <div style={{
           background: dark ? "#78350F" : "#FEF3C7",
           color: dark ? "#FBBF24" : "#92400E",
-          padding: "10px 20px",
-          fontSize: 13,
+          padding: isMobile ? "10px 12px" : "10px 20px",
+          fontSize: isMobile ? 12 : 13,
           fontWeight: 500,
           textAlign: "center",
           borderRadius: "0 0 12px 12px",
-          margin: "0 24px 16px",
+          margin: isMobile ? "0 12px 12px" : "0 24px 16px",
         }}>
           ⚠️ Aucune année scolaire active. Certaines fonctionnalités (saisie de punition, absences) sont désactivées.
         </div>

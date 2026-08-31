@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { useExportPDF } from "../hooks/useExportPDF";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { getFaute } from "../utils";
 import {
   Search,
@@ -19,7 +20,8 @@ import {
 import toast from "react-hot-toast";
 
 export function RechercheEleve({ punitions, eleves, fautes }) {
-  const { dark } = useStyles(); // ✅ mode sombre/clair
+  const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selected, setSelected] = useState(null);
@@ -124,14 +126,38 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
     setGraviteFilter("toutes");
   };
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 13 : 14;
+  const cardPadding = isMobile ? 14 : 20;
+  const searchFlexDirection = isMobile ? "column" : "row";
+  const searchGap = isMobile ? 8 : 12;
+  const inputPadding = isMobile ? "12px 14px 12px 42px" : "10px 14px 10px 42px";
+  const inputFontSize = isMobile ? 16 : 14;
+  const selectPadding = isMobile ? "12px 14px" : "10px 14px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const resultItemPadding = isMobile ? "12px 14px" : "12px 14px";
+  const resultItemFontSize = isMobile ? 15 : 14;
+  const filterButtonPadding = isMobile ? "10px 12px" : "6px 12px";
+  const filterButtonFontSize = isMobile ? 14 : 13;
+  const backButtonPadding = isMobile ? "10px 12px" : "8px 16px";
+  const ficheCardPadding = isMobile ? 16 : 24;
+  const ficheTitleSize = isMobile ? 18 : 22;
+  const actionButtonPadding = isMobile ? "12px 16px" : "12px 24px";
+  const actionButtonFontSize = isMobile ? 16 : 14;
+  const historyCardPadding = isMobile ? "12px 14px" : "12px 16px";
+  const historyCardFontSize = isMobile ? 14 : 14;
+
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: containerPadding }}>
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Dossier élève
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Recherchez un élève puis exportez sa fiche de conduite.
         </p>
       </div>
@@ -142,14 +168,14 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
           <div style={{
             background: cardBg,
             borderRadius: 16,
-            padding: 20,
+            padding: cardPadding,
             boxShadow: shadow,
             marginBottom: 24,
             border: `1px solid ${cardBorder}`,
           }}>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: searchGap, flexWrap: "wrap", alignItems: "center", flexDirection: searchFlexDirection }}>
               {/* Recherche */}
-              <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+              <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 200 }}>
                 <Search size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
                 <input
                   value={search}
@@ -160,28 +186,29 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
                   placeholder="Rechercher un élève..."
                   style={{
                     width: "100%",
-                    padding: "10px 14px 10px 42px",
+                    padding: inputPadding,
                     border: `1px solid ${cardBorder}`,
                     borderRadius: 10,
-                    fontSize: 14,
+                    fontSize: inputFontSize,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
+                    boxSizing: "border-box",
                   }}
                 />
               </div>
 
               {/* Filtre par classe */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 150 }}>
-                <Filter size={16} color={textSecondary} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: isMobile ? "100%" : 150 }}>
+                <Filter size={isMobile ? 16 : 16} color={textSecondary} />
                 <select
                   value={classeFilter}
                   onChange={(e) => setClasseFilter(e.target.value)}
                   style={{
-                    padding: "10px 14px",
+                    padding: selectPadding,
                     border: `1px solid ${cardBorder}`,
                     borderRadius: 8,
-                    fontSize: 14,
+                    fontSize: selectFontSize,
                     outline: "none",
                     background: inputBg,
                     color: inputText,
@@ -205,7 +232,7 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
                       setSearch(`${e.nom} ${e.postnom}`);
                     }}
                     style={{
-                      padding: "12px 14px",
+                      padding: resultItemPadding,
                       cursor: "pointer",
                       display: "flex",
                       justifyContent: "space-between",
@@ -218,7 +245,7 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
                     onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
                   >
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ fontWeight: 600, fontSize: resultItemFontSize, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {e.nom} {e.postnom}
                       </div>
                       <div style={{ fontSize: 12, color: textSecondary }}>Classe {e.classe}</div>
@@ -247,7 +274,7 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              padding: "8px 16px",
+              padding: backButtonPadding,
               background: cardBg,
               border: `1px solid ${cardBorder}`,
               borderRadius: 8,
@@ -255,6 +282,7 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
               fontWeight: 500,
               cursor: "pointer",
               marginBottom: 20,
+              fontSize: isMobile ? 14 : 14,
             }}
           >
             <ArrowLeft size={16} /> Retour à la liste
@@ -267,14 +295,16 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
                 key={g}
                 onClick={() => setGraviteFilter(g)}
                 style={{
-                  padding: "6px 12px",
+                  padding: filterButtonPadding,
                   border: `1px solid ${graviteFilter === g ? accent : cardBorder}`,
                   borderRadius: 20,
                   background: graviteFilter === g ? (dark ? "#312E81" : "#EEF2FF") : "transparent",
                   color: graviteFilter === g ? accent : textSecondary,
                   fontWeight: 500,
                   cursor: "pointer",
-                  fontSize: 13,
+                  fontSize: filterButtonFontSize,
+                  flex: isMobile ? 1 : "none",
+                  justifyContent: "center",
                 }}
               >
                 {g === "toutes" ? "Toutes" : g}
@@ -288,7 +318,7 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
             style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 24,
+              padding: ficheCardPadding,
               boxShadow: shadow,
               marginBottom: 24,
               border: `1px solid ${dark ? "#334155" : "#EEF2FF"}`,
@@ -296,26 +326,26 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
             }}
           >
             <div style={{ textAlign: "center", marginBottom: 20, paddingBottom: 16, borderBottom: `2px solid ${dark ? "#334155" : "#EEF2FF"}` }}>
-              <FileText size={28} color={accent} style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 22, fontWeight: 800, color: textPrimary }}>FICHE DE CONDUITE</div>
+              <FileText size={isMobile ? 24 : 28} color={accent} style={{ marginBottom: 8 }} />
+              <div style={{ fontSize: ficheTitleSize, fontWeight: 800, color: textPrimary }}>FICHE DE CONDUITE</div>
               <div style={{ fontSize: 12, color: textSecondary }}>Conseil de discipline — {new Date().getFullYear()}</div>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: textSecondary, textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>Élève</div>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>{selected.nom} {selected.postnom}</div>
+              <div style={{ fontWeight: 700, fontSize: isMobile ? 15 : 16 }}>{selected.nom} {selected.postnom}</div>
               <div style={{ fontSize: 13, color: textSecondary }}>Classe : {selected.classe}</div>
             </div>
 
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: textSecondary, textTransform: "uppercase", fontWeight: 600, marginBottom: 8 }}>Récapitulatif</div>
-              <div style={{ background: mutedBg, borderRadius: 10, padding: "12px 16px" }}>
+              <div style={{ background: mutedBg, borderRadius: 10, padding: isMobile ? "10px 12px" : "12px 16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 14, color: textPrimary }}>Total fautes</span>
+                  <span style={{ fontSize: isMobile ? 13 : 14, color: textPrimary }}>Total fautes</span>
                   <span style={{ fontWeight: 700, color: textPrimary }}>{eleveP.length}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                  <span style={{ fontSize: 14, color: textPrimary }}>Fautes graves</span>
+                  <span style={{ fontSize: isMobile ? 13 : 14, color: textPrimary }}>Fautes graves</span>
                   <span style={{ fontWeight: 700, color: danger }}>{eleveP.filter(p => getFaute(fautes, p.idFaute)?.gravite === "Grave").length}</span>
                 </div>
                 <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
@@ -341,7 +371,7 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
               {eleveP.slice(0, 3).map((p, i) => {
                 const faute = getFaute(fautes, p.idFaute);
                 return (
-                  <div key={i} style={{ fontSize: 13, color: textPrimary, padding: "8px 0", borderTop: `1px solid ${borderLight}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div key={i} style={{ fontSize: isMobile ? 12 : 13, color: textPrimary, padding: "8px 0", borderTop: `1px solid ${borderLight}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span>{p.date} — {faute?.libelle} ({faute?.gravite})</span>
                     <span style={{ color: danger, fontWeight: 500, fontSize: 12 }}>{p.sanction}</span>
                   </div>
@@ -351,7 +381,7 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
             </div>
 
             {hasGrave && (
-              <div style={{ background: dark ? "#7F1D1D" : "#FEF2F2", color: dark ? "#F87171" : "#B91C1C", padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+              <div style={{ background: dark ? "#7F1D1D" : "#FEF2F2", color: dark ? "#F87171" : "#B91C1C", padding: "10px 14px", borderRadius: 8, fontSize: isMobile ? 12 : 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
                 <AlertTriangle size={16} />
                 Recommandé pour conseil de discipline
               </div>
@@ -359,23 +389,25 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
           </div>
 
           {/* Boutons d'action */}
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 32 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 32, flexDirection: isMobile ? "column" : "row" }}>
             <button
               onClick={handleGeneratePDF}
               disabled={isExporting}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
-                padding: "12px 24px",
+                padding: actionButtonPadding,
                 background: isExporting ? "#A5B4FC" : accent,
                 color: "white",
                 border: "none",
                 borderRadius: 10,
                 fontWeight: 600,
-                fontSize: 14,
+                fontSize: actionButtonFontSize,
                 cursor: isExporting ? "not-allowed" : "pointer",
                 boxShadow: isExporting ? "none" : `0 4px 12px ${dark ? "rgba(129,140,248,0.4)" : "rgba(79,70,229,0.2)"}`,
+                width: isMobile ? "100%" : "auto",
               }}
             >
               <Download size={18} />
@@ -386,15 +418,17 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
-                padding: "12px 24px",
+                padding: actionButtonPadding,
                 background: buttonSecondaryBg,
                 color: buttonSecondaryText,
                 border: "none",
                 borderRadius: 10,
                 fontWeight: 500,
-                fontSize: 14,
+                fontSize: actionButtonFontSize,
                 cursor: "pointer",
+                width: isMobile ? "100%" : "auto",
               }}
             >
               {copied ? <Check size={18} color={success} /> : <Copy size={18} />}
@@ -404,16 +438,16 @@ export function RechercheEleve({ punitions, eleves, fautes }) {
 
           {/* Historique complet (extensible) */}
           <div>
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
+            <h3 style={{ fontSize: isMobile ? 18 : 18, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
               Historique complet
             </h3>
             <div style={{ display: "grid", gap: 8 }}>
               {eleveP.slice(0, expandedPunitions ? eleveP.length : 5).map((p) => {
                 const faute = getFaute(fautes, p.idFaute);
                 return (
-                  <div key={p._id} style={{ background: cardBg, borderRadius: 12, padding: "12px 16px", boxShadow: shadow, border: `1px solid ${cardBorder}` }}>
+                  <div key={p._id} style={{ background: cardBg, borderRadius: 12, padding: historyCardPadding, boxShadow: shadow, border: `1px solid ${cardBorder}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>{faute?.libelle}</div>
+                      <div style={{ fontWeight: 600, fontSize: historyCardFontSize, color: textPrimary }}>{faute?.libelle}</div>
                       <span style={{ background: faute?.gravite === "Grave" ? (dark ? "#7F1D1D" : "#FEE2E2") : (dark ? "#78350F" : "#FEF3C7"), color: faute?.gravite === "Grave" ? (dark ? "#F87171" : "#B91C1C") : (dark ? "#FBBF24" : "#92400E"), padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                         {faute?.gravite}
                       </span>

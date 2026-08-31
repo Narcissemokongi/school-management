@@ -2,11 +2,13 @@ import { useState, useRef } from "react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { getFaute, getTopDerangeurs, getPunitionsParClasse } from "../utils";
 import { FileDown, BarChart3, TrendingUp, PieChart, Download, Loader } from "lucide-react";
 
 export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
-  const { dark } = useStyles(); // ✅ récupère le mode sombre/clair
+  const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   const parClasse = getPunitionsParClasse(punitions, eleves, classes);
   const max = Math.max(...Object.values(parClasse), 1);
@@ -74,24 +76,50 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
     }
   };
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 14;
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const headerFlexDirection = isMobile ? "column" : "row";
+  const headerAlignItems = isMobile ? "stretch" : "center";
+  const exportButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const exportButtonFontSize = isMobile ? 16 : 14;
+  const exportButtonWidth = isMobile ? "100%" : "auto";
+  const cardPadding = isMobile ? 16 : 24;
+  const sectionMarginBottom = isMobile ? 24 : 32;
+  const sectionTitleSize = isMobile ? 16 : 18;
+  const barLabelFontSize = isMobile ? 13 : 14;
+  const top5ItemPadding = isMobile ? "10px 0" : "12px 0";
+  const top5AvatarSize = isMobile ? 24 : 28;
+  const top5FontSize = isMobile ? 13 : 14;
+  const top5BadgePadding = isMobile ? "4px 8px" : "4px 10px";
+  const top5BadgeFontSize = isMobile ? 12 : 13;
+  const graviteCardPadding = isMobile ? "10px 12px" : "12px 16px";
+  const graviteCardMinWidth = isMobile ? 90 : 120;
+  const graviteBadgeFontSize = isMobile ? 11 : 13;
+  const graviteValueFontSize = isMobile ? 18 : 20;
+  const graviteLabelFontSize = isMobile ? 11 : 12;
+
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
       <div style={{
         display: "flex",
+        flexDirection: headerFlexDirection,
         justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 32,
+        alignItems: headerAlignItems,
+        marginBottom: headerMarginBottom,
         flexWrap: "wrap",
         gap: 16,
       }}>
         <div>
-          <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+          <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
             Statistiques des classes
           </h2>
-          <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+          <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
             Distribution des punitions par salle
           </p>
         </div>
@@ -101,18 +129,20 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
           style={{
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            padding: "10px 20px",
+            padding: exportButtonPadding,
             background: generating ? "#A5B4FC" : accent,
             color: "#FFFFFF",
             border: "none",
             borderRadius: 10,
             fontWeight: 600,
-            fontSize: 14,
+            fontSize: exportButtonFontSize,
             cursor: generating ? "not-allowed" : "pointer",
             boxShadow: generating ? "none" : `0 4px 12px ${dark ? "rgba(129,140,248,0.4)" : "rgba(79,70,229,0.2)"}`,
             transition: "background 0.2s",
             whiteSpace: "nowrap",
+            width: exportButtonWidth,
           }}
         >
           {generating ? <Loader size={18} className="animate-spin" /> : <Download size={18} />}
@@ -126,7 +156,7 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
         style={{
           background: cardBg,
           borderRadius: 16,
-          padding: 24,
+          padding: cardPadding,
           boxShadow: shadow,
           border: `1px solid ${cardBorder}`,
           color: textPrimary,
@@ -134,17 +164,17 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
         }}
       >
         {/* Punitions par classe */}
-        <div style={{ marginBottom: 32 }}>
+        <div style={{ marginBottom: sectionMarginBottom }}>
           <h3 style={{
-            fontSize: 18,
+            fontSize: sectionTitleSize,
             fontWeight: 600,
             color: textPrimary,
-            marginBottom: 20,
+            marginBottom: isMobile ? 12 : 20,
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}>
-            <BarChart3 size={20} color={accent} /> Punitions par classe
+            <BarChart3 size={isMobile ? 18 : 20} color={accent} /> Punitions par classe
           </h3>
           {Object.keys(parClasse).length === 0 && (
             <p style={{ color: textSecondary, fontSize: 14 }}>Aucune donnée disponible.</p>
@@ -156,16 +186,16 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
               const barColor =
                 count === max ? danger : count > max / 2 ? warning : accent;
               return (
-                <div key={classe} style={{ marginBottom: 16 }}>
+                <div key={classe} style={{ marginBottom: isMobile ? 12 : 16 }}>
                   <div style={{
                     display: "flex",
                     justifyContent: "space-between",
                     marginBottom: 4,
                   }}>
-                    <span style={{ fontWeight: 500, fontSize: 14, color: textPrimary }}>
+                    <span style={{ fontWeight: 500, fontSize: barLabelFontSize, color: textPrimary }}>
                       Classe {classe}
                     </span>
-                    <span style={{ fontWeight: 700, color: barColor }}>
+                    <span style={{ fontWeight: 700, color: barColor, fontSize: barLabelFontSize }}>
                       {count}
                     </span>
                   </div>
@@ -189,17 +219,17 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
         </div>
 
         {/* Top 5 */}
-        <div style={{ marginBottom: 32 }}>
+        <div style={{ marginBottom: sectionMarginBottom }}>
           <h3 style={{
-            fontSize: 18,
+            fontSize: sectionTitleSize,
             fontWeight: 600,
             color: textPrimary,
-            marginBottom: 20,
+            marginBottom: isMobile ? 12 : 20,
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}>
-            <TrendingUp size={20} color={danger} /> Top 5 Cerveaux Moteurs
+            <TrendingUp size={isMobile ? 18 : 20} color={danger} /> Top 5 Cerveaux Moteurs
           </h3>
           {top5.length === 0 && (
             <p style={{ color: textSecondary, fontSize: 14 }}>Aucun élève répertorié.</p>
@@ -211,26 +241,28 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                padding: "12px 0",
+                padding: top5ItemPadding,
                 borderBottom: i < top5.length - 1 ? `1px solid ${cardBorder}` : "none",
+                flexDirection: isMobile ? "column" : "row",
+                gap: isMobile ? 8 : 0,
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12 }}>
                   <div style={{
-                    width: 28,
-                    height: 28,
+                    width: top5AvatarSize,
+                    height: top5AvatarSize,
                     borderRadius: "50%",
                     background: colors[i],
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: 13,
+                    fontSize: top5FontSize,
                     fontWeight: 700,
                     color: "#FFF",
                   }}>
                     #{i + 1}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: textPrimary }}>
+                    <div style={{ fontWeight: 600, fontSize: top5FontSize, color: textPrimary }}>
                       {t.eleve?.nom} {t.eleve?.postnom}
                     </div>
                     <div style={{ fontSize: 12, color: textSecondary }}>
@@ -241,9 +273,9 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
                 <span style={{
                   background: `${colors[i]}${dark ? "33" : "15"}`,
                   color: colors[i],
-                  padding: "4px 10px",
+                  padding: top5BadgePadding,
                   borderRadius: 12,
-                  fontSize: 13,
+                  fontSize: top5BadgeFontSize,
                   fontWeight: 600,
                 }}>
                   {t.count}
@@ -256,17 +288,17 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
         {/* Répartition par gravité */}
         <div>
           <h3 style={{
-            fontSize: 18,
+            fontSize: sectionTitleSize,
             fontWeight: 600,
             color: textPrimary,
-            marginBottom: 20,
+            marginBottom: isMobile ? 12 : 20,
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}>
-            <PieChart size={20} color={success} /> Répartition par gravité
+            <PieChart size={isMobile ? 18 : 20} color={success} /> Répartition par gravité
           </h3>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: isMobile ? 8 : 16, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
             {["Grave", "Moyenne", "Légère"].map((g) => {
               const count = punitions.filter(
                 (p) => getFaute(fautes, p.idFaute)?.gravite === g
@@ -283,11 +315,11 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
                 <div
                   key={g}
                   style={{
-                    flex: 1,
-                    minWidth: 120,
+                    flex: isMobile ? "none" : 1,
+                    minWidth: isMobile ? "100%" : graviteCardMinWidth,
                     background: neutralBg,
                     borderRadius: 12,
-                    padding: "12px 16px",
+                    padding: graviteCardPadding,
                     textAlign: "center",
                     border: `1px solid ${cardBorder}`,
                   }}
@@ -296,7 +328,7 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
                     display: "inline-block",
                     padding: "4px 10px",
                     borderRadius: 20,
-                    fontSize: 13,
+                    fontSize: graviteBadgeFontSize,
                     fontWeight: 600,
                     background: bgColor,
                     color: textColor,
@@ -304,10 +336,10 @@ export function StatistiquesClasses({ punitions, eleves, classes, fautes }) {
                   }}>
                     {g}
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 20, color: textPrimary }}>
+                  <div style={{ fontWeight: 700, fontSize: graviteValueFontSize, color: textPrimary }}>
                     {count}
                   </div>
-                  <div style={{ fontSize: 12, color: textSecondary }}>cas</div>
+                  <div style={{ fontSize: graviteLabelFontSize, color: textSecondary }}>cas</div>
                 </div>
               );
             })}

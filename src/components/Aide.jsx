@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile";
 import {
   HelpCircle, Users, AlertTriangle, MessageCircle, Phone,
   Settings, User, ChevronDown, ChevronRight, BookOpen, DollarSign,
@@ -10,6 +11,7 @@ import toast from "react-hot-toast";
 
 export function Aide({ user, role, isSuperAdmin }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile();
   const [openSection, setOpenSection] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -23,7 +25,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       if (user.role === "admin" && !user.ecoleId) return "superAdmin";
       return user.role;
     }
-    return "eleve"; // Par défaut, évite le warning si aucun rôle
+    return "eleve";
   }, [user, role, isSuperAdmin]);
 
   useEffect(() => {
@@ -51,7 +53,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     superAdmin: [
       {
         id: "ecoles",
-        icon: <School size={20} />,
+        icon: <School size={isMobile ? 18 : 20} />,
         title: "Gérer les écoles",
         keywords: "écoles créer supprimer code",
         content: (
@@ -68,7 +70,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "admins",
-        icon: <Shield size={20} />,
+        icon: <Shield size={isMobile ? 18 : 20} />,
         title: "Super admins secondaires",
         keywords: "super admin permissions rôles",
         content: (
@@ -84,7 +86,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -102,7 +104,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     admin: [
       {
         id: "eleves",
-        icon: <BookOpen size={20} />,
+        icon: <BookOpen size={isMobile ? 18 : 20} />,
         title: "Gestion des élèves",
         keywords: "élèves ajouter importer excel classe",
         content: (
@@ -120,7 +122,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "classes",
-        icon: <Users size={20} />,
+        icon: <Users size={isMobile ? 18 : 20} />,
         title: "Gestion des classes",
         keywords: "classes créer renommer supprimer",
         content: (
@@ -135,7 +137,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "utilisateurs",
-        icon: <UserCheck size={20} />,
+        icon: <UserCheck size={isMobile ? 18 : 20} />,
         title: "Gestion des utilisateurs",
         keywords: "utilisateurs créer rôles permissions",
         content: (
@@ -151,7 +153,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "fautes",
-        icon: <AlertTriangle size={20} />,
+        icon: <AlertTriangle size={isMobile ? 18 : 20} />,
         title: "Fautes et sanctions",
         keywords: "fautes sanctions disciplinaire",
         content: (
@@ -166,7 +168,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "frais",
-        icon: <DollarSign size={20} />,
+        icon: <DollarSign size={isMobile ? 18 : 20} />,
         title: "Gestion des frais",
         keywords: "frais scolarité paiement comptable",
         content: (
@@ -182,7 +184,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "annees",
-        icon: <Calendar size={20} />,
+        icon: <Calendar size={isMobile ? 18 : 20} />,
         title: "Années scolaires",
         keywords: "année scolaire active",
         content: (
@@ -197,7 +199,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -215,7 +217,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     directeur: [
       {
         id: "eleves",
-        icon: <BookOpen size={20} />,
+        icon: <BookOpen size={isMobile ? 18 : 20} />,
         title: "Consulter les élèves",
         keywords: "élèves liste classe",
         content: (
@@ -231,7 +233,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "stats",
-        icon: <ClipboardList size={20} />,
+        icon: <ClipboardList size={isMobile ? 18 : 20} />,
         title: "Statistiques disciplinaires",
         keywords: "statistiques punitions",
         content: (
@@ -246,7 +248,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "messages",
-        icon: <MessageCircle size={20} />,
+        icon: <MessageCircle size={isMobile ? 18 : 20} />,
         title: "Messagerie",
         keywords: "messages chat notification",
         content: (
@@ -262,7 +264,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "appels",
-        icon: <Phone size={20} />,
+        icon: <Phone size={isMobile ? 18 : 20} />,
         title: "Appels vidéo",
         keywords: "appels vidéo audio",
         content: (
@@ -278,7 +280,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -296,7 +298,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     disciplinaire: [
       {
         id: "punitions",
-        icon: <AlertTriangle size={20} />,
+        icon: <AlertTriangle size={isMobile ? 18 : 20} />,
         title: "Saisir une punition",
         keywords: "punitions sanctions faute",
         content: (
@@ -316,7 +318,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "historique",
-        icon: <ClipboardList size={20} />,
+        icon: <ClipboardList size={isMobile ? 18 : 20} />,
         title: "Historique des punitions",
         keywords: "historique punitions",
         content: (
@@ -331,7 +333,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "absences",
-        icon: <Calendar size={20} />,
+        icon: <Calendar size={isMobile ? 18 : 20} />,
         title: "Absences et retards",
         keywords: "absences retards",
         content: (
@@ -346,7 +348,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -364,7 +366,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     enseignant: [
       {
         id: "notes",
-        icon: <BookOpen size={20} />,
+        icon: <BookOpen size={isMobile ? 18 : 20} />,
         title: "Saisir les notes",
         keywords: "notes évaluation",
         content: (
@@ -381,7 +383,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "absences",
-        icon: <Calendar size={20} />,
+        icon: <Calendar size={isMobile ? 18 : 20} />,
         title: "Absences et retards",
         keywords: "absences retards",
         content: (
@@ -396,7 +398,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "emploi",
-        icon: <Clock size={20} />,
+        icon: <Clock size={isMobile ? 18 : 20} />,
         title: "Emploi du temps",
         keywords: "emploi du temps",
         content: (
@@ -410,7 +412,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -428,7 +430,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     parent: [
       {
         id: "enfants",
-        icon: <Users size={20} />,
+        icon: <Users size={isMobile ? 18 : 20} />,
         title: "Mes enfants",
         keywords: "enfants informations",
         content: (
@@ -443,7 +445,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "notes",
-        icon: <BookOpen size={20} />,
+        icon: <BookOpen size={isMobile ? 18 : 20} />,
         title: "Notes",
         keywords: "notes bulletins",
         content: (
@@ -459,7 +461,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "absences",
-        icon: <Calendar size={20} />,
+        icon: <Calendar size={isMobile ? 18 : 20} />,
         title: "Absences et retards",
         keywords: "absences retards",
         content: (
@@ -474,7 +476,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "punitions",
-        icon: <AlertTriangle size={20} />,
+        icon: <AlertTriangle size={isMobile ? 18 : 20} />,
         title: "Punitions",
         keywords: "punitions discipline",
         content: (
@@ -489,7 +491,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "frais",
-        icon: <DollarSign size={20} />,
+        icon: <DollarSign size={isMobile ? 18 : 20} />,
         title: "Frais de scolarité",
         keywords: "frais paiement",
         content: (
@@ -503,7 +505,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -521,7 +523,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     eleve: [
       {
         id: "notes",
-        icon: <BookOpen size={20} />,
+        icon: <BookOpen size={isMobile ? 18 : 20} />,
         title: "Mes notes",
         keywords: "notes bulletins",
         content: (
@@ -536,7 +538,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "absences",
-        icon: <Calendar size={20} />,
+        icon: <Calendar size={isMobile ? 18 : 20} />,
         title: "Mes absences",
         keywords: "absences retards",
         content: (
@@ -550,7 +552,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "emploi",
-        icon: <Clock size={20} />,
+        icon: <Clock size={isMobile ? 18 : 20} />,
         title: "Emploi du temps",
         keywords: "emploi du temps",
         content: (
@@ -564,7 +566,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -582,7 +584,7 @@ export function Aide({ user, role, isSuperAdmin }) {
     comptable: [
       {
         id: "frais",
-        icon: <DollarSign size={20} />,
+        icon: <DollarSign size={isMobile ? 18 : 20} />,
         title: "Gestion des frais",
         keywords: "frais paiement soldes",
         content: (
@@ -598,7 +600,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "export",
-        icon: <Download size={20} />,
+        icon: <Download size={isMobile ? 18 : 20} />,
         title: "Exporter les données",
         keywords: "export excel",
         content: (
@@ -609,7 +611,7 @@ export function Aide({ user, role, isSuperAdmin }) {
       },
       {
         id: "profil",
-        icon: <User size={20} />,
+        icon: <User size={isMobile ? 18 : 20} />,
         title: "Profil et mot de passe",
         keywords: "mot de passe profil compte",
         content: (
@@ -679,8 +681,26 @@ export function Aide({ user, role, isSuperAdmin }) {
     },
   ];
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : 20;
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 13 : 14;
+  const searchPadding = isMobile ? "12px 40px 12px 40px" : "10px 40px 10px 40px";
+  const searchFontSize = isMobile ? 16 : 14;
+  const searchIconLeft = isMobile ? 12 : 12;
+  const searchClearRight = isMobile ? 8 : 8;
+  const toggleAllButtonPadding = isMobile ? "10px 12px" : "6px 12px";
+  const toggleAllButtonFontSize = isMobile ? 14 : 13;
+  const sectionCardPadding = isMobile ? "14px" : "16px";
+  const sectionTitleFontSize = isMobile ? 15 : 16;
+  const sectionContentPaddingLeft = isMobile ? "14px" : "48px";
+  const sectionContentFontSize = isMobile ? 14 : 15;
+  const faqCardPadding = isMobile ? "10px 14px" : "12px 16px";
+  const faqQuestionSize = isMobile ? 15 : 16;
+  const faqAnswerSize = isMobile ? 13 : 14;
+
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 20, width: "100%" }}>
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: containerPadding, width: "100%" }}>
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
@@ -691,20 +711,20 @@ export function Aide({ user, role, isSuperAdmin }) {
         }
       `}</style>
 
-      <h1 style={{ ...S.h2, display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
-        <span><HelpCircle size={28} /> Aide</span>
-        <span style={{ fontSize: 14, fontWeight: 400, color: S.textMuted }}>
+      <h1 style={{ ...S.h2, display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", fontSize: titleSize }}>
+        <span><HelpCircle size={isMobile ? 24 : 28} /> Aide</span>
+        <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 400, color: S.textMuted }}>
           {filteredSections.length} rubrique(s)
         </span>
       </h1>
-      <p style={{ ...S.muted, marginBottom: 24 }}>
+      <p style={{ ...S.muted, marginBottom: isMobile ? 16 : 24, fontSize: subtitleSize }}>
         Rubriques pour : <strong>{roleKey}</strong>
       </p>
 
       {/* Barre de recherche et contrôles */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: isMobile ? 16 : 24 }}>
         <div style={{ position: "relative", width: "100%" }}>
-          <Search size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
+          <Search size={18} style={{ position: "absolute", left: searchIconLeft, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
           <input
             type="search"
             placeholder="Rechercher une rubrique..."
@@ -712,13 +732,14 @@ export function Aide({ user, role, isSuperAdmin }) {
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 40px 10px 40px",
+              padding: searchPadding,
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 8,
               background: dark ? "#0F172A" : "#F9FAFB",
               color: dark ? "#F1F5F9" : "#1E293B",
-              fontSize: 14,
+              fontSize: searchFontSize,
               outline: "none",
+              boxSizing: "border-box",
             }}
             aria-label="Rechercher dans l'aide"
           />
@@ -727,7 +748,7 @@ export function Aide({ user, role, isSuperAdmin }) {
               onClick={() => setSearchTerm("")}
               style={{
                 position: "absolute",
-                right: 8,
+                right: searchClearRight,
                 top: "50%",
                 transform: "translateY(-50%)",
                 background: "none",
@@ -748,13 +769,13 @@ export function Aide({ user, role, isSuperAdmin }) {
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              padding: "6px 12px",
+              padding: toggleAllButtonPadding,
               background: "transparent",
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 6,
               color: dark ? "#94A3B8" : "#64748B",
               cursor: "pointer",
-              fontSize: 13,
+              fontSize: toggleAllButtonFontSize,
             }}
           >
             {allOpen ? <ChevronsUp size={16} /> : <ChevronsDown size={16} />}
@@ -769,7 +790,7 @@ export function Aide({ user, role, isSuperAdmin }) {
         </p>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 8 : 12 }}>
         {filteredSections.map((section) => {
           const isOpen = allOpen ? true : openSection === section.id;
           return (
@@ -791,12 +812,12 @@ export function Aide({ user, role, isSuperAdmin }) {
                   alignItems: "center",
                   gap: 12,
                   width: "100%",
-                  padding: "16px",
+                  padding: sectionCardPadding,
                   background: "none",
                   border: "none",
                   cursor: "pointer",
                   color: S.text,
-                  fontSize: 16,
+                  fontSize: sectionTitleFontSize,
                   fontWeight: 600,
                   textAlign: "left",
                   outline: "none",
@@ -809,9 +830,9 @@ export function Aide({ user, role, isSuperAdmin }) {
                   {highlightText(section.title)}
                 </span>
                 {isOpen ? (
-                  <ChevronDown size={20} style={{ flexShrink: 0 }} />
+                  <ChevronDown size={isMobile ? 18 : 20} style={{ flexShrink: 0 }} />
                 ) : (
-                  <ChevronRight size={20} style={{ flexShrink: 0 }} />
+                  <ChevronRight size={isMobile ? 18 : 20} style={{ flexShrink: 0 }} />
                 )}
               </button>
               <div
@@ -820,11 +841,11 @@ export function Aide({ user, role, isSuperAdmin }) {
                   maxHeight: isOpen ? 500 : 0,
                   overflow: "hidden",
                   transition: "max-height 0.3s ease",
-                  padding: isOpen ? "0 16px 16px 48px" : "0 16px 0 48px",
+                  padding: isOpen ? `0 ${sectionCardPadding} ${sectionCardPadding} ${sectionContentPaddingLeft}` : `0 ${sectionCardPadding} 0 ${sectionContentPaddingLeft}`,
                   lineHeight: 1.8,
                 }}
               >
-                <div style={{ position: "relative" }}>
+                <div style={{ position: "relative", fontSize: sectionContentFontSize }}>
                   {section.content}
                   <button
                     onClick={(e) => {
@@ -852,25 +873,25 @@ export function Aide({ user, role, isSuperAdmin }) {
       </div>
 
       {/* Section FAQ */}
-      <div style={{ marginTop: 40 }}>
-        <h2 style={{ ...S.h3, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-          <HelpCircle size={20} /> Questions fréquentes
+      <div style={{ marginTop: isMobile ? 24 : 40 }}>
+        <h2 style={{ ...S.h3, marginBottom: 16, display: "flex", alignItems: "center", gap: 8, fontSize: isMobile ? 18 : 20 }}>
+          <HelpCircle size={isMobile ? 18 : 20} /> Questions fréquentes
         </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
           {faq.map((item, idx) => (
             <div
               key={idx}
               style={{
                 background: dark ? "#1E293B" : "#FFFFFF",
                 borderRadius: 8,
-                padding: "12px 16px",
+                padding: faqCardPadding,
                 border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               }}
             >
-              <div style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 4 }}>
+              <div style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 4, fontSize: faqQuestionSize }}>
                 {item.q}
               </div>
-              <div style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+              <div style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: faqAnswerSize }}>
                 {item.a}
               </div>
             </div>
@@ -883,8 +904,8 @@ export function Aide({ user, role, isSuperAdmin }) {
           onClick={scrollToTop}
           style={{
             position: "fixed",
-            bottom: 24,
-            right: 24,
+            bottom: isMobile ? 16 : 24,
+            right: isMobile ? 16 : 24,
             zIndex: 1000,
             width: 44,
             height: 44,

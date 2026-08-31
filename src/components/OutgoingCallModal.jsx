@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { PhoneOutgoing, XCircle, Clock, Volume2, VolumeX, User } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -9,6 +10,8 @@ const RING_DURATION = 60; // secondes
 
 export function OutgoingCallModal({ callId, calleeId, onCancel }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
   const calleeUser = useQuery(
     api.users.get,
     calleeId ? { userId: calleeId } : "skip"
@@ -18,7 +21,6 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
   const audioRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Minuteur avec useCallback pour éviter les réinitialisations
   const handleCancel = useCallback(() => {
     clearInterval(timerRef.current);
     onCancel();
@@ -40,7 +42,6 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
     return () => clearInterval(timerRef.current);
   }, [onCancel]);
 
-  // Gestion audio
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -61,6 +62,19 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
 
   const progress = (secondsLeft / RING_DURATION) * 100;
 
+  // Styles adaptatifs
+  const cardPadding = isMobile ? "20px" : "32px";
+  const cardMaxWidth = isMobile ? "90%" : 400;
+  const avatarSize = isMobile ? 80 : 96;
+  const avatarFontSize = isMobile ? 28 : 36;
+  const titleFontSize = isMobile ? 18 : 22;
+  const subtitleFontSize = isMobile ? 14 : 16;
+  const timerFontSize = isMobile ? 16 : 18;
+  const cancelButtonPadding = isMobile ? "14px 20px" : "12px 28px";
+  const cancelButtonFontSize = isMobile ? 16 : 16;
+  const muteButtonFontSize = isMobile ? 14 : 14;
+  const progressWidth = isMobile ? "80%" : "70%";
+
   return (
     <div
       style={{
@@ -76,18 +90,18 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
         justifyContent: "center",
         zIndex: 9999,
         animation: "fadeIn 0.25s ease",
+        padding: isMobile ? 12 : 0,
       }}
     >
       <div
         style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 28,
-          padding: "32px",
+          padding: cardPadding,
           textAlign: "center",
           boxShadow: dark ? "0 25px 50px rgba(0,0,0,0.6)" : "0 25px 50px rgba(0,0,0,0.2)",
-          maxWidth: 400,
+          maxWidth: cardMaxWidth,
           width: "100%",
-          margin: "0 16px",
           border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`,
           animation: "slideUp 0.35s cubic-bezier(0.4,0,0.2,1)",
           position: "relative",
@@ -97,8 +111,8 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
         {/* Avatar avec initiale */}
         <div
           style={{
-            width: 96,
-            height: 96,
+            width: avatarSize,
+            height: avatarSize,
             borderRadius: "50%",
             background: "linear-gradient(135deg, #F59E0B, #F97316)",
             display: "flex",
@@ -107,17 +121,17 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
             margin: "0 auto 16px",
             animation: "pulse 1.5s ease infinite",
             color: "white",
-            fontSize: 36,
+            fontSize: avatarFontSize,
             fontWeight: 700,
             boxShadow: "0 8px 20px rgba(245,158,11,0.4)",
           }}
         >
-          {calleeUser?.nom?.charAt(0).toUpperCase() || <User size={36} />}
+          {calleeUser?.nom?.charAt(0).toUpperCase() || <User size={avatarFontSize} />}
         </div>
 
         <h2
           style={{
-            fontSize: 22,
+            fontSize: titleFontSize,
             fontWeight: 700,
             color: dark ? "#F1F5F9" : "#1E293B",
             margin: "0 0 4px",
@@ -128,7 +142,7 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
 
         <p
           style={{
-            fontSize: 16,
+            fontSize: subtitleFontSize,
             color: dark ? "#CBD5E1" : "#64748B",
             marginBottom: 16,
           }}
@@ -139,10 +153,10 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
         {/* Minuteur et progression circulaire */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: dark ? "#94A3B8" : "#64748B", fontWeight: 600 }}>
-            <Clock size={18} />
-            <span style={{ fontSize: 18 }}>{formatTime(secondsLeft)}</span>
+            <Clock size={isMobile ? 16 : 18} />
+            <span style={{ fontSize: timerFontSize }}>{formatTime(secondsLeft)}</span>
           </div>
-          <div style={{ width: "70%", height: 6, background: dark ? "#334155" : "#E2E8F0", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ width: progressWidth, height: 6, background: dark ? "#334155" : "#E2E8F0", borderRadius: 3, overflow: "hidden" }}>
             <div
               style={{
                 width: `${progress}%`,
@@ -160,19 +174,21 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
           <button
             onClick={handleCancel}
             style={{
-              padding: "12px 28px",
+              padding: cancelButtonPadding,
               background: "linear-gradient(135deg, #EF4444, #DC2626)",
               color: "#FFFFFF",
               border: "none",
               borderRadius: 14,
               fontWeight: 600,
-              fontSize: 16,
+              fontSize: cancelButtonFontSize,
               cursor: "pointer",
               display: "inline-flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 8,
               transition: "transform 0.2s, box-shadow 0.2s",
               boxShadow: "0 6px 16px rgba(239,68,68,0.4)",
+              width: isMobile ? "100%" : "auto",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = "scale(1.05)";
@@ -193,7 +209,7 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
               border: "none",
               color: dark ? "#94A3B8" : "#64748B",
               cursor: "pointer",
-              fontSize: 14,
+              fontSize: muteButtonFontSize,
               fontWeight: 500,
               display: "flex",
               alignItems: "center",

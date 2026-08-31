@@ -5,6 +5,7 @@ import { GestionEleves } from "./GestionEleves";
 import { GestionClassesAdmin } from "./GestionClassesAdmin";
 import { Breadcrumb } from "./Breadcrumb";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { Loader, GraduationCap, BookOpen } from "lucide-react";
 
 export function GestionElevesEtClasses({
@@ -14,6 +15,7 @@ export function GestionElevesEtClasses({
   anneeActive,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [subTab, setSubTab] = useState("eleves");
 
   // Queries
@@ -54,20 +56,33 @@ export function GestionElevesEtClasses({
   const badgeBg = dark ? "#312E81" : "#EEF2FF";
   const badgeText = dark ? "#A5B4FC" : "#4F46E5";
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "32px 24px";
+  const noYearPadding = isMobile ? "24px 16px" : "32px 24px";
+  const titleSize = isMobile ? 20 : 24;
+  const subtitleSize = isMobile ? 14 : 16;
+  const tabsMarginBottom = isMobile ? 16 : 24;
+  const tabsMarginTop = isMobile ? 16 : 24;
+  const tabPadding = isMobile ? "10px 12px" : "12px 20px";
+  const tabFontSize = isMobile ? 14 : 16;
+  const iconSize = isMobile ? 16 : 18;
+  const badgeSize = isMobile ? 16 : 18;
+  const badgeFontSize = isMobile ? 10 : 11;
+
   if (!anneeId) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: noYearPadding }}>
         <Breadcrumb items={["Scolarité"]} />
         <div
           style={{
             background: dark ? "#1E293B" : "#FFFFFF",
             borderRadius: 16,
-            padding: 48,
+            padding: isMobile ? 32 : 48,
             textAlign: "center",
           }}
         >
-          <h2 style={{ color: textPrimary }}>Aucune année scolaire active</h2>
-          <p style={{ color: textSecondary }}>
+          <h2 style={{ color: textPrimary, fontSize: titleSize }}>Aucune année scolaire active</h2>
+          <p style={{ color: textSecondary, fontSize: subtitleSize }}>
             Veuillez créer ou activer une année scolaire dans les paramètres.
           </p>
         </div>
@@ -87,19 +102,19 @@ export function GestionElevesEtClasses({
     {
       id: "eleves",
       label: "Élèves",
-      icon: <GraduationCap size={18} />,
+      icon: <GraduationCap size={iconSize} />,
       badge: eleves.length,
     },
     {
       id: "classes",
       label: "Classes",
-      icon: <BookOpen size={18} />,
+      icon: <BookOpen size={iconSize} />,
       badge: sortedClasses.length,
     },
   ];
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       <Breadcrumb items={["Scolarité", tabs.find((t) => t.id === subTab)?.label || ""]} />
@@ -110,10 +125,11 @@ export function GestionElevesEtClasses({
           display: "flex",
           gap: 0,
           borderBottom: `2px solid ${borderColor}`,
-          marginBottom: 24,
-          marginTop: 24,
+          marginBottom: tabsMarginBottom,
+          marginTop: tabsMarginTop,
           overflowX: "auto",
           whiteSpace: "nowrap",
+          WebkitOverflowScrolling: "touch", // Défilement fluide sur mobile
         }}
       >
         {tabs.map((t) => (
@@ -126,7 +142,7 @@ export function GestionElevesEtClasses({
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: "12px 20px",
+              padding: tabPadding,
               border: "none",
               background: "transparent",
               color: subTab === t.id ? accentColor : textSecondary,
@@ -137,6 +153,7 @@ export function GestionElevesEtClasses({
               whiteSpace: "nowrap",
               position: "relative",
               flexShrink: 0,
+              fontSize: tabFontSize,
             }}
           >
             {t.icon}
@@ -144,15 +161,15 @@ export function GestionElevesEtClasses({
             {t.badge !== undefined && t.badge > 0 && (
               <span
                 style={{
-                  minWidth: 18,
-                  height: 18,
+                  minWidth: badgeSize,
+                  height: badgeSize,
                   background: badgeBg,
                   color: badgeText,
                   borderRadius: "50%",
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 11,
+                  fontSize: badgeFontSize,
                   fontWeight: 700,
                   padding: "0 4px",
                 }}
@@ -185,7 +202,7 @@ export function GestionElevesEtClasses({
           userId={user._id}
           eleves={eleves}
           anneeId={anneeId}
-          enseignants={enseignants} // ✅ Ajout
+          enseignants={enseignants}
           updateEleveClasse={(eleveId, newClasseNom) =>
             updateEleveClasse({
               eleveId,

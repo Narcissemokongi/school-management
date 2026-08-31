@@ -1,10 +1,13 @@
 import { useState, useMemo } from "react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { getEleve, getFaute } from "../utils";
 import { Search, AlertTriangle, Scale } from "lucide-react";
 
 export function HistoriqueDisciplinaire({ punitions, eleves, fautes, user }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filtrer les punitions du disciplinaire connecté
@@ -58,9 +61,9 @@ export function HistoriqueDisciplinaire({ punitions, eleves, fautes, user }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 4,
-        padding: "4px 10px",
+        padding: isMobile ? "4px 8px" : "4px 10px",
         borderRadius: 20,
-        fontSize: 12,
+        fontSize: isMobile ? 11 : 12,
         fontWeight: 600,
         background: style.bg,
         color: style.color,
@@ -70,16 +73,39 @@ export function HistoriqueDisciplinaire({ punitions, eleves, fautes, user }) {
     );
   };
 
+  // Styles adaptatifs
+  const headerMarginBottom = isMobile ? 16 : 20;
+  const headerTitleSize = isMobile ? 20 : 24;
+  const headerSubtitleSize = isMobile ? 13 : 14;
+  const searchPadding = isMobile ? "10px 12px" : "8px 12px";
+  const searchFontSize = isMobile ? 16 : 14;
+  const searchIconSize = isMobile ? 18 : 18;
+  const cardPadding = isMobile ? 14 : 20;
+  const cardGap = isMobile ? 8 : 12;
+  const cardTitleSize = isMobile ? 16 : 18;
+  const cardTextSize = isMobile ? 13 : 14;
+  const cardSecondarySize = isMobile ? 12 : 13;
+
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ ...S.h2, color: textPrimary }}>Mon historique</div>
-        <div style={{ ...S.muted, color: textSecondary }}>{myPunitions.length} punition(s) enregistrée(s)</div>
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <div style={{ ...S.h2, color: textPrimary, fontSize: headerTitleSize }}>Mon historique</div>
+        <div style={{ ...S.muted, color: textSecondary, fontSize: headerSubtitleSize }}>
+          {myPunitions.length} punition(s) enregistrée(s)
+        </div>
       </div>
 
       {/* Barre de recherche */}
-      <div style={{ marginBottom: 20, display: "flex", alignItems: "center", background: cardBg, borderRadius: 10, padding: "8px 12px", border: `1px solid ${cardBorder}` }}>
-        <Search size={18} color={iconColor} />
+      <div style={{
+        marginBottom: isMobile ? 16 : 20,
+        display: "flex",
+        alignItems: "center",
+        background: cardBg,
+        borderRadius: 10,
+        padding: searchPadding,
+        border: `1px solid ${cardBorder}`,
+      }}>
+        <Search size={searchIconSize} color={iconColor} />
         <input
           type="text"
           placeholder="Rechercher par nom ou classe..."
@@ -89,7 +115,7 @@ export function HistoriqueDisciplinaire({ punitions, eleves, fautes, user }) {
             border: "none",
             outline: "none",
             marginLeft: 8,
-            fontSize: 14,
+            fontSize: searchFontSize,
             width: "100%",
             background: "transparent",
             color: inputText,
@@ -107,36 +133,36 @@ export function HistoriqueDisciplinaire({ punitions, eleves, fautes, user }) {
             style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 20,
+              padding: cardPadding,
               boxShadow: cardShadow,
               border: `1px solid ${cardBorder}`,
-              marginBottom: 12,
+              marginBottom: cardGap,
               transition: "background-color 0.3s",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: textPrimary }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+              <div style={{ fontSize: cardTitleSize, fontWeight: 700, color: textPrimary, flex: 1, minWidth: 0 }}>
                 {eleve ? `${eleve.nom} ${eleve.postnom} ${eleve.prenom || ''}` : "Élève inconnu"}
               </div>
               {graviteBadge(faute?.gravite)}
             </div>
 
-            <div style={{ fontSize: 14, color: textSecondary, marginBottom: 6 }}>
+            <div style={{ fontSize: cardTextSize, color: textSecondary, marginBottom: 6 }}>
               Classe {eleve?.classe || "?"} • {p.date}
             </div>
 
-            <div style={{ fontSize: 14, color: textPrimary, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-              <AlertTriangle size={16} color={dark ? "#818CF8" : "#4F46E5"} />
+            <div style={{ fontSize: cardTextSize, color: textPrimary, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+              <AlertTriangle size={isMobile ? 14 : 16} color={dark ? "#818CF8" : "#4F46E5"} />
               {faute?.libelle || "Faute inconnue"}
             </div>
 
-            <div style={{ fontSize: 13, color: textSecondary, display: "flex", alignItems: "center", gap: 6 }}>
-              <Scale size={16} color={dark ? "#94A3B8" : "#64748B"} />
+            <div style={{ fontSize: cardSecondarySize, color: textSecondary, display: "flex", alignItems: "center", gap: 6 }}>
+              <Scale size={isMobile ? 14 : 16} color={dark ? "#94A3B8" : "#64748B"} />
               Sanction : {p.sanction}
             </div>
 
             {p.commentaire && (
-              <div style={{ fontSize: 12, color: textSecondary, marginTop: 6, fontStyle: "italic" }}>
+              <div style={{ fontSize: cardSecondarySize, color: textSecondary, marginTop: 6, fontStyle: "italic" }}>
                 "{p.commentaire}"
               </div>
             )}
@@ -145,7 +171,7 @@ export function HistoriqueDisciplinaire({ punitions, eleves, fautes, user }) {
       })}
 
       {myPunitions.length === 0 && (
-        <div style={{ textAlign: "center", padding: 40, color: textSecondary }}>
+        <div style={{ textAlign: "center", padding: 40, color: textSecondary, fontSize: isMobile ? 14 : 16 }}>
           {searchTerm ? "Aucun résultat trouvé." : "Aucune punition enregistrée"}
         </div>
       )}

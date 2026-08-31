@@ -1,20 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronUp } from "lucide-react";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 
 export function ScrollToTop({
-  bottom = 24,               // position basse personnalisable
-  right = 24,                // position droite personnalisable
-  showAfter = 300,           // seuil de défilement (px)
+  bottom = 24,
+  right = 24,
+  showAfter = 300,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const [visible, setVisible] = useState(false);
   const [progress, setProgress] = useState(0);
   const rafRef = useRef(null);
   const prefersReducedMotion = useRef(false);
 
   useEffect(() => {
-    // Détection de la préférence de réduction des animations
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     prefersReducedMotion.current = mediaQuery.matches;
     const handleChange = (e) => { prefersReducedMotion.current = e.matches; };
@@ -35,7 +36,7 @@ export function ScrollToTop({
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll(); // initialisation
+    onScroll();
     return () => {
       window.removeEventListener("scroll", onScroll);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -46,7 +47,15 @@ export function ScrollToTop({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  // Couleurs adaptatives
+  // Styles adaptatifs
+  const buttonSize = isMobile ? 44 : 50;
+  const innerButtonSize = isMobile ? 34 : 40;
+  const iconSize = isMobile ? 18 : 20;
+  const bottomPosition = isMobile ? 16 : bottom;
+  const rightPosition = isMobile ? 16 : right;
+  const borderRadius = buttonSize / 2;
+  const circleRadius = (buttonSize / 2) - 3; // rayon de l'anneau de progression
+
   const buttonBg = dark ? "#818CF8" : "#4F46E5";
   const buttonColor = "#FFFFFF";
   const boxShadow = dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 4px 12px rgba(79,70,229,0.3)";
@@ -57,8 +66,8 @@ export function ScrollToTop({
     <div
       style={{
         position: "fixed",
-        bottom,
-        right,
+        bottom: bottomPosition,
+        right: rightPosition,
         zIndex: 1000,
         opacity: visible ? 1 : 0,
         transform: visible ? "scale(1)" : "scale(0.8)",
@@ -73,34 +82,34 @@ export function ScrollToTop({
       <div
         style={{
           position: "relative",
-          width: 50,
-          height: 50,
+          width: buttonSize,
+          height: buttonSize,
           borderRadius: "50%",
           background: dark ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.9)",
           boxShadow,
           overflow: "hidden",
         }}
       >
-        <svg width="50" height="50" style={{ position: "absolute", top: 0, left: 0 }}>
+        <svg width={buttonSize} height={buttonSize} style={{ position: "absolute", top: 0, left: 0 }}>
           <circle
-            cx="25"
-            cy="25"
-            r="22"
+            cx={buttonSize / 2}
+            cy={buttonSize / 2}
+            r={circleRadius}
             fill="none"
             stroke={trackColor}
             strokeWidth="3"
           />
           <circle
-            cx="25"
-            cy="25"
-            r="22"
+            cx={buttonSize / 2}
+            cy={buttonSize / 2}
+            r={circleRadius}
             fill="none"
             stroke={buttonBg}
             strokeWidth="3"
-            strokeDasharray={`${2 * Math.PI * 22}`}
-            strokeDashoffset={`${2 * Math.PI * 22 * (1 - progress / 100)}`}
+            strokeDasharray={`${2 * Math.PI * circleRadius}`}
+            strokeDashoffset={`${2 * Math.PI * circleRadius * (1 - progress / 100)}`}
             strokeLinecap="round"
-            transform="rotate(-90 25 25)"
+            transform={`rotate(-90 ${buttonSize / 2} ${buttonSize / 2})`}
             style={{ transition: "stroke-dashoffset 0.1s linear" }}
           />
         </svg>
@@ -117,8 +126,8 @@ export function ScrollToTop({
             color: buttonColor,
             border: "none",
             borderRadius: "50%",
-            width: 40,
-            height: 40,
+            width: innerButtonSize,
+            height: innerButtonSize,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -143,7 +152,7 @@ export function ScrollToTop({
             e.currentTarget.style.outline = "none";
           }}
         >
-          <ChevronUp size={20} />
+          <ChevronUp size={iconSize} />
         </button>
       </div>
       <style>{`

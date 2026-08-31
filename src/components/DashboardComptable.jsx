@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile";
 import {
   DollarSign,
   TrendingUp,
@@ -13,7 +14,8 @@ import {
 } from "lucide-react";
 
 export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
-  const { dark } = useStyles(); // ✅ mode sombre/clair
+  const { dark } = useStyles();
+  const isMobile = useIsMobile();
 
   // Récupération de la devise
   const ecole = useQuery(
@@ -87,75 +89,87 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
 
   if (!anneeId) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "32px 16px" : "32px 24px", textAlign: "center" }}>
         <DollarSign size={48} color={warning} style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
+        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
           Aucune année scolaire active
         </h2>
-        <p style={{ color: textSecondary, fontSize: 14 }}>
+        <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
           Veuillez activer une année scolaire pour voir le tableau de bord.
         </p>
       </div>
     );
   }
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 13 : 14;
+  const statGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: isMobile ? 12 : 16,
+    marginBottom: isMobile ? 24 : 32,
+  };
+  const sectionTitleSize = isMobile ? 16 : 18;
+  const sectionPadding = isMobile ? 16 : 24;
+  const sectionMarginBottom = isMobile ? 16 : 20;
+
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Tableau de bord comptable {anneeActive ? `· ${anneeActive.nom}` : ""}
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Vue d'ensemble des finances de l'établissement ({deviseSymbol})
         </p>
       </div>
 
       {/* Cartes statistiques */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 16,
-          marginBottom: 32,
-        }}
-      >
+      <div style={statGridStyle}>
         <StatCard
-          icon={<DollarSign size={24} />}
+          icon={<DollarSign size={isMobile ? 20 : 24} />}
           value={`${totalFrais.toLocaleString()} ${deviseSymbol}`}
           label="Total dû"
           color={accent}
           dark={dark}
+          isMobile={isMobile}
         />
         <StatCard
-          icon={<CheckCircle size={24} />}
+          icon={<CheckCircle size={isMobile ? 20 : 24} />}
           value={`${totalPaye.toLocaleString()} ${deviseSymbol}`}
           label="Total payé"
           color={success}
           dark={dark}
+          isMobile={isMobile}
         />
         <StatCard
-          icon={<Clock size={24} />}
+          icon={<Clock size={isMobile ? 20 : 24} />}
           value={`${reste.toLocaleString()} ${deviseSymbol}`}
           label="Reste à payer"
           color={reste > 0 ? danger : success}
           dark={dark}
+          isMobile={isMobile}
         />
         <StatCard
-          icon={<TrendingUp size={24} />}
+          icon={<TrendingUp size={isMobile ? 20 : 24} />}
           value={`${tauxPaiement}%`}
           label="Taux de paiement"
           color={warning}
           dark={dark}
+          isMobile={isMobile}
         />
         <StatCard
-          icon={<School size={24} />}
+          icon={<School size={isMobile ? 20 : 24} />}
           value={nbElevesAvecFrais}
           label="Élèves avec frais"
           color="#6366F1"
           dark={dark}
+          isMobile={isMobile}
         />
       </div>
 
@@ -164,7 +178,7 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
         style={{
           background: cardBg,
           borderRadius: 16,
-          padding: 24,
+          padding: sectionPadding,
           boxShadow: shadow,
           border: `1px solid ${cardBorder}`,
           transition: "background-color 0.3s",
@@ -172,22 +186,22 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
       >
         <h3
           style={{
-            fontSize: 18,
+            fontSize: sectionTitleSize,
             fontWeight: 600,
             color: textPrimary,
-            marginBottom: 20,
+            marginBottom: isMobile ? 16 : 20,
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}
         >
-          <BarChart3 size={20} color={accent} /> Paiements par classe
+          <BarChart3 size={isMobile ? 18 : 20} color={accent} /> Paiements par classe
         </h3>
         {statsParClasse.length === 0 ? (
           <p style={{ color: textSecondary, fontSize: 14 }}>Aucune donnée disponible.</p>
         ) : (
           statsParClasse.map((c) => (
-            <div key={c.classe} style={{ marginBottom: 20 }}>
+            <div key={c.classe} style={{ marginBottom: sectionMarginBottom }}>
               <div
                 style={{
                   display: "flex",
@@ -198,14 +212,13 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
                   gap: 8,
                 }}
               >
-                <span style={{ fontWeight: 500, fontSize: 14, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ fontWeight: 500, fontSize: isMobile ? 13 : 14, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {c.classe} ({c.nbEleves} élève(s))
                 </span>
-                <span style={{ fontSize: 13, color: textSecondary, whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: isMobile ? 12 : 13, color: textSecondary, whiteSpace: "nowrap" }}>
                   {c.paye.toLocaleString()} / {c.total.toLocaleString()} {deviseSymbol} — {c.taux}%
                 </span>
               </div>
-              {/* Barre de progression */}
               <div
                 style={{
                   height: 8,
@@ -232,7 +245,7 @@ export function DashboardComptable({ ecoleId, eleves, anneeId, anneeActive }) {
   );
 }
 
-function StatCard({ icon, value, label, color, dark }) {
+function StatCard({ icon, value, label, color, dark, isMobile }) {
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
@@ -244,18 +257,18 @@ function StatCard({ icon, value, label, color, dark }) {
       style={{
         background: cardBg,
         borderRadius: 16,
-        padding: 20,
+        padding: isMobile ? 14 : 20,
         display: "flex",
         alignItems: "center",
-        gap: 16,
+        gap: isMobile ? 12 : 16,
         boxShadow: shadow,
         border: `1px solid ${border}`,
       }}
     >
       <div
         style={{
-          width: 48,
-          height: 48,
+          width: isMobile ? 40 : 48,
+          height: isMobile ? 40 : 48,
           background: `${color}${dark ? "33" : "15"}`,
           borderRadius: 12,
           display: "flex",
@@ -267,10 +280,10 @@ function StatCard({ icon, value, label, color, dark }) {
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: textPrimary }}>
+        <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 700, color: textPrimary }}>
           {value}
         </div>
-        <div style={{ fontSize: 14, color: textSecondary }}>{label}</div>
+        <div style={{ fontSize: isMobile ? 12 : 14, color: textSecondary }}>{label}</div>
       </div>
     </div>
   );

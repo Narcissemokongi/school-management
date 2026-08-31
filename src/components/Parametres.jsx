@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
+import { useAppStore } from "../store/appStore";
 import {
   User, Building, Shield, Save, Upload, Eye, EyeOff,
   Calendar, Loader, AlertCircle, ShieldCheck, Mail,
@@ -16,7 +17,7 @@ import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 // ===== Sous-composant pour la gestion de la 2FA par email =====
-function TwoFactorEmailSettings({ userId }) {
+function TwoFactorEmailSettings({ userId, isMobile }) {
   const { dark } = useStyles();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -89,16 +90,23 @@ function TwoFactorEmailSettings({ userId }) {
   const inputText = dark ? "#F1F5F9" : "#1E293B";
   const buttonPrimary = dark ? "#818CF8" : "#4F46E5";
 
+  // Styles adaptatifs
+  const inputPadding = isMobile ? "12px 14px" : "10px 14px";
+  const inputFontSize = isMobile ? 16 : 14;
+  const buttonPadding = isMobile ? "12px 16px" : "8px 16px";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const containerPadding = isMobile ? 16 : 20;
+
   return (
-    <div style={{ background: cardBg, borderRadius: 12, padding: 20, border: `1px solid ${cardBorder}` }}>
-      <h3 style={{ display: "flex", alignItems: "center", gap: 8, color: textPrimary, marginBottom: 12 }}>
-        <ShieldCheck size={20} color={buttonPrimary} />
+    <div style={{ background: cardBg, borderRadius: 12, padding: containerPadding, border: `1px solid ${cardBorder}` }}>
+      <h3 style={{ display: "flex", alignItems: "center", gap: 8, color: textPrimary, marginBottom: 12, fontSize: isMobile ? 16 : 18 }}>
+        <ShieldCheck size={isMobile ? 18 : 20} color={buttonPrimary} />
         Authentification à deux facteurs (Email)
       </h3>
 
       {twoFactorRecord?.enabled ? (
         <div>
-          <p style={{ color: textSecondary, marginBottom: 8 }}>
+          <p style={{ color: textSecondary, marginBottom: 8, fontSize: isMobile ? 14 : 14 }}>
             La 2FA par email est <strong>activée</strong> sur : {twoFactorRecord.email}
           </p>
           <button
@@ -107,8 +115,9 @@ function TwoFactorEmailSettings({ userId }) {
             style={{
               display: "inline-flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 8,
-              padding: "8px 16px",
+              padding: buttonPadding,
               background: "#EF4444",
               color: "white",
               border: "none",
@@ -116,6 +125,8 @@ function TwoFactorEmailSettings({ userId }) {
               fontWeight: 600,
               cursor: "pointer",
               opacity: verifying ? 0.7 : 1,
+              fontSize: buttonFontSize,
+              width: isMobile ? "100%" : "auto",
             }}
           >
             {verifying ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
@@ -124,10 +135,10 @@ function TwoFactorEmailSettings({ userId }) {
         </div>
       ) : isSettingUp ? (
         <div>
-          <p style={{ color: textSecondary, marginBottom: 8 }}>
+          <p style={{ color: textSecondary, marginBottom: 8, fontSize: isMobile ? 14 : 14 }}>
             Un code à 6 chiffres a été envoyé à <strong>{email}</strong>. Saisissez-le ci-dessous :
           </p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
             <input
               type="text"
               inputMode="numeric"
@@ -136,11 +147,11 @@ function TwoFactorEmailSettings({ userId }) {
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               placeholder="123456"
               style={{
-                padding: "10px 14px",
+                padding: inputPadding,
                 border: `1px solid ${cardBorder}`,
                 borderRadius: 8,
                 fontSize: 16,
-                width: 140,
+                width: isMobile ? "100%" : 140,
                 textAlign: "center",
                 letterSpacing: "4px",
                 background: inputBg,
@@ -151,7 +162,7 @@ function TwoFactorEmailSettings({ userId }) {
               onClick={handleVerifyCode}
               disabled={verifying || code.length !== 6}
               style={{
-                padding: "10px 20px",
+                padding: buttonPadding,
                 background: verifying ? "#A5B4FC" : buttonPrimary,
                 color: "white",
                 border: "none",
@@ -160,7 +171,10 @@ function TwoFactorEmailSettings({ userId }) {
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
+                fontSize: buttonFontSize,
+                width: isMobile ? "100%" : "auto",
               }}
             >
               {verifying ? <Loader size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
@@ -169,17 +183,17 @@ function TwoFactorEmailSettings({ userId }) {
           </div>
           <button
             onClick={() => setIsSettingUp(false)}
-            style={{ marginTop: 8, background: "none", border: "none", color: textSecondary, cursor: "pointer", fontSize: 13 }}
+            style={{ marginTop: 8, background: "none", border: "none", color: textSecondary, cursor: "pointer", fontSize: isMobile ? 14 : 13 }}
           >
             Annuler
           </button>
         </div>
       ) : (
         <div>
-          <p style={{ color: textSecondary, marginBottom: 8 }}>
+          <p style={{ color: textSecondary, marginBottom: 8, fontSize: isMobile ? 14 : 14 }}>
             Ajoutez une couche de sécurité supplémentaire en recevant un code par email à chaque connexion.
           </p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
             <input
               type="email"
               placeholder="Votre adresse email"
@@ -187,11 +201,11 @@ function TwoFactorEmailSettings({ userId }) {
               onChange={(e) => setEmail(e.target.value)}
               style={{
                 flex: 1,
-                minWidth: 200,
-                padding: "10px 14px",
+                minWidth: isMobile ? "100%" : 200,
+                padding: inputPadding,
                 border: `1px solid ${cardBorder}`,
                 borderRadius: 8,
-                fontSize: 14,
+                fontSize: inputFontSize,
                 background: inputBg,
                 color: inputText,
               }}
@@ -200,7 +214,7 @@ function TwoFactorEmailSettings({ userId }) {
               onClick={handleSendCode}
               disabled={sending || !email.trim()}
               style={{
-                padding: "10px 16px",
+                padding: buttonPadding,
                 background: sending ? "#A5B4FC" : buttonPrimary,
                 color: "white",
                 border: "none",
@@ -209,7 +223,10 @@ function TwoFactorEmailSettings({ userId }) {
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
+                fontSize: buttonFontSize,
+                width: isMobile ? "100%" : "auto",
               }}
             >
               {sending ? <Loader size={16} className="animate-spin" /> : <Mail size={16} />}
@@ -225,9 +242,9 @@ function TwoFactorEmailSettings({ userId }) {
 // ===== Composant principal Parametres =====
 export function Parametres({ ecoleId, user }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
-  // Onglet actif persisté dans le store
   const tab = useAppStore((state) => state.parametresTab || "profil");
   const setTab = useAppStore((state) => state.setParametresTab);
 
@@ -436,11 +453,22 @@ export function Parametres({ ecoleId, user }) {
     { id: "annees", label: "Année scolaire", icon: <Calendar size={18} /> },
   ];
 
-  const tabStyle = (isActive) => ({
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "24px";
+  const titleSize = isMobile ? 20 : 24;
+  const tabContainerStyle = {
+    display: "flex",
+    gap: isMobile ? 4 : 16,
+    marginBottom: isMobile ? 16 : 24,
+    flexWrap: "wrap",
+    overflowX: isMobile ? "auto" : "visible",
+    whiteSpace: "nowrap",
+  };
+  const tabButtonStyle = (isActive) => ({
     display: "flex",
     alignItems: "center",
     gap: 8,
-    padding: "8px 16px",
+    padding: isMobile ? "10px 12px" : "8px 16px",
     border: "none",
     borderRadius: 8,
     background: isActive ? (dark ? "#818CF8" : "#4F46E5") : "transparent",
@@ -448,30 +476,56 @@ export function Parametres({ ecoleId, user }) {
     fontWeight: 600,
     cursor: "pointer",
     transition: "all 0.2s",
+    fontSize: isMobile ? 14 : 14,
+    flexShrink: 0,
   });
-
+  const sectionCardStyle = {
+    background: dark ? "#1E293B" : "#FFFFFF",
+    borderRadius: 16,
+    padding: isMobile ? 16 : 24,
+    boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+  };
   const inputStyle = {
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     background: dark ? "#0F172A" : "#F9FAFB",
     color: dark ? "#F1F5F9" : "#1E293B",
     transition: "border-color 0.2s, background-color 0.3s",
+    boxSizing: "border-box",
+  };
+  const buttonPrimaryStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: isMobile ? "12px 20px" : "10px 20px",
+    background: dark ? "#818CF8" : "#4F46E5",
+    color: "white",
+    border: "none",
+    borderRadius: 8,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontSize: isMobile ? 16 : 14,
+    width: isMobile ? "100%" : "auto",
+  };
+  const gridFormStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: 12,
   };
 
   return (
-    <div>
-      <h2 style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 24 }}>
+    <div style={{ padding: containerPadding }}>
+      <h2 style={{ fontSize: titleSize, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: isMobile ? 16 : 24 }}>
         Paramètres
       </h2>
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}
-        role="tablist"
-        aria-label="Sections des paramètres"
-      >
+      <div style={tabContainerStyle} role="tablist" aria-label="Sections des paramètres">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -480,7 +534,7 @@ export function Parametres({ ecoleId, user }) {
             aria-controls={`panel-${t.id}`}
             id={`tab-${t.id}`}
             onClick={() => setTab(t.id)}
-            style={tabStyle(tab === t.id)}
+            style={tabButtonStyle(tab === t.id)}
           >
             {t.icon}
             {t.label}
@@ -490,11 +544,11 @@ export function Parametres({ ecoleId, user }) {
 
       {tab === "profil" && (
         <div role="tabpanel" id="panel-profil" aria-labelledby="tab-profil">
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: 24, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={sectionCardStyle}>
+            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
               <User size={18} /> Informations du profil
             </h3>
-            <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            <div style={{ marginBottom: 16, ...gridFormStyle }}>
               <div>
                 <span style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>Nom</span>
                 <p style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "4px 0 0" }}>{user.nom} {user.postnom || ""}</p>
@@ -509,11 +563,11 @@ export function Parametres({ ecoleId, user }) {
               </div>
             </div>
 
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>
+            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>
               Modifier mon mot de passe
             </h3>
             <div style={{ marginBottom: 12 }}>
-              <label htmlFor="old-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Ancien mot de passe</label>
+              <label htmlFor="old-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Ancien mot de passe</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input
                   id="old-password"
@@ -528,12 +582,12 @@ export function Parametres({ ecoleId, user }) {
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: dark ? "#94A3B8" : "#64748B" }}
                   aria-label={showOld ? "Cacher le mot de passe" : "Afficher le mot de passe"}
                 >
-                  {showOld ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showOld ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
                 </button>
               </div>
             </div>
             <div style={{ marginBottom: 12 }}>
-              <label htmlFor="new-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Nouveau mot de passe</label>
+              <label htmlFor="new-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Nouveau mot de passe</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input
                   id="new-password"
@@ -548,12 +602,12 @@ export function Parametres({ ecoleId, user }) {
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: dark ? "#94A3B8" : "#64748B" }}
                   aria-label={showNew ? "Cacher le mot de passe" : "Afficher le mot de passe"}
                 >
-                  {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showNew ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
                 </button>
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="confirm-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Confirmer le nouveau mot de passe</label>
+              <label htmlFor="confirm-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Confirmer le nouveau mot de passe</label>
               <input
                 id="confirm-password"
                 type="password"
@@ -566,7 +620,11 @@ export function Parametres({ ecoleId, user }) {
             <button
               onClick={handleChangePassword}
               disabled={changingPwd}
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", background: changingPwd ? "#94A3B8" : dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: changingPwd ? "not-allowed" : "pointer" }}
+              style={{
+                ...buttonPrimaryStyle,
+                background: changingPwd ? "#94A3B8" : dark ? "#818CF8" : "#4F46E5",
+                cursor: changingPwd ? "not-allowed" : "pointer",
+              }}
               aria-label="Enregistrer le nouveau mot de passe"
             >
               {changingPwd ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
@@ -578,18 +636,18 @@ export function Parametres({ ecoleId, user }) {
 
       {tab === "securite" && (
         <div role="tabpanel" id="panel-securite" aria-labelledby="tab-securite">
-          <TwoFactorEmailSettings userId={user._id} />
+          <TwoFactorEmailSettings userId={user._id} isMobile={isMobile} />
         </div>
       )}
 
       {tab === "ecole" && (
         <div role="tabpanel" id="panel-ecole" aria-labelledby="tab-ecole">
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: 24, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>Informations de l'école</h3>
+          <div style={sectionCardStyle}>
+            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>Informations de l'école</h3>
 
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-nom" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Nom de l'école</label>
-              <div style={{ display: "flex", gap: 8 }}>
+              <label htmlFor="ecole-nom" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Nom de l'école</label>
+              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
                 <input
                   id="ecole-nom"
                   value={nomEcole}
@@ -600,7 +658,7 @@ export function Parametres({ ecoleId, user }) {
                 <button
                   onClick={handleUpdateEcole}
                   disabled={updating.ecole}
-                  style={{ padding: "10px 16px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
                   aria-label="Mettre à jour le nom de l'école"
                 >
                   {updating.ecole ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
@@ -610,8 +668,8 @@ export function Parametres({ ecoleId, user }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-logo" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Logo (URL)</label>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <label htmlFor="ecole-logo" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Logo (URL)</label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexDirection: isMobile ? "column" : "row" }}>
                 <input
                   id="ecole-logo"
                   value={logoUrl}
@@ -622,7 +680,7 @@ export function Parametres({ ecoleId, user }) {
                 <button
                   onClick={handleUpdateLogo}
                   disabled={updating.logo}
-                  style={{ padding: "10px 16px", background: "#10B981", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                  style={{ ...buttonPrimaryStyle, background: "#10B981", width: isMobile ? "100%" : "auto" }}
                   aria-label="Mettre à jour le logo"
                 >
                   {updating.logo ? <Loader size={16} className="animate-spin" /> : <Upload size={16} />}
@@ -645,8 +703,8 @@ export function Parametres({ ecoleId, user }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-devise" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Devise</label>
-              <div style={{ display: "flex", gap: 8 }}>
+              <label htmlFor="ecole-devise" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Devise</label>
+              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
                 <select
                   id="ecole-devise"
                   value={devise}
@@ -660,7 +718,7 @@ export function Parametres({ ecoleId, user }) {
                 <button
                   onClick={handleUpdateDevise}
                   disabled={updating.devise}
-                  style={{ padding: "10px 16px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
                 >
                   {updating.devise ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
                   Mettre à jour
@@ -669,8 +727,8 @@ export function Parametres({ ecoleId, user }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-periode" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Type de période</label>
-              <div style={{ display: "flex", gap: 8 }}>
+              <label htmlFor="ecole-periode" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Type de période</label>
+              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
                 <select
                   id="ecole-periode"
                   value={typePeriode}
@@ -685,7 +743,7 @@ export function Parametres({ ecoleId, user }) {
                 <button
                   onClick={handleUpdateTypePeriode}
                   disabled={updating.periode}
-                  style={{ padding: "10px 16px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
                 >
                   {updating.periode ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
                   Mettre à jour
@@ -694,8 +752,8 @@ export function Parametres({ ecoleId, user }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-bareme" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Barème</label>
-              <div style={{ display: "flex", gap: 8 }}>
+              <label htmlFor="ecole-bareme" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Barème</label>
+              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
                 <input
                   id="ecole-bareme"
                   type="number"
@@ -708,7 +766,7 @@ export function Parametres({ ecoleId, user }) {
                 <button
                   onClick={handleUpdateBareme}
                   disabled={updating.bareme}
-                  style={{ padding: "10px 16px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
                 >
                   {updating.bareme ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
                   Mettre à jour
@@ -717,8 +775,8 @@ export function Parametres({ ecoleId, user }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B" }}>Seuils des mentions</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Seuils des mentions</label>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
                 <div>
                   <span style={{ fontSize: 13 }}>Félicitations</span>
                   <input
@@ -759,7 +817,7 @@ export function Parametres({ ecoleId, user }) {
               <button
                 onClick={handleUpdateMentions}
                 disabled={updating.mentions}
-                style={{ padding: "10px 16px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}
+                style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", marginTop: 8 }}
               >
                 {updating.mentions ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
                 Mettre à jour les seuils
@@ -771,8 +829,8 @@ export function Parametres({ ecoleId, user }) {
 
       {tab === "roles" && (
         <div role="tabpanel" id="panel-roles" aria-labelledby="tab-roles">
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: 24, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>Gestion des rôles</h3>
+          <div style={sectionCardStyle}>
+            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>Gestion des rôles</h3>
             {users.length === 0 && <p style={{ color: dark ? "#94A3B8" : "#64748B" }}>Aucun utilisateur.</p>}
             {users.map((u) => (
               <div
@@ -783,6 +841,8 @@ export function Parametres({ ecoleId, user }) {
                   alignItems: "center",
                   padding: "8px 0",
                   borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                  flexDirection: isMobile ? "column" : "row",
+                  gap: 8,
                 }}
               >
                 <div>
@@ -792,7 +852,7 @@ export function Parametres({ ecoleId, user }) {
                 <select
                   value={u.role}
                   onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                  style={{ ...inputStyle, width: 150, marginBottom: 0, cursor: u._id === user._id ? "not-allowed" : "pointer", opacity: u._id === user._id ? 0.6 : 1 }}
+                  style={{ ...inputStyle, width: isMobile ? "100%" : 150, marginBottom: 0, cursor: u._id === user._id ? "not-allowed" : "pointer", opacity: u._id === user._id ? 0.6 : 1 }}
                   disabled={u._id === user._id}
                   aria-label={`Changer le rôle de ${u.nom}`}
                 >

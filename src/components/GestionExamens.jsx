@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
@@ -11,6 +12,7 @@ import toast from "react-hot-toast";
 
 export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
   const [classeSelectionnee, setClasseSelectionnee] = useState("");
@@ -122,35 +124,64 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
     return acc;
   }, {});
 
+  // Styles adaptatifs
   const inputStyle = (field) => ({
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${field && formErrors[field] ? danger : cardBorder}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     background: inputBg,
     color: inputText,
     transition: "border-color 0.2s, background-color 0.3s",
+    boxSizing: "border-box",
   });
 
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 13 : 14;
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const classSelectorFlexDirection = isMobile ? "column" : "row";
+  const classSelectorAlignItems = isMobile ? "stretch" : "center";
+  const classSelectorGap = isMobile ? 8 : 12;
+  const selectPadding = isMobile ? "12px 14px" : "10px 14px";
+  const selectFontSize = isMobile ? 16 : 14;
+  const newExamButtonPadding = isMobile ? "12px 16px" : "10px 16px";
+  const newExamButtonFontSize = isMobile ? 16 : 14;
+  const newExamButtonWidth = isMobile ? "100%" : "auto";
+  const formCardPadding = isMobile ? 16 : 24;
+  const formTitleSize = isMobile ? 16 : 18;
+  const formGridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))";
+  const formGap = isMobile ? 12 : 16;
+  const formButtonsFlexDirection = isMobile ? "column" : "row";
+  const formButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const formButtonFontSize = isMobile ? 16 : 14;
+  const formButtonWidth = isMobile ? "100%" : "auto";
+  const listCardPadding = isMobile ? "12px 14px" : "14px 18px";
+  const listCardFlexDirection = isMobile ? "column" : "row";
+  const listCardAlignItems = isMobile ? "stretch" : "center";
+  const listCardGap = isMobile ? 8 : 0;
+  const actionButtonPadding = isMobile ? "8px 10px" : "6px";
+  const emptyStatePadding = isMobile ? 32 : 48;
+
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: containerPadding }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Gestion des examens
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Planifiez les compositions et examens par classe
         </p>
       </div>
 
       {/* Choix de la classe */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-        <School size={18} color={textSecondary} />
+      <div style={{ display: "flex", alignItems: classSelectorAlignItems, gap: classSelectorGap, marginBottom: 24, flexWrap: "wrap", flexDirection: classSelectorFlexDirection }}>
+        <School size={isMobile ? 18 : 18} color={textSecondary} />
         <select
           value={classeSelectionnee}
           onChange={(e) => {
@@ -158,14 +189,15 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
             resetForm();
           }}
           style={{
-            padding: "10px 14px",
+            padding: selectPadding,
             border: `1px solid ${cardBorder}`,
             borderRadius: 8,
-            fontSize: 14,
+            fontSize: selectFontSize,
             outline: "none",
             background: inputBg,
             color: inputText,
-            minWidth: 200,
+            minWidth: isMobile ? "100%" : 200,
+            flex: 1,
           }}
         >
           <option value="">-- Choisir une classe --</option>
@@ -185,14 +217,17 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
-              padding: "10px 16px",
+              padding: newExamButtonPadding,
               background: accent,
               color: "white",
               border: "none",
               borderRadius: 8,
               fontWeight: 500,
               cursor: "pointer",
+              fontSize: newExamButtonFontSize,
+              width: newExamButtonWidth,
             }}
           >
             <Plus size={18} /> Nouvel examen
@@ -206,19 +241,19 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
           style={{
             background: cardBg,
             borderRadius: 16,
-            padding: 24,
+            padding: formCardPadding,
             boxShadow: shadow,
             marginBottom: 24,
             border: `1px solid ${cardBorder}`,
           }}
         >
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
+          <h3 style={{ fontSize: formTitleSize, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
             {editExam ? "Modifier l'examen" : "Nouvel examen"}
           </h3>
           <form onSubmit={handleSubmit}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: formGridColumns, gap: formGap }}>
               <div>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>
+                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>
                   Matière
                 </label>
                 <input
@@ -230,7 +265,7 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
                 {formErrors.matiere && <span style={{ color: danger, fontSize: 12 }}>{formErrors.matiere}</span>}
               </div>
               <div>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>
+                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>
                   Date
                 </label>
                 <input
@@ -242,7 +277,7 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
                 {formErrors.date && <span style={{ color: danger, fontSize: 12 }}>{formErrors.date}</span>}
               </div>
               <div>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>
+                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>
                   Heure (optionnel)
                 </label>
                 <input
@@ -253,7 +288,7 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
                 />
               </div>
               <div>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>
+                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>
                   Durée (optionnel)
                 </label>
                 <input
@@ -265,7 +300,7 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
                 />
               </div>
               <div>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>
+                <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>
                   Salle (optionnel)
                 </label>
                 <input
@@ -278,21 +313,24 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 20, flexDirection: formButtonsFlexDirection }}>
               <button
                 type="submit"
                 disabled={saving}
                 style={{
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
-                  padding: "10px 20px",
+                  padding: formButtonPadding,
                   background: saving ? "#A5B4FC" : editExam ? "#F59E0B" : accent,
                   color: "white",
                   border: "none",
                   borderRadius: 8,
                   fontWeight: 500,
                   cursor: "pointer",
+                  fontSize: formButtonFontSize,
+                  width: formButtonWidth,
                 }}
               >
                 {saving ? <span className="animate-spin">⏳</span> : <Save size={18} />}
@@ -302,13 +340,15 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
                 type="button"
                 onClick={resetForm}
                 style={{
-                  padding: "10px 20px",
+                  padding: formButtonPadding,
                   background: buttonSecondaryBg,
                   border: "none",
                   borderRadius: 8,
                   fontWeight: 500,
                   cursor: "pointer",
                   color: buttonSecondaryText,
+                  fontSize: formButtonFontSize,
+                  width: formButtonWidth,
                 }}
               >
                 Annuler
@@ -321,7 +361,7 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
       {/* Liste des examens groupés par date */}
       {classeSelectionnee && (
         <div>
-          <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
+          <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: 16, color: textPrimary }}>
             Calendrier des examens – {classeSelectionnee}
           </h3>
           {examens.length === 0 && (
@@ -329,82 +369,84 @@ export function GestionExamens({ ecoleId, classes, user, anneeId, anneeActive })
               style={{
                 background: cardBg,
                 borderRadius: 16,
-                padding: 48,
+                padding: emptyStatePadding,
                 textAlign: "center",
                 boxShadow: shadow,
                 color: textSecondary,
                 border: `1px solid ${cardBorder}`,
               }}
             >
-              <Calendar size={32} style={{ marginBottom: 8 }} />
+              <Calendar size={isMobile ? 28 : 32} style={{ marginBottom: 8 }} />
               <p>Aucun examen planifié pour cette classe.</p>
             </div>
           )}
           {Object.entries(groupes)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, liste]) => (
-              <div key={date} style={{ marginBottom: 24 }}>
+              <div key={date} style={{ marginBottom: isMobile ? 16 : 24 }}>
                 <h4
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    fontSize: 16,
+                    fontSize: isMobile ? 15 : 16,
                     fontWeight: 600,
                     color: textPrimary,
                     marginBottom: 12,
                   }}
                 >
-                  <Calendar size={18} color={accent} />
+                  <Calendar size={isMobile ? 16 : 18} color={accent} />
                   {date}
                 </h4>
-                <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "grid", gap: isMobile ? 6 : 8 }}>
                   {liste.map((exam) => (
                     <div
                       key={exam._id}
                       style={{
                         background: cardBg,
                         borderRadius: 12,
-                        padding: "14px 18px",
+                        padding: listCardPadding,
                         display: "flex",
+                        flexDirection: listCardFlexDirection,
                         justifyContent: "space-between",
-                        alignItems: "center",
+                        alignItems: listCardAlignItems,
+                        gap: listCardGap,
                         boxShadow: shadow,
                         border: `1px solid ${cardBorder}`,
                       }}
                     >
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
-                        <span style={{ fontWeight: 500, display: "flex", alignItems: "center", gap: 6, color: textPrimary }}>
-                          <BookOpen size={16} color={accent} />
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 8 : 16, alignItems: "center" }}>
+                        <span style={{ fontWeight: 500, display: "flex", alignItems: "center", gap: 6, color: textPrimary, fontSize: isMobile ? 14 : 15 }}>
+                          <BookOpen size={isMobile ? 16 : 16} color={accent} />
                           {exam.matiere}
                         </span>
                         {exam.heure && (
-                          <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
                             <Clock size={16} />
                             {exam.heure}
                           </span>
                         )}
                         {exam.duree && (
-                          <span style={{ color: textSecondary, fontSize: 13 }}>⏱️ {exam.duree}</span>
+                          <span style={{ color: textSecondary, fontSize: isMobile ? 12 : 13 }}>⏱️ {exam.duree}</span>
                         )}
                         {exam.salle && (
-                          <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 6, color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
                             <MapPin size={16} />
                             {exam.salle}
                           </span>
                         )}
                       </div>
-                      <div style={{ display: "flex", gap: 6 }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-end" : "flex-start", width: isMobile ? "100%" : "auto" }}>
                         <button
                           onClick={() => startEdit(exam)}
-                          style={{ background: "none", border: "none", color: accent, cursor: "pointer", padding: 6 }}
+                          style={{ background: "none", border: "none", color: accent, cursor: "pointer", padding: actionButtonPadding }}
                           title="Modifier"
                         >
                           <Edit2 size={18} />
                         </button>
                         <button
                           onClick={() => handleDelete(exam._id)}
-                          style={{ background: "none", border: "none", color: danger, cursor: "pointer", padding: 6 }}
+                          style={{ background: "none", border: "none", color: danger, cursor: "pointer", padding: actionButtonPadding }}
                           title="Supprimer"
                         >
                           <Trash2 size={18} />

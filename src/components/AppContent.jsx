@@ -7,12 +7,16 @@ import { LoginScreen } from "./LoginScreen";
 import { RegisterScreen } from "./RegisterScreen";
 import { AuthenticatedApp } from "./AuthenticatedApp";
 import { Toaster } from "react-hot-toast";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import "../fonts.css";
 
 export function AppContent() {
   const [user, setUser] = useState(null);
   const [showRegister, setShowRegister] = useState(false);
   const [loadingSession, setLoadingSession] = useState(true);
+
+  const { dark } = useTheme(); // Récupération du mode sombre
+  const isMobile = useIsMobile(); // Détection mobile
 
   const { deferredPrompt, isInstalled, promptInstall, dismissPrompt } = useInstallPrompt();
 
@@ -27,7 +31,6 @@ export function AppContent() {
   useEffect(() => {
     if (savedUser) {
       if (sessionQuery === undefined) {
-        // en cours de chargement
         return;
       }
       if (sessionQuery && sessionQuery.status === "active") {
@@ -57,19 +60,22 @@ export function AppContent() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#F3F4F6",
+        background: dark ? "#0F172A" : "#F3F4F6",
+        padding: isMobile ? "16px" : "0",
       }}>
         <div style={{ textAlign: "center" }}>
           <div style={{
             width: 40,
             height: 40,
-            border: "3px solid rgba(79,70,229,0.2)",
-            borderTopColor: "#4F46E5",
+            border: `3px solid ${dark ? "rgba(129,140,248,0.2)" : "rgba(79,70,229,0.2)"}`,
+            borderTopColor: dark ? "#818CF8" : "#4F46E5",
             borderRadius: "50%",
             animation: "spin 0.8s linear infinite",
             margin: "0 auto 16px",
           }} />
-          <p style={{ color: "#64748B" }}>Chargement de la session...</p>
+          <p style={{ color: dark ? "#CBD5E1" : "#64748B", fontSize: isMobile ? 14 : 16 }}>
+            Chargement de la session...
+          </p>
         </div>
       </div>
     );
@@ -77,7 +83,16 @@ export function AppContent() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster
+        position={isMobile ? "top-center" : "top-right"}
+        toastOptions={{
+          style: {
+            background: dark ? "#1E293B" : "#FFFFFF",
+            color: dark ? "#F1F5F9" : "#1E293B",
+            fontSize: isMobile ? 14 : 16,
+          },
+        }}
+      />
 
       {deferredPrompt && !isInstalled && <InstallBanner onInstall={promptInstall} onDismiss={dismissPrompt} />}
 

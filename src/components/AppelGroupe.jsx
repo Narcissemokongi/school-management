@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import AgoraRTC from "agora-rtc-sdk-ng";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import {
   PhoneOff, Mic, MicOff, Video, VideoOff, Users, Loader2,
   Wifi, WifiOff, Clock, SwitchCamera, Volume2, VolumeX, Pause, Play,
+  Monitor, MonitorOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -20,6 +22,8 @@ export function AppelGroupe({
   callType = "video",
   groupName,
 }) {
+  const isMobile = useIsMobile(); // Détection mobile
+
   const [remoteUsers, setRemoteUsers] = useState([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(callType === "audio");
@@ -329,6 +333,15 @@ export function AppelGroupe({
     unknown: "#94A3B8",
   }[networkQuality];
 
+  // Styles adaptatifs
+  const controlButtonSize = isMobile ? 44 : 52;
+  const controlGap = isMobile ? 10 : 20;
+  const topPadding = isMobile ? "8px 12px" : "12px 16px";
+  const gridGap = isMobile ? 8 : 12;
+  const gridPadding = isMobile ? 8 : 16;
+  const gridMin = isMobile ? "140px" : "200px";
+  const bottomPadding = isMobile ? "8px 8px" : "12px 16px";
+
   return (
     <div style={{
       position: "relative",
@@ -370,17 +383,17 @@ export function AppelGroupe({
       {/* Bandeau supérieur */}
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        padding: "12px 16px", background: "rgba(15,23,42,0.7)", backdropFilter: "blur(8px)", zIndex: 10,
+        padding: topPadding, background: "rgba(15,23,42,0.7)", backdropFilter: "blur(8px)", zIndex: 10,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Users size={20} color="#94A3B8" />
+          <div style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Users size={isMobile ? 16 : 20} color="#94A3B8" />
           </div>
-          <span style={{ fontWeight: 600, fontSize: 16 }}>{groupName || "Appel de groupe"}</span>
-          <span style={{ fontSize: 13, color: "#94A3B8" }}>({participants.length + 1} participants)</span>
+          <span style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16 }}>{groupName || "Appel de groupe"}</span>
+          <span style={{ fontSize: isMobile ? 11 : 13, color: "#94A3B8" }}>({participants.length + 1} participants)</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, color: networkQualityColor, fontSize: 13 }}>
-          <Wifi size={16} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, color: networkQualityColor, fontSize: isMobile ? 11 : 13 }}>
+          <Wifi size={isMobile ? 14 : 16} />
           {networkQualityLabel && <span>{networkQualityLabel}</span>}
         </div>
       </div>
@@ -389,62 +402,73 @@ export function AppelGroupe({
       <div style={{
         flex: 1,
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-        gap: 12,
-        padding: 16,
+        gridTemplateColumns: `repeat(auto-fit, minmax(${gridMin}, 1fr))`,
+        gap: gridGap,
+        padding: gridPadding,
         overflowY: "auto",
       }}>
         {/* Vidéo locale */}
-        <div style={{ background: "#1E293B", borderRadius: 16, overflow: "hidden", position: "relative", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+        <div style={{
+          background: "#1E293B",
+          borderRadius: 16,
+          overflow: "hidden",
+          position: "relative",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          aspectRatio: isMobile ? "4/3" : "16/9",
+        }}>
           <div ref={localVideoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           {isVideoOff && (
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: 64, opacity: 0.8 }}>
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: isMobile ? 40 : 64, opacity: 0.8 }}>
               📷
             </div>
           )}
-          <div style={{ position: "absolute", bottom: 12, left: 12, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", borderRadius: 8, padding: "4px 12px", fontSize: 13, fontWeight: 500 }}>
+          <div style={{ position: "absolute", bottom: isMobile ? 6 : 12, left: isMobile ? 6 : 12, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", borderRadius: 8, padding: isMobile ? "2px 8px" : "4px 12px", fontSize: isMobile ? 11 : 13, fontWeight: 500 }}>
             Vous {isMuted ? "(muet)" : ""} {isOnHold ? "(en attente)" : ""}
           </div>
         </div>
 
         {/* Vidéos distantes */}
         {remoteUsers.map((remoteUser) => (
-          <RemoteVideo key={remoteUser.uid} user={remoteUser} />
+          <RemoteVideo key={remoteUser.uid} user={remoteUser} isMobile={isMobile} />
         ))}
       </div>
 
       {/* Barre de contrôle */}
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 20,
-        padding: "12px 16px", background: "rgba(15,23,42,0.95)", backdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: controlGap,
+        padding: bottomPadding, background: "rgba(15,23,42,0.95)", backdropFilter: "blur(8px)",
         borderTop: "1px solid rgba(255,255,255,0.08)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#94A3B8", fontSize: 15, marginRight: "auto" }}>
-          {connectionState === "CONNECTED" ? <Wifi size={16} color="#10B981" /> : <WifiOff size={16} color="#EF4444" />}
-          <Clock size={18} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#94A3B8", fontSize: isMobile ? 13 : 15, marginRight: "auto" }}>
+          {connectionState === "CONNECTED" ? <Wifi size={isMobile ? 14 : 16} color="#10B981" /> : <WifiOff size={isMobile ? 14 : 16} color="#EF4444" />}
+          <Clock size={isMobile ? 16 : 18} />
           <span style={{ fontVariantNumeric: "tabular-nums" }}>{formatDuration(callDuration)}</span>
         </div>
 
-        <button onClick={toggleMute} style={controlButtonStyle(isMuted ? "red" : "default")}>
-          {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
+        <button onClick={toggleMute} style={controlButtonStyle(isMuted ? "red" : "default", controlButtonSize)}>
+          {isMuted ? <MicOff size={isMobile ? 18 : 22} /> : <Mic size={isMobile ? 18 : 22} />}
         </button>
-        <button onClick={toggleVideo} style={controlButtonStyle(isVideoOff ? "red" : "default")}>
-          {isVideoOff ? <VideoOff size={22} /> : <Video size={22} />}
+        <button onClick={toggleVideo} style={controlButtonStyle(isVideoOff ? "red" : "default", controlButtonSize)}>
+          {isVideoOff ? <VideoOff size={isMobile ? 18 : 22} /> : <Video size={isMobile ? 18 : 22} />}
         </button>
-        <button onClick={switchCamera} style={controlButtonStyle("default")} title="Changer de caméra">
-          <SwitchCamera size={22} />
+        {!isMobile && (
+          <button onClick={switchCamera} style={controlButtonStyle("default", controlButtonSize)} title="Changer de caméra">
+            <SwitchCamera size={22} />
+          </button>
+        )}
+        <button onClick={toggleSpeaker} style={controlButtonStyle(isSpeakerOn ? "default" : "red", controlButtonSize)} title="Haut-parleur">
+          {isSpeakerOn ? <Volume2 size={isMobile ? 18 : 22} /> : <VolumeX size={isMobile ? 18 : 22} />}
         </button>
-        <button onClick={toggleSpeaker} style={controlButtonStyle(isSpeakerOn ? "default" : "red")} title="Haut-parleur">
-          {isSpeakerOn ? <Volume2 size={22} /> : <VolumeX size={22} />}
+        <button onClick={toggleHold} style={controlButtonStyle(isOnHold ? "blue" : "default", controlButtonSize)} title="Mettre en attente">
+          {isOnHold ? <Play size={isMobile ? 18 : 22} /> : <Pause size={isMobile ? 18 : 22} />}
         </button>
-        <button onClick={toggleHold} style={controlButtonStyle(isOnHold ? "blue" : "default")} title="Mettre en attente">
-          {isOnHold ? <Play size={22} /> : <Pause size={22} />}
-        </button>
-        <button onClick={startScreenShare} style={controlButtonStyle(isScreenSharing ? "blue" : "default")}>
-          {isScreenSharing ? <MonitorOff size={22} /> : <Monitor size={22} />}
-        </button>
-        <button onClick={handleEndCall} style={{ ...controlButtonStyle("red"), background: "#EF4444", borderColor: "#EF4444", width: 56, height: 56 }}>
-          <PhoneOff size={26} />
+        {!isMobile && (
+          <button onClick={startScreenShare} style={controlButtonStyle(isScreenSharing ? "blue" : "default", controlButtonSize)}>
+            {isScreenSharing ? <MonitorOff size={22} /> : <Monitor size={22} />}
+          </button>
+        )}
+        <button onClick={handleEndCall} style={{ ...controlButtonStyle("red", controlButtonSize), background: "#EF4444", borderColor: "#EF4444", width: isMobile ? 48 : 56, height: isMobile ? 48 : 56 }}>
+          <PhoneOff size={isMobile ? 22 : 26} />
         </button>
       </div>
 
@@ -453,7 +477,7 @@ export function AppelGroupe({
   );
 }
 
-function RemoteVideo({ user }) {
+function RemoteVideo({ user, isMobile }) {
   const videoRef = useRef(null);
   const [videoTrack, setVideoTrack] = useState(user.videoTrack);
 
@@ -481,19 +505,26 @@ function RemoteVideo({ user }) {
   }, [videoTrack]);
 
   return (
-    <div style={{ background: "#1E293B", borderRadius: 16, overflow: "hidden", position: "relative", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+    <div style={{
+      background: "#1E293B",
+      borderRadius: 16,
+      overflow: "hidden",
+      position: "relative",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+      aspectRatio: isMobile ? "4/3" : "16/9",
+    }}>
       <div ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      <div style={{ position: "absolute", bottom: 12, left: 12, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", borderRadius: 8, padding: "4px 12px", fontSize: 13, fontWeight: 500 }}>
+      <div style={{ position: "absolute", bottom: isMobile ? 6 : 12, left: isMobile ? 6 : 12, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", borderRadius: 8, padding: isMobile ? "2px 8px" : "4px 12px", fontSize: isMobile ? 11 : 13, fontWeight: 500 }}>
         Participant {user.uid}
       </div>
     </div>
   );
 }
 
-function controlButtonStyle(variant) {
+function controlButtonStyle(variant, size = 52) {
   const base = {
-    width: 52,
-    height: 52,
+    width: size,
+    height: size,
     borderRadius: "50%",
     border: "2px solid rgba(255,255,255,0.2)",
     background: "rgba(255,255,255,0.08)",

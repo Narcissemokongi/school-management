@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 import { StatCard } from "./StatCard";
 import { BarChart } from "./BarChart";
 import { Skeleton } from "../Skeleton";
@@ -12,13 +13,12 @@ import {
   PieChart, Target, Percent, XCircle,
 } from "lucide-react";
 
-// Sous-composant pour afficher une tendance
 function TrendIndicator({ value, direction, dark }) {
   const isUp = direction === "up";
   const color = isUp ? "#10B981" : "#EF4444";
   const Icon = isUp ? ArrowUpRight : ArrowDownRight;
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: 2, color }}>
+    <span style={{ display: "flex", alignItems: "center", gap: 2, color, fontSize: 12 }}>
       <Icon size={12} />
       {Math.abs(value)}% ce mois
     </span>
@@ -27,6 +27,8 @@ function TrendIndicator({ value, direction, dark }) {
 
 export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefresh }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
+
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
@@ -39,7 +41,6 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
     recentEcoles === undefined ||
     recentUsers === undefined;
 
-  // Fonction de rafraîchissement
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
@@ -56,7 +57,6 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
     }
   };
 
-  // Calculs dérivés optimisés
   const topEcoles = useMemo(() => {
     return [...ecolesAvecUsers]
       .sort((a, b) => (b.userCount || 0) - (a.userCount || 0))
@@ -110,13 +110,13 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
 
   if (isLoading) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 8 : 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))", gap: isMobile ? 8 : 16 }}>
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} height={80} variant="card" />
           ))}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))", gap: isMobile ? 12 : 24 }}>
           <Skeleton height={250} variant="card" />
           <Skeleton height={250} variant="card" />
         </div>
@@ -125,7 +125,6 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
     );
   }
 
-  // Préparation du donut
   const donutTotal = activeEcoles + suspendedEcoles;
   const donutRadius = 40;
   const donutCircumference = 2 * Math.PI * donutRadius;
@@ -133,8 +132,30 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
     ? `${(activeEcoles / donutTotal) * donutCircumference} ${donutCircumference}`
     : "0 0";
 
+  // Styles adaptatifs
+  const containerPadding = isMobile ? "16px 12px" : "0";
+  const headerMargin = isMobile ? 20 : 32;
+  const headerFlexDirection = isMobile ? "column" : "row";
+  const headerAlign = isMobile ? "stretch" : "center";
+  const buttonPadding = isMobile ? "10px 12px" : "8px 16px";
+  const buttonFontSize = isMobile ? 14 : 14;
+  const gridMainColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))";
+  const gridMainGap = isMobile ? 8 : 16;
+  const twoColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(320px, 1fr))";
+  const twoColumnsGap = isMobile ? 12 : 24;
+  const donutColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))";
+  const donutGap = isMobile ? 12 : 24;
+  const statCardPadding = isMobile ? 14 : 20; // utilisé via style dans StatCard si accepté, sinon on peut wrapper
+  const sectionPadding = isMobile ? 16 : 24;
+  const sectionMarginBottom = isMobile ? 16 : 24;
+  const smallText = isMobile ? 12 : 13;
+  const mediumText = isMobile ? 14 : 14;
+  const largeText = isMobile ? 18 : 24;
+  const titleSize = isMobile ? 20 : 24;
+  const subtitleSize = isMobile ? 13 : 14;
+
   return (
-    <div style={{ animation: "fadeIn 0.4s ease" }}>
+    <div style={{ animation: "fadeIn 0.4s ease", padding: containerPadding }}>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
@@ -142,22 +163,23 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
       {/* En-tête */}
       <div style={{
         display: "flex",
-        alignItems: "center",
+        flexDirection: headerFlexDirection,
+        alignItems: headerAlign,
         justifyContent: "space-between",
-        marginBottom: 32,
+        marginBottom: headerMargin,
         flexWrap: "wrap",
         gap: 12,
       }}>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+          <h2 style={{ fontSize: titleSize, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
             Vue d'ensemble
           </h2>
-          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14, marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
-            <Calendar size={14} />
+          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: subtitleSize, marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+            <Calendar size={isMobile ? 12 : 14} />
             {today}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
           {error && (
             <span style={{ color: "#EF4444", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
               <AlertTriangle size={14} /> {error}
@@ -171,15 +193,17 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
-              padding: "8px 16px",
+              padding: buttonPadding,
               background: "transparent",
               color: dark ? "#94A3B8" : "#64748B",
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 8,
               cursor: "pointer",
-              fontSize: 14,
+              fontSize: buttonFontSize,
               transition: "background 0.2s",
+              width: isMobile ? "100%" : "auto",
             }}
           >
             <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
@@ -191,16 +215,18 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
               style={{
                 display: "flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 6,
-                padding: "8px 16px",
+                padding: buttonPadding,
                 background: dark ? "#818CF8" : "#4F46E5",
                 color: "white",
                 border: "none",
                 borderRadius: 8,
                 fontWeight: 600,
                 cursor: "pointer",
-                fontSize: 14,
+                fontSize: buttonFontSize,
                 transition: "background 0.2s",
+                width: isMobile ? "100%" : "auto",
               }}
             >
               Gérer les écoles <ArrowRight size={16} />
@@ -210,9 +236,9 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
       </div>
 
       {/* Cartes statistiques principales */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 32 }}>
+      <div style={{ display: "grid", gridTemplateColumns: gridMainColumns, gap: gridMainGap, marginBottom: headerMargin }}>
         <StatCard
-          icon={<School size={24} />}
+          icon={<School size={isMobile ? 20 : 24} />}
           value={totalEcoles}
           label="Écoles"
           color="#4F46E5"
@@ -221,7 +247,7 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
           subValue={<TrendIndicator value={trend.totalEcoles.value} direction={trend.totalEcoles.direction} />}
         />
         <StatCard
-          icon={<Users size={24} />}
+          icon={<Users size={isMobile ? 20 : 24} />}
           value={totalUsers}
           label="Utilisateurs"
           color="#10B981"
@@ -230,28 +256,28 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
           subValue={<TrendIndicator value={trend.totalUsers.value} direction={trend.totalUsers.direction} />}
         />
         <StatCard
-          icon={<GraduationCap size={24} />}
+          icon={<GraduationCap size={isMobile ? 20 : 24} />}
           value={totalEleves}
           label="Élèves"
           color="#F59E0B"
           subValue={<TrendIndicator value={trend.totalEleves.value} direction={trend.totalEleves.direction} />}
         />
         <StatCard
-          icon={<BookOpen size={24} />}
+          icon={<BookOpen size={isMobile ? 20 : 24} />}
           value={totalClasses}
           label="Classes"
           color="#3B82F6"
           subValue={<TrendIndicator value={trend.totalClasses.value} direction={trend.totalClasses.direction} />}
         />
         <StatCard
-          icon={<AlertTriangle size={24} />}
+          icon={<AlertTriangle size={isMobile ? 20 : 24} />}
           value={globalStats.totalPunitions ?? 0}
           label="Punitions"
           color="#EF4444"
           subValue={<TrendIndicator value={trend.totalPunitions.value} direction={trend.totalPunitions.direction} />}
         />
         <StatCard
-          icon={<School size={24} />}
+          icon={<School size={isMobile ? 20 : 24} />}
           value={suspendedEcoles}
           label="Écoles suspendues"
           color="#F59E0B"
@@ -262,20 +288,20 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
       {/* Deux colonnes principales */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-        gap: 24,
-        marginBottom: 24,
+        gridTemplateColumns: twoColumns,
+        gap: twoColumnsGap,
+        marginBottom: isMobile ? 16 : 24,
       }}>
         {/* Top 5 écoles */}
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 16,
-          padding: 24,
+          padding: sectionPadding,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           border: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}`,
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isMobile ? 12 : 20, flexDirection: isMobile ? "column" : "row", gap: 8 }}>
+            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
               Top 5 écoles
             </h3>
             {onNavigate && (
@@ -289,7 +315,7 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
                   border: "none",
                   color: dark ? "#818CF8" : "#4F46E5",
                   cursor: "pointer",
-                  fontSize: 13,
+                  fontSize: smallText,
                   fontWeight: 500,
                 }}
                 aria-label="Voir toutes les écoles"
@@ -301,7 +327,7 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
           {topEcoles.length > 0 ? (
             <BarChart data={topEcoles} maxValue={maxUsers} />
           ) : (
-            <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>Aucune école disponible</p>
+            <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: smallText }}>Aucune école disponible</p>
           )}
         </div>
 
@@ -309,19 +335,18 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 16,
-          padding: 24,
+          padding: sectionPadding,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           border: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}`,
         }}>
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+          <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: isMobile ? 12 : 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
             Activité récente
           </h3>
 
-          {/* Nouvelles écoles */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <div style={{ marginBottom: isMobile ? 16 : 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: isMobile ? 8 : 12 }}>
               <Activity size={16} color={dark ? "#94A3B8" : "#64748B"} />
-              <span style={{ fontSize: 14, fontWeight: 500, color: dark ? "#E2E8F0" : "#1E293B" }}>
+              <span style={{ fontSize: isMobile ? 14 : 14, fontWeight: 500, color: dark ? "#E2E8F0" : "#1E293B" }}>
                 Nouvelles écoles
               </span>
             </div>
@@ -334,7 +359,7 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
                     justifyContent: "space-between",
                     padding: "8px 0",
                     borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "#F1F5F9"}`,
-                    fontSize: 14,
+                    fontSize: isMobile ? 13 : 14,
                     color: dark ? "#F1F5F9" : "#1E293B",
                     animation: `fadeIn 0.3s ease ${idx * 0.05}s both`,
                   }}
@@ -354,21 +379,20 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
                     </div>
                     <span>{ecole.nom}</span>
                   </div>
-                  <span style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>
+                  <span style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 12 : 13 }}>
                     {ecole.code || "—"}
                   </span>
                 </div>
               ))
             ) : (
-              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>Aucune école récente</p>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: smallText }}>Aucune école récente</p>
             )}
           </div>
 
-          {/* Derniers utilisateurs */}
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: isMobile ? 8 : 12 }}>
               <Users size={16} color={dark ? "#94A3B8" : "#64748B"} />
-              <span style={{ fontSize: 14, fontWeight: 500, color: dark ? "#E2E8F0" : "#1E293B" }}>
+              <span style={{ fontSize: isMobile ? 14 : 14, fontWeight: 500, color: dark ? "#E2E8F0" : "#1E293B" }}>
                 Derniers inscrits
               </span>
             </div>
@@ -381,11 +405,14 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
+                      alignItems: "center",
                       padding: "8px 0",
                       borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "#F1F5F9"}`,
-                      fontSize: 14,
+                      fontSize: isMobile ? 13 : 14,
                       color: dark ? "#F1F5F9" : "#1E293B",
                       animation: `fadeIn 0.3s ease ${idx * 0.05}s both`,
+                      flexWrap: isMobile ? "wrap" : "nowrap",
+                      gap: 4,
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -424,7 +451,7 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
                 );
               })
             ) : (
-              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>Aucun utilisateur récent</p>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: smallText }}>Aucun utilisateur récent</p>
             )}
           </div>
         </div>
@@ -433,21 +460,21 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
       {/* Donut + Indicateurs clés */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-        gap: 24,
-        marginBottom: 24,
+        gridTemplateColumns: donutColumns,
+        gap: donutGap,
+        marginBottom: isMobile ? 16 : 24,
       }}>
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 16,
-          padding: 24,
+          padding: sectionPadding,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           border: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}`,
         }}>
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+          <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: isMobile ? 12 : 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
             Répartition des écoles
           </h3>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: isMobile ? 16 : 24, flexDirection: isMobile ? "column" : "row" }}>
             <svg width="120" height="120" viewBox="0 0 100 100" role="img" aria-label={`${activeEcoles} écoles actives, ${suspendedEcoles} suspendues`}>
               <circle cx="50" cy="50" r={donutRadius} fill="none" stroke={dark ? "#334155" : "#E2E8F0"} strokeWidth="15" />
               <circle
@@ -478,14 +505,14 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 16,
-          padding: 24,
+          padding: sectionPadding,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           border: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}`,
         }}>
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+          <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: isMobile ? 12 : 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
             Indicateurs clés
           </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(120px, 1fr))", gap: isMobile ? 12 : 16 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
               <Target size={24} color="#4F46E5" />
               <span style={{ fontSize: 20, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{avgElevesPerEcole}</span>
@@ -515,13 +542,15 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 16,
-          padding: 20,
+          padding: isMobile ? 14 : 20,
           display: "flex",
+          flexDirection: isMobile ? "column" : "row",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: isMobile ? "stretch" : "center",
           border: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}`,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           animation: "fadeIn 0.3s ease",
+          gap: 12,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{
@@ -537,10 +566,10 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
               <Bell size={20} />
             </div>
             <div>
-              <div style={{ color: dark ? "#F1F5F9" : "#1E293B", fontWeight: 600 }}>
+              <div style={{ color: dark ? "#F1F5F9" : "#1E293B", fontWeight: 600, fontSize: isMobile ? 15 : 16 }}>
                 {pendingUsersCount} demande(s) d'inscription en attente
               </div>
-              <div style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>
+              <div style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 13 }}>
                 Ces demandes nécessitent votre approbation ou rejet.
               </div>
             </div>
@@ -549,7 +578,7 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
             <button
               onClick={() => onNavigate("pending")}
               style={{
-                padding: "8px 16px",
+                padding: isMobile ? "12px 16px" : "8px 16px",
                 background: dark ? "#818CF8" : "#4F46E5",
                 color: "white",
                 border: "none",
@@ -558,8 +587,11 @@ export function OverviewTab({ globalStats, ecolesAvecUsers, onNavigate, onRefres
                 fontWeight: 600,
                 display: "flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 6,
                 whiteSpace: "nowrap",
+                width: isMobile ? "100%" : "auto",
+                fontSize: isMobile ? 16 : 14,
               }}
             >
               Gérer <ArrowRight size={14} />

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 import { Loader } from "lucide-react";
 import toast from "react-hot-toast";
 import { trierClasses } from "../../utils/sort";
@@ -9,6 +10,7 @@ import { provincesRDC } from "../../utils/rdcData";
 
 export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEleve }) {
   const { S, dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   // États uniques pour chaque champ
   const [nom, setNom] = useState("");
@@ -143,29 +145,31 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
     }
   };
 
+  // Styles adaptatifs
   const inputStyle = (field) => ({
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${errors[field] ? "#EF4444" : dark ? "rgba(255,255,255,0.1)" : "#D1D5DB"}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     marginBottom: 12,
     background: dark ? "#0F172A" : "#F9FAFB",
     color: dark ? "#F1F5F9" : "#1E293B",
     outline: "none",
     transition: "border-color 0.2s, background-color 0.3s, color 0.3s",
+    boxSizing: "border-box",
   });
 
   const labelStyle = {
     display: "block",
     marginBottom: 4,
     fontWeight: 500,
-    fontSize: 14,
+    fontSize: isMobile ? 15 : 14,
     color: dark ? "#CBD5E1" : "#374151",
   };
 
   const sectionTitleStyle = {
-    fontSize: 15,
+    fontSize: isMobile ? 16 : 15,
     fontWeight: 600,
     marginBottom: 12,
     marginTop: 8,
@@ -176,22 +180,30 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
     ? provincesRDC.find(p => p.nom === province)?.territoires || []
     : [];
 
+  const gridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))";
+  const cardPadding = isMobile ? 16 : 24;
+  const titleSize = isMobile ? 17 : 18;
+  const buttonPadding = isMobile ? "12px 0" : "10px 0";
+  const buttonFontSize = isMobile ? 16 : 14;
+  const smallButtonPadding = isMobile ? "10px 16px" : "8px 16px";
+  const smallButtonFontSize = isMobile ? 14 : 14;
+
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 16,
-      padding: 24,
+      padding: cardPadding,
       boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
       marginBottom: 24,
       transition: "background-color 0.3s",
     }}>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
+      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
         Ajouter un élève
       </h3>
 
       {/* Section Identité */}
       <div style={sectionTitleStyle}>Identité</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
         <div>
           <label style={labelStyle}>Nom *</label>
           <input value={nom} onChange={(e) => setNom(e.target.value)} style={inputStyle("nom")} placeholder="Nom de famille" />
@@ -225,7 +237,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
 
       {/* Section Origine RDC */}
       <div style={sectionTitleStyle}>Origine géographique</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
         <div>
           <label style={labelStyle}>Province</label>
           <select value={province} onChange={(e) => { setProvince(e.target.value); setTerritoire(""); }} style={inputStyle("province")}>
@@ -256,7 +268,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
 
       {/* Section Contact */}
       <div style={sectionTitleStyle}>Contact</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
         <div>
           <label style={labelStyle}>Adresse</label>
           <input value={adresse} onChange={(e) => setAdresse(e.target.value)} style={inputStyle("adresse")} placeholder="Adresse complète" />
@@ -269,7 +281,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
 
       {/* Section Parents / Tuteur */}
       <div style={sectionTitleStyle}>Parents / Tuteur</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
         <div>
           <label style={labelStyle}>Nom du père</label>
           <input value={nomPere} onChange={(e) => setNomPere(e.target.value)} style={inputStyle("nomPere")} placeholder="Père" />
@@ -290,7 +302,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
 
       {/* Classe */}
       <div style={sectionTitleStyle}>Classe</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 12 }}>
         <div>
           <label style={labelStyle}>Classe *</label>
           <select value={classe} onChange={(e) => setClasse(e.target.value)} style={inputStyle("classe")}>
@@ -331,6 +343,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
               cursor: "pointer",
               padding: 0,
               marginBottom: 12,
+              fontSize: smallButtonFontSize,
             }}
           >
             + Créer un nouveau parent
@@ -339,7 +352,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
       ) : (
         <div style={{
           background: dark ? "#0F172A" : "#F8FAFC",
-          padding: 12,
+          padding: isMobile ? 10 : 12,
           borderRadius: 10,
           marginBottom: 12,
         }}>
@@ -368,7 +381,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
           <button
             type="button"
             onClick={() => setCreateParent(false)}
-            style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", padding: 0 }}
+            style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", padding: 0, fontSize: smallButtonFontSize }}
           >
             Annuler
           </button>
@@ -380,13 +393,13 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
         disabled={adding}
         style={{
           width: "100%",
-          padding: "10px 0",
+          padding: buttonPadding,
           background: adding ? "#A5B4FC" : dark ? "#818CF8" : "#4F46E5",
           color: "white",
           border: "none",
           borderRadius: 10,
           fontWeight: 600,
-          fontSize: 14,
+          fontSize: buttonFontSize,
           cursor: adding ? "not-allowed" : "pointer",
           display: "flex",
           justifyContent: "center",
@@ -406,7 +419,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
           color: dark ? "#34D399" : "#065F46",
           padding: "10px 14px",
           borderRadius: 8,
-          fontSize: 14,
+          fontSize: isMobile ? 14 : 14,
           fontWeight: 600,
           textAlign: "center",
         }}>

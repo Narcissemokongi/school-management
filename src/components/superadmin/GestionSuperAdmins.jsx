@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../../hooks/useConfirm";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { hashPassword } from "../../utils/crypto";
@@ -47,6 +48,7 @@ function PermissionBadge({ label, dark }) {
 
 export function GestionSuperAdmins({ user }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
   const superAdmins = useQuery(api.users.listSuperAdmins) ?? [];
@@ -107,7 +109,7 @@ export function GestionSuperAdmins({ user }) {
   );
 
   const toggleSort = (field) => {
-    setCurrentPage(1); // Reset page on sort change
+    setCurrentPage(1);
     if (sortBy === field) setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
     else {
       setSortBy(field);
@@ -115,7 +117,6 @@ export function GestionSuperAdmins({ user }) {
     }
   };
 
-  // Fonction pour basculer une permission dans le formulaire de création
   const togglePermission = (permId) => {
     setForm((prev) => ({
       ...prev,
@@ -125,7 +126,6 @@ export function GestionSuperAdmins({ user }) {
     }));
   };
 
-  // Export Excel
   const handleExportExcel = () => {
     try {
       const data = filteredAdmins.map((a) => ({
@@ -145,7 +145,6 @@ export function GestionSuperAdmins({ user }) {
     }
   };
 
-  // Import Excel amélioré
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -183,10 +182,8 @@ export function GestionSuperAdmins({ user }) {
           const login = row[loginIdx].toString().trim();
           const password = row[passwordIdx].toString();
           const permsString = row[permsIdx]?.toString() || "";
-          // Sépare par virgule ou point-virgule
           const permValues = permsString.split(/[;,]/).map((p) => p.trim()).filter(Boolean);
 
-          // Convertit les labels ou identifiants en identifiants valides
           const validPerms = permValues.map((p) => {
             const lower = p.toLowerCase();
             if (PERMISSION_LABEL_TO_ID[lower]) return PERMISSION_LABEL_TO_ID[lower];
@@ -199,7 +196,6 @@ export function GestionSuperAdmins({ user }) {
             continue;
           }
 
-          // Vérification rapide des doublons (login existant)
           if (superAdmins.some((a) => a.login === login)) {
             errors.push(`Ligne ${i + 1}: login "${login}" existe déjà`);
             continue;
@@ -230,19 +226,35 @@ export function GestionSuperAdmins({ user }) {
     reader.readAsArrayBuffer(file);
   };
 
-  // Styles
+  // Styles adaptatifs
   const inputStyle = {
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     marginBottom: 16,
     outline: "none",
     background: dark ? "#0F172A" : "#F8FAFC",
     color: dark ? "#F1F5F9" : "#1E293B",
     transition: "border-color 0.2s, background-color 0.3s",
   };
+  const headerFlexDirection = isMobile ? "column" : "row";
+  const headerAlign = isMobile ? "stretch" : "center";
+  const searchInputWidth = isMobile ? "100%" : 200;
+  const toolbarFlexDirection = isMobile ? "column" : "row";
+  const buttonPadding = isMobile ? "10px 12px" : "8px 12px";
+  const buttonFontSize = isMobile ? 14 : 13;
+  const cardPadding = isMobile ? 12 : 16;
+  const cardFlexDirection = isMobile ? "column" : "row";
+  const cardAlign = isMobile ? "stretch" : "center";
+  const actionsFlexDirection = isMobile ? "row" : "row";
+  const actionsGap = isMobile ? 8 : 8;
+  const permissionGridColumns = isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))";
+  const permissionLabelPadding = isMobile ? "10px 12px" : "8px 12px";
+  const editPermGridColumns = isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))";
+  const formButtonFlexDirection = isMobile ? "column" : "row";
+  const formButtonWidth = isMobile ? "100%" : "auto";
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -328,7 +340,6 @@ export function GestionSuperAdmins({ user }) {
     }
   };
 
-  // Statistiques rapides
   const totalPermissions = PERMISSIONS_LIST.length;
   const avgPermissions = superAdmins.length > 0
     ? (superAdmins.reduce((sum, a) => sum + (a.permissions?.length || 0), 0) / superAdmins.length).toFixed(1)
@@ -340,20 +351,20 @@ export function GestionSuperAdmins({ user }) {
 
       {/* En-tête */}
       <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
+        display: "flex", flexDirection: headerFlexDirection, justifyContent: "space-between", alignItems: headerAlign,
         flexWrap: "wrap", gap: 12, marginBottom: 20,
       }}>
         <div>
-          <h3 style={{ fontSize: 20, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
+          <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
             Super Admins secondaires
           </h3>
-          <p style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", marginTop: 4 }}>
+          <p style={{ fontSize: isMobile ? 13 : 13, color: dark ? "#94A3B8" : "#64748B", marginTop: 4 }}>
             {superAdmins.length} super admin(s) · Permissions moyennes : {avgPermissions}/{totalPermissions}
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ position: "relative" }}>
+        <div style={{ display: "flex", flexDirection: toolbarFlexDirection, gap: 10, alignItems: isMobile ? "stretch" : "center", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+          <div style={{ position: "relative", width: isMobile ? "100%" : "auto" }}>
             <Search size={18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
             <input
               type="search"
@@ -361,11 +372,15 @@ export function GestionSuperAdmins({ user }) {
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               style={{
-                padding: "8px 12px 8px 34px", borderRadius: 8,
+                padding: isMobile ? "10px 12px 10px 34px" : "8px 12px 8px 34px",
+                borderRadius: 8,
                 border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                 background: dark ? "#1E293B" : "#FFFFFF",
                 color: dark ? "#F1F5F9" : "#1E293B",
-                fontSize: 14, outline: "none", width: 200,
+                fontSize: isMobile ? 16 : 14,
+                outline: "none",
+                width: searchInputWidth,
+                boxSizing: "border-box",
               }}
               aria-label="Rechercher un super admin"
             />
@@ -373,7 +388,7 @@ export function GestionSuperAdmins({ user }) {
 
           <button
             onClick={handleExportExcel}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 8, color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer", fontSize: 13 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: buttonPadding, background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 8, color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer", fontSize: buttonFontSize, width: isMobile ? "100%" : "auto" }}
             aria-label="Exporter en Excel"
           >
             <Download size={16} /> Exporter Excel
@@ -382,7 +397,7 @@ export function GestionSuperAdmins({ user }) {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={importing}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 8, color: dark ? "#F1F5F9" : "#1E293B", cursor: importing ? "not-allowed" : "pointer", fontSize: 13 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: buttonPadding, background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 8, color: dark ? "#F1F5F9" : "#1E293B", cursor: importing ? "not-allowed" : "pointer", fontSize: buttonFontSize, width: isMobile ? "100%" : "auto" }}
             aria-label="Importer depuis Excel"
           >
             {importing ? <Loader size={16} className="animate-spin" /> : <Upload size={16} />}
@@ -391,7 +406,7 @@ export function GestionSuperAdmins({ user }) {
 
           <button
             onClick={() => setShowCreate(!showCreate)}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 14 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: isMobile ? "10px 16px" : "8px 16px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: isMobile ? 16 : 14, width: isMobile ? "100%" : "auto" }}
             aria-label={showCreate ? "Fermer le formulaire" : "Créer un nouveau super admin"}
           >
             {showCreate ? <X size={16} /> : <Plus size={16} />}
@@ -400,7 +415,6 @@ export function GestionSuperAdmins({ user }) {
         </div>
       </div>
 
-      {/* Input fichier caché pour l'import */}
       <input
         ref={fileInputRef}
         type="file"
@@ -409,89 +423,89 @@ export function GestionSuperAdmins({ user }) {
         onChange={handleImportExcel}
       />
 
-      {/* Formulaire de création */}
       {showCreate && (
         <div style={{
           background: dark ? "#1E293B" : "#FFFFFF",
           borderRadius: 12,
-          padding: 20,
+          padding: isMobile ? 14 : 20,
           marginBottom: 24,
           boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
           border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         }}>
-          <h4 style={{ marginTop: 0, marginBottom: 16, color: dark ? "#F1F5F9" : "#1E293B" }}>
+          <h4 style={{ marginTop: 0, marginBottom: 16, color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 16 : 18 }}>
             Créer un super admin
           </h4>
           <form onSubmit={handleCreate}>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Nom complet</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151", fontSize: isMobile ? 15 : 14 }}>Nom complet</label>
             <input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} placeholder="Ex: Jean Dupont" style={inputStyle} />
 
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Login</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151", fontSize: isMobile ? 15 : 14 }}>Login</label>
             <input value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} placeholder="Ex: jean.dupont" style={inputStyle} />
 
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Mot de passe</label>
+            <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151", fontSize: isMobile ? 15 : 14 }}>Mot de passe</label>
             <div style={{ position: "relative" }}>
               <input type={showPassword ? "text" : "password"} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mot de passe temporaire" style={{ ...inputStyle, paddingRight: 40 }} />
               <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "35%", transform: "translateY(-50%)", background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer" }} aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}>
-                {showPassword ? <Lock size={18} /> : <Unlock size={18} />}
+                {showPassword ? <Lock size={isMobile ? 20 : 18} /> : <Unlock size={isMobile ? 20 : 18} />}
               </button>
             </div>
 
-            <label style={{ display: "block", marginBottom: 8, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151" }}>Permissions</label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8, marginBottom: 16 }}>
+            <label style={{ display: "block", marginBottom: 8, fontWeight: 500, color: dark ? "#CBD5E1" : "#374151", fontSize: isMobile ? 15 : 14 }}>Permissions</label>
+            <div style={{ display: "grid", gridTemplateColumns: permissionGridColumns, gap: 8, marginBottom: 16 }}>
               {PERMISSIONS_LIST.map((perm) => (
-                <label key={perm.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, background: form.permissions.includes(perm.id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, cursor: "pointer" }}>
-                  <input type="checkbox" checked={form.permissions.includes(perm.id)} onChange={() => togglePermission(perm.id)} style={{ width: 16, height: 16, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
-                  <span style={{ fontSize: 13, color: dark ? "#F1F5F9" : "#1E293B" }}>{perm.label}</span>
+                <label key={perm.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: permissionLabelPadding, borderRadius: 8, background: form.permissions.includes(perm.id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.permissions.includes(perm.id)} onChange={() => togglePermission(perm.id)} style={{ width: isMobile ? 18 : 16, height: isMobile ? 18 : 16, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
+                  <span style={{ fontSize: isMobile ? 14 : 13, color: dark ? "#F1F5F9" : "#1E293B" }}>{perm.label}</span>
                 </label>
               ))}
             </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
-              <button type="submit" disabled={creating} style={{ flex: 1, padding: "10px 16px", background: creating ? "#A5B4FC" : dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: creating ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <div style={{ display: "flex", gap: 10, flexDirection: formButtonFlexDirection }}>
+              <button type="submit" disabled={creating} style={{ flex: isMobile ? "none" : 1, padding: isMobile ? "12px 16px" : "10px 16px", background: creating ? "#A5B4FC" : dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: creating ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: isMobile ? 16 : 14, width: formButtonWidth }}>
                 {creating ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
                 {creating ? "Création..." : "Créer le super admin"}
               </button>
-              <button type="button" onClick={() => setShowCreate(false)} style={{ padding: "10px 16px", background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 8, fontWeight: 500, cursor: "pointer", color: dark ? "#F1F5F9" : "#1E293B" }}>Annuler</button>
+              <button type="button" onClick={() => setShowCreate(false)} style={{ padding: isMobile ? "12px 16px" : "10px 16px", background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 8, fontWeight: 500, cursor: "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 16 : 14, width: formButtonWidth }}>
+                Annuler
+              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Liste */}
       {filteredAdmins.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: dark ? "#94A3B8" : "#64748B", background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12 }}>
-          <ShieldCheck size={48} color={dark ? "#334155" : "#CBD5E1"} />
-          <p style={{ marginTop: 12, fontSize: 16 }}>{searchTerm ? "Aucun super admin trouvé" : "Aucun super admin secondaire"}</p>
+        <div style={{ textAlign: "center", padding: isMobile ? 24 : 40, color: dark ? "#94A3B8" : "#64748B", background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12 }}>
+          <ShieldCheck size={isMobile ? 40 : 48} color={dark ? "#334155" : "#CBD5E1"} />
+          <p style={{ marginTop: 12, fontSize: isMobile ? 15 : 16 }}>{searchTerm ? "Aucun super admin trouvé" : "Aucun super admin secondaire"}</p>
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", gap: 8, marginBottom: 12, fontSize: 13, flexWrap: "wrap" }}>
-            <button onClick={() => toggleSort("nom")} style={{ padding: "4px 8px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, fontSize: isMobile ? 12 : 13, flexWrap: "wrap" }}>
+            <button onClick={() => toggleSort("nom")} style={{ padding: isMobile ? "8px 10px" : "4px 8px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }}>
               Nom {sortBy === "nom" && (sortOrder === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
             </button>
-            <button onClick={() => toggleSort("login")} style={{ padding: "4px 8px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }}>
+            <button onClick={() => toggleSort("login")} style={{ padding: isMobile ? "8px 10px" : "4px 8px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }}>
               Login {sortBy === "login" && (sortOrder === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
             </button>
-            <button onClick={() => toggleSort("permissions")} style={{ padding: "4px 8px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }}>
+            <button onClick={() => toggleSort("permissions")} style={{ padding: isMobile ? "8px 10px" : "4px 8px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }}>
               Permissions {sortBy === "permissions" && (sortOrder === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
             </button>
           </div>
 
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
             {paginatedAdmins.map((admin) => (
-              <div key={admin._id} style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: 16, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+              <div key={admin._id} style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: cardPadding, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: cardAlign, flexWrap: "wrap", gap: 12, flexDirection: cardFlexDirection }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 16, color: dark ? "#F1F5F9" : "#1E293B" }}>{admin.nom}</div>
-                    <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>@{admin.login}</div>
+                    <div style={{ fontWeight: 600, fontSize: isMobile ? 16 : 16, color: dark ? "#F1F5F9" : "#1E293B" }}>{admin.nom}</div>
+                    <div style={{ fontSize: isMobile ? 13 : 13, color: dark ? "#94A3B8" : "#64748B" }}>@{admin.login}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => startEditPermissions(admin)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>
-                      <Edit2 size={14} /> Permissions
+                    <button onClick={() => startEditPermissions(admin)} style={{ display: "flex", alignItems: "center", gap: 6, padding: isMobile ? "10px 12px" : "6px 12px", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: isMobile ? 14 : 13 }}>
+                      <Edit2 size={isMobile ? 16 : 14} /> Permissions
                     </button>
-                    <button onClick={() => handleDelete(admin)} disabled={deletingId === admin._id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", background: "#EF4444", color: "white", border: "none", borderRadius: 6, cursor: deletingId === admin._id ? "not-allowed" : "pointer", opacity: deletingId === admin._id ? 0.7 : 1, fontSize: 13 }}>
-                      {deletingId === admin._id ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    <button onClick={() => handleDelete(admin)} disabled={deletingId === admin._id} style={{ display: "flex", alignItems: "center", gap: 6, padding: isMobile ? "10px 12px" : "6px 12px", background: "#EF4444", color: "white", border: "none", borderRadius: 6, cursor: deletingId === admin._id ? "not-allowed" : "pointer", opacity: deletingId === admin._id ? 0.7 : 1, fontSize: isMobile ? 14 : 13 }}>
+                      {deletingId === admin._id ? <Loader size={14} className="animate-spin" /> : <Trash2 size={isMobile ? 16 : 14} />}
                       Supprimer
                     </button>
                   </div>
@@ -506,21 +520,21 @@ export function GestionSuperAdmins({ user }) {
 
                 {editingId === admin._id && (
                   <div style={{ marginTop: 16, borderTop: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, paddingTop: 12 }}>
-                    <div style={{ fontWeight: 500, marginBottom: 8, color: dark ? "#CBD5E1" : "#374151" }}>Modifier les permissions</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                    <div style={{ fontWeight: 500, marginBottom: 8, color: dark ? "#CBD5E1" : "#374151", fontSize: isMobile ? 15 : 14 }}>Modifier les permissions</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, flexDirection: isMobile ? "column" : "row" }}>
                       {PERMISSIONS_LIST.map((perm) => (
-                        <label key={perm.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 6, background: editPermissions.includes(perm.id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, cursor: "pointer" }}>
-                          <input type="checkbox" checked={editPermissions.includes(perm.id)} onChange={() => toggleEditPermission(perm.id)} style={{ width: 14, height: 14, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
-                          <span style={{ fontSize: 12, color: dark ? "#F1F5F9" : "#1E293B" }}>{perm.label}</span>
+                        <label key={perm.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: isMobile ? "10px 12px" : "6px 10px", borderRadius: 6, background: editPermissions.includes(perm.id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, cursor: "pointer" }}>
+                          <input type="checkbox" checked={editPermissions.includes(perm.id)} onChange={() => toggleEditPermission(perm.id)} style={{ width: isMobile ? 18 : 14, height: isMobile ? 18 : 14, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
+                          <span style={{ fontSize: isMobile ? 14 : 12, color: dark ? "#F1F5F9" : "#1E293B" }}>{perm.label}</span>
                         </label>
                       ))}
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => handleSavePermissions(admin._id)} disabled={savingPermissions} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#10B981", color: "white", border: "none", borderRadius: 6, cursor: savingPermissions ? "not-allowed" : "pointer", fontSize: 13 }}>
+                    <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
+                      <button onClick={() => handleSavePermissions(admin._id)} disabled={savingPermissions} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: isMobile ? "12px 14px" : "8px 14px", background: "#10B981", color: "white", border: "none", borderRadius: 6, cursor: savingPermissions ? "not-allowed" : "pointer", fontSize: isMobile ? 14 : 13 }}>
                         {savingPermissions ? <Loader size={14} className="animate-spin" /> : <Save size={14} />}
                         Enregistrer
                       </button>
-                      <button onClick={cancelEditPermissions} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: dark ? "#334155" : "#F1F5F9", color: dark ? "#F1F5F9" : "#1E293B", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>
+                      <button onClick={cancelEditPermissions} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: isMobile ? "12px 14px" : "8px 14px", background: dark ? "#334155" : "#F1F5F9", color: dark ? "#F1F5F9" : "#1E293B", border: "none", borderRadius: 6, cursor: "pointer", fontSize: isMobile ? 14 : 13 }}>
                         <X size={14} /> Annuler
                       </button>
                     </div>
@@ -532,11 +546,11 @@ export function GestionSuperAdmins({ user }) {
 
           {totalPages > 1 && (
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16 }}>
-              <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safeCurrentPage === 1} style={{ padding: "6px 10px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: safeCurrentPage === 1 ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }} aria-label="Page précédente">
+              <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safeCurrentPage === 1} style={{ padding: isMobile ? "8px 12px" : "6px 10px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: safeCurrentPage === 1 ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }} aria-label="Page précédente">
                 <ChevronLeft size={16} />
               </button>
-              <span style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>{safeCurrentPage} / {totalPages}</span>
-              <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safeCurrentPage === totalPages} style={{ padding: "6px 10px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: safeCurrentPage === totalPages ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }} aria-label="Page suivante">
+              <span style={{ fontSize: isMobile ? 14 : 13, color: dark ? "#94A3B8" : "#64748B" }}>{safeCurrentPage} / {totalPages}</span>
+              <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safeCurrentPage === totalPages} style={{ padding: isMobile ? "8px 12px" : "6px 10px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", color: safeCurrentPage === totalPages ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B", cursor: "pointer" }} aria-label="Page suivante">
                 <ChevronRight size={16} />
               </button>
             </div>

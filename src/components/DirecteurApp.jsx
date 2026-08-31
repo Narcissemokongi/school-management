@@ -14,7 +14,8 @@ import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { StatistiquesAvancees } from "./StatistiquesAvancees";
 import { AssistantPassage } from "./AssistantPassage";
-import { useAppStore } from "../store/appStore";   // <-- Import
+import { useAppStore } from "../store/appStore";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import {
   Home, User, Building, MessageCircle, Phone, HelpCircle,
   FileText, Shield, Calendar, BarChart, ArrowRight,
@@ -34,6 +35,7 @@ export function DirecteurApp({
   handleLogout,
 }) {
   const { S } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
 
   // Onglet actif depuis le store, avec setter
   const tab = useAppStore((state) => state.directeurTab);
@@ -92,12 +94,25 @@ export function DirecteurApp({
   const renderContent = () => {
     if (!anneeId && ["accueil", "eleves", "classes", "statistiques", "passage"].includes(tab)) {
       return (
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", textAlign: "center" }}>
-          <Calendar size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+        <div style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "24px 16px" : "32px 24px",
+          textAlign: "center",
+        }}>
+          <Calendar size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
+          <h2 style={{
+            fontSize: isMobile ? 20 : 24,
+            fontWeight: 600,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            margin: "0 0 8px",
+          }}>
             Aucune année scolaire active
           </h2>
-          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 14 }}>
+          <p style={{
+            color: dark ? "#94A3B8" : "#64748B",
+            fontSize: isMobile ? 13 : 14,
+          }}>
             Veuillez demander à l'administrateur d'activer une année scolaire pour accéder à cette section.
           </p>
         </div>
@@ -184,12 +199,12 @@ export function DirecteurApp({
         <div style={{
           background: dark ? "#78350F" : "#FEF3C7",
           color: dark ? "#FBBF24" : "#92400E",
-          padding: "10px 20px",
-          fontSize: 13,
+          padding: isMobile ? "10px 12px" : "10px 20px",
+          fontSize: isMobile ? 12 : 13,
           fontWeight: 500,
           textAlign: "center",
           borderRadius: "0 0 12px 12px",
-          margin: "0 24px 16px",
+          margin: isMobile ? "0 12px 12px" : "0 24px 16px",
         }}>
           ⚠️ Aucune année scolaire active. Certaines fonctionnalités sont limitées.
         </div>

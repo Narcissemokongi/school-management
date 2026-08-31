@@ -11,11 +11,12 @@ import { useConfirm } from "../../hooks/useConfirm";
 import toast from "react-hot-toast";
 import { api } from "../../../convex/_generated/api";
 import { useStyles } from "../../styles/theme";
+import { useIsMobile } from "../../hooks/useIsMobile"; // <-- Import du hook
 
 // Sous-composant : Barre de recherche
-const SearchInput = ({ value, onChange, dark }) => (
-  <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-    <Search size={18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
+const SearchInput = ({ value, onChange, dark, isMobile }) => (
+  <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 200 }}>
+    <Search size={isMobile ? 18 : 18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
     <input
       type="search"
       placeholder="Rechercher par nom ou login..."
@@ -23,20 +24,21 @@ const SearchInput = ({ value, onChange, dark }) => (
       onChange={onChange}
       style={{
         width: "100%",
-        padding: "10px 12px 10px 34px",
+        padding: isMobile ? "12px 14px 12px 36px" : "10px 12px 10px 34px",
         borderRadius: 8,
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         background: dark ? "#1E293B" : "#FFFFFF",
         color: dark ? "#F1F5F9" : "#1E293B",
-        fontSize: 14,
+        fontSize: isMobile ? 16 : 14,
         outline: "none",
+        boxSizing: "border-box",
       }}
     />
   </div>
 );
 
 // Sous-composant : Bouton de tri
-const SortButton = ({ label, field, currentSort, currentOrder, onClick, dark }) => {
+const SortButton = ({ label, field, currentSort, currentOrder, onClick, dark, isMobile }) => {
   const isActive = currentSort === field;
   const Icon = isActive ? (currentOrder === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
@@ -46,15 +48,17 @@ const SortButton = ({ label, field, currentSort, currentOrder, onClick, dark }) 
       style={{
         display: "flex",
         alignItems: "center",
+        justifyContent: "center",
         gap: 4,
-        padding: "6px 10px",
+        padding: isMobile ? "8px 10px" : "6px 10px",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         borderRadius: 6,
         background: isActive ? (dark ? "#1E293B" : "#EEF2FF") : "transparent",
         color: isActive ? (dark ? "#A5B4FC" : "#4F46E5") : dark ? "#94A3B8" : "#64748B",
         cursor: "pointer",
-        fontSize: 13,
+        fontSize: isMobile ? 13 : 13,
         fontWeight: isActive ? 600 : 400,
+        flex: isMobile ? 1 : "none",
       }}
     >
       {label}
@@ -64,14 +68,14 @@ const SortButton = ({ label, field, currentSort, currentOrder, onClick, dark }) 
 };
 
 // Sous-composant : Pagination
-const Pagination = ({ currentPage, totalPages, onPageChange, dark }) => (
+const Pagination = ({ currentPage, totalPages, onPageChange, dark, isMobile }) => (
   <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16 }}>
     <button
       onClick={() => onPageChange(Math.max(1, currentPage - 1))}
       disabled={currentPage === 1}
       aria-label="Page précédente"
       style={{
-        padding: "6px 10px",
+        padding: isMobile ? "8px 12px" : "6px 10px",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         borderRadius: 6,
         background: "transparent",
@@ -81,7 +85,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, dark }) => (
     >
       <ChevronLeft size={16} />
     </button>
-    <span style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>
+    <span style={{ fontSize: isMobile ? 14 : 13, color: dark ? "#94A3B8" : "#64748B" }}>
       Page {currentPage} / {totalPages}
     </span>
     <button
@@ -89,7 +93,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, dark }) => (
       disabled={currentPage === totalPages}
       aria-label="Page suivante"
       style={{
-        padding: "6px 10px",
+        padding: isMobile ? "8px 12px" : "6px 10px",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         borderRadius: 6,
         background: "transparent",
@@ -104,6 +108,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange, dark }) => (
 
 export function PendingTab({ pendingUsers, user }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
 
   const approveUser = useMutation(api.users.approveUser);
@@ -120,7 +125,6 @@ export function PendingTab({ pendingUsers, user }) {
   const [approvingIds, setApprovingIds] = useState(new Set());
   const [rejectingIds, setRejectingIds] = useState(new Set());
 
-  // Recherche différée
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const pageSize = 5;
 
@@ -138,7 +142,6 @@ export function PendingTab({ pendingUsers, user }) {
       result = result.filter((u) => u.role === filterRole);
     }
 
-    // Tri
     const sorted = [...result].sort((a, b) => {
       if (sortBy === "nom") {
         return sortOrder === "asc" ? a.nom.localeCompare(b.nom) : b.nom.localeCompare(a.nom);
@@ -155,7 +158,6 @@ export function PendingTab({ pendingUsers, user }) {
     return sorted;
   }, [pendingUsers, deferredSearchTerm, filterRole, sortBy, sortOrder]);
 
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedUsers = filteredUsers.slice(
@@ -163,13 +165,11 @@ export function PendingTab({ pendingUsers, user }) {
     safeCurrentPage * pageSize
   );
 
-  // Rôles disponibles
   const rolesDisponibles = useMemo(() => {
     const roles = new Set(pendingUsers.map((u) => u.role));
     return Array.from(roles).sort();
   }, [pendingUsers]);
 
-  // Handlers individuels
   const handleApprove = useCallback(async (userId) => {
     setApprovingIds((prev) => new Set(prev).add(userId));
     try {
@@ -216,7 +216,6 @@ export function PendingTab({ pendingUsers, user }) {
     }
   }, [rejectUser, user._id]);
 
-  // Actions groupées
   const toggleSelectAll = useCallback(() => {
     if (selectedIds.size === paginatedUsers.length && paginatedUsers.length > 0) {
       setSelectedIds(new Set());
@@ -271,7 +270,6 @@ export function PendingTab({ pendingUsers, user }) {
     }
   }, [selectedIds, rejectUser, user._id, confirm]);
 
-  // Changement de tri
   const handleSort = useCallback((field) => {
     setSortBy((prevField) => {
       if (prevField === field) {
@@ -283,23 +281,22 @@ export function PendingTab({ pendingUsers, user }) {
     });
   }, []);
 
-  // Reset page quand filtres changent
   const resetPage = useCallback(() => setCurrentPage(1), []);
 
   if (pendingUsers.length === 0) {
     return (
       <div style={{
         textAlign: "center",
-        padding: 48,
+        padding: isMobile ? 32 : 48,
         color: dark ? "#94A3B8" : "#64748B",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         gap: 12,
       }}>
-        <Inbox size={48} color="#10B981" />
-        <p style={{ fontSize: 16 }}>Aucune demande en attente</p>
-        <p style={{ fontSize: 14 }}>Toutes les demandes ont été traitées.</p>
+        <Inbox size={isMobile ? 40 : 48} color="#10B981" />
+        <p style={{ fontSize: isMobile ? 15 : 16, margin: 0 }}>Aucune demande en attente</p>
+        <p style={{ fontSize: isMobile ? 13 : 14, margin: 0 }}>Toutes les demandes ont été traitées.</p>
       </div>
     );
   }
@@ -314,24 +311,33 @@ export function PendingTab({ pendingUsers, user }) {
       `}</style>
 
       {/* Barre d'outils */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 16, alignItems: "center" }}>
+      <div style={{
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        flexWrap: "wrap",
+        gap: isMobile ? 8 : 12,
+        marginBottom: 16,
+        alignItems: isMobile ? "stretch" : "center",
+      }}>
         <SearchInput
           value={searchTerm}
           onChange={(e) => { setSearchTerm(e.target.value); resetPage(); }}
           dark={dark}
+          isMobile={isMobile}
         />
 
         <select
           value={filterRole}
           onChange={(e) => { setFilterRole(e.target.value); resetPage(); }}
           style={{
-            padding: "8px 12px",
+            padding: isMobile ? "12px 14px" : "8px 12px",
             borderRadius: 8,
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             background: dark ? "#1E293B" : "#FFFFFF",
             color: dark ? "#F1F5F9" : "#1E293B",
-            fontSize: 14,
+            fontSize: isMobile ? 16 : 14,
             cursor: "pointer",
+            width: isMobile ? "100%" : "auto",
           }}
           aria-label="Filtrer par rôle"
         >
@@ -342,27 +348,29 @@ export function PendingTab({ pendingUsers, user }) {
         </select>
 
         {/* Tri */}
-        <div style={{ display: "flex", gap: 6 }}>
-          <SortButton label="Nom" field="nom" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} />
-          <SortButton label="Rôle" field="role" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} />
-          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} />
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+          <SortButton label="Nom" field="nom" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} isMobile={isMobile} />
+          <SortButton label="Rôle" field="role" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} isMobile={isMobile} />
+          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} isMobile={isMobile} />
         </div>
 
         {/* Sélection multiple */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: isMobile ? "0" : "auto", flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
           <button
             onClick={toggleSelectAll}
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 6,
-              padding: "6px 10px",
+              padding: isMobile ? "10px 12px" : "6px 10px",
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 6,
               background: "transparent",
               color: dark ? "#F1F5F9" : "#1E293B",
               cursor: "pointer",
-              fontSize: 13,
+              fontSize: isMobile ? 14 : 13,
+              width: isMobile ? "100%" : "auto",
             }}
             aria-label="Tout sélectionner"
           >
@@ -382,14 +390,16 @@ export function PendingTab({ pendingUsers, user }) {
                 style={{
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
-                  padding: "6px 12px",
+                  padding: isMobile ? "10px 12px" : "6px 12px",
                   background: "#10B981",
                   color: "white",
                   border: "none",
                   borderRadius: 6,
                   cursor: bulkProcessing ? "not-allowed" : "pointer",
-                  fontSize: 13,
+                  fontSize: isMobile ? 14 : 13,
+                  width: isMobile ? "100%" : "auto",
                 }}
               >
                 {bulkProcessing ? <Loader size={14} className="animate-spin" /> : <UserCheck size={14} />}
@@ -401,14 +411,16 @@ export function PendingTab({ pendingUsers, user }) {
                 style={{
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
-                  padding: "6px 12px",
+                  padding: isMobile ? "10px 12px" : "6px 12px",
                   background: "#EF4444",
                   color: "white",
                   border: "none",
                   borderRadius: 6,
                   cursor: bulkProcessing ? "not-allowed" : "pointer",
-                  fontSize: 13,
+                  fontSize: isMobile ? 14 : 13,
+                  width: isMobile ? "100%" : "auto",
                 }}
               >
                 {bulkProcessing ? <Loader size={14} className="animate-spin" /> : <UserX size={14} />}
@@ -420,7 +432,7 @@ export function PendingTab({ pendingUsers, user }) {
       </div>
 
       {/* Résumé */}
-      <div style={{ marginBottom: 12, fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>
+      <div style={{ marginBottom: 12, fontSize: isMobile ? 13 : 13, color: dark ? "#94A3B8" : "#64748B" }}>
         {filteredUsers.length} demande(s) affichée(s)
       </div>
 
@@ -439,7 +451,7 @@ export function PendingTab({ pendingUsers, user }) {
                   checked={selectedIds.has(u._id)}
                   onChange={() => toggleSelectOne(u._id)}
                   aria-label={`Sélectionner ${u.nom}`}
-                  style={{ width: 16, height: 16, cursor: "pointer", accentColor: dark ? "#818CF8" : "#4F46E5" }}
+                  style={{ width: isMobile ? 18 : 16, height: isMobile ? 18 : 16, cursor: "pointer", accentColor: dark ? "#818CF8" : "#4F46E5" }}
                 />
               </div>
               <PendingUserCard
@@ -462,10 +474,10 @@ export function PendingTab({ pendingUsers, user }) {
           totalPages={totalPages}
           onPageChange={setCurrentPage}
           dark={dark}
+          isMobile={isMobile}
         />
       )}
 
-      {/* Dialog de confirmation pour rejet groupé */}
       <ConfirmDialog {...dialogProps} />
     </div>
   );

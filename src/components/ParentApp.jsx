@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
@@ -14,12 +14,13 @@ import { AbsencesEnfant } from "./AbsencesEnfant";
 import { MentionsLegales } from "./MentionsLegales";
 import { Aide } from "./Aide";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { useAppStore } from "../store/appStore"; // <-- Import du store
+import { useAppStore } from "../store/appStore";
 import {
   Users, MessageCircle, Calendar, Phone, HelpCircle,
   FileText, Shield, ArrowLeft, BookOpen, DollarSign,
   AlertTriangle, ClipboardList, Clock, Search, X,
   User, BarChart3, AlertCircle, UserPlus, CheckCircle2, Loader,
+  XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -53,7 +54,6 @@ export function ParentApp({
 
   const showAddChild = useAppStore((state) => state.parentShowAddChild);
   const setShowAddChild = useAppStore((state) => state.setParentShowAddChild);
-  // =========================================
 
   const handleNavigateToMessaging = (contactId) => {
     setMessagingContactId(contactId);
@@ -97,6 +97,7 @@ export function ParentApp({
             user={user}
             dark={dark}
             onClose={() => setShowAddChild(false)}
+            isMobile={isMobile}
           />
         ) : (
           <ListeEnfants
@@ -116,24 +117,25 @@ export function ParentApp({
       case "emploi":
         if (!selectedEnfant) {
           return (
-            <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px", textAlign: "center" }}>
+            <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "24px", textAlign: "center" }}>
               <Calendar size={48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 16 }} />
-              <h2 style={{ fontSize: 22, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 8 }}>
+              <h2 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 8 }}>
                 Emploi du temps
               </h2>
-              <p style={{ color: dark ? "#94A3B8" : "#64748B", marginBottom: 24 }}>
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", marginBottom: 24, fontSize: isMobile ? 14 : 16 }}>
                 Veuillez d'abord sélectionner un enfant dans la section "Mes enfants".
               </p>
               <button
                 onClick={() => setTab("enfants")}
                 style={{
-                  padding: "10px 20px",
+                  padding: isMobile ? "12px 20px" : "10px 20px",
                   background: dark ? "#818CF8" : "#4F46E5",
                   color: "white",
                   border: "none",
                   borderRadius: 8,
                   cursor: "pointer",
                   fontWeight: 600,
+                  fontSize: isMobile ? 16 : 14,
                 }}
               >
                 Choisir un enfant
@@ -174,16 +176,18 @@ export function ParentApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {renderContent()}
+      <div style={{ padding: isMobile ? "0 12px" : "0" }}>
+        {renderContent()}
+      </div>
     </Layout>
   );
 }
 
-// ===== Composant de demande d'association parent-enfant (avec messages interactifs) =====
-function DemandeAssociation({ user, dark, onClose }) {
+// ===== Composant de demande d'association parent-enfant =====
+function DemandeAssociation({ user, dark, onClose, isMobile }) {
   const [matricule, setMatricule] = useState("");
   const [sending, setSending] = useState(false);
-  const [alert, setAlert] = useState(null); // { type: 'error'|'info'|'success', message: string }
+  const [alert, setAlert] = useState(null);
 
   const createRequest = useMutation(api.parentLinks.createParentLinkRequest);
   const cancelRequest = useMutation(api.parentLinks.cancelParentLinkRequest);
@@ -275,10 +279,10 @@ function DemandeAssociation({ user, dark, onClose }) {
 
   const inputStyle = {
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${alert?.type === "error" ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     background: dark ? "#0F172A" : "#F9FAFB",
     color: dark ? "#F1F5F9" : "#1E293B",
@@ -286,7 +290,7 @@ function DemandeAssociation({ user, dark, onClose }) {
   };
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px" }}>
+    <div style={{ maxWidth: 480, margin: "0 auto", padding: isMobile ? "0 12px" : "0 16px" }}>
       {onClose && (
         <button
           onClick={onClose}
@@ -298,7 +302,7 @@ function DemandeAssociation({ user, dark, onClose }) {
             display: "flex",
             alignItems: "center",
             gap: 4,
-            fontSize: 14,
+            fontSize: isMobile ? 14 : 14,
             marginBottom: 16,
           }}
         >
@@ -307,7 +311,7 @@ function DemandeAssociation({ user, dark, onClose }) {
       )}
 
       <form onSubmit={handleSubmit} style={{ marginBottom: 24 }}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: 14, color: dark ? "#CBD5E1" : "#374151" }}>
+        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: dark ? "#CBD5E1" : "#374151" }}>
           Matricule de l'enfant
         </label>
         <input
@@ -329,9 +333,9 @@ function DemandeAssociation({ user, dark, onClose }) {
             gap: 8,
             background: currentAlert.background,
             color: currentAlert.color,
-            padding: "10px 14px",
+            padding: isMobile ? "12px 14px" : "10px 14px",
             borderRadius: 8,
-            fontSize: 13,
+            fontSize: isMobile ? 14 : 13,
             fontWeight: 500,
             marginBottom: 12,
           }}>
@@ -345,7 +349,7 @@ function DemandeAssociation({ user, dark, onClose }) {
           disabled={sending}
           style={{
             width: "100%",
-            padding: "10px 16px",
+            padding: isMobile ? "12px 16px" : "10px 16px",
             background: sending ? "#94A3B8" : dark ? "#818CF8" : "#4F46E5",
             color: "white",
             border: "none",
@@ -356,6 +360,7 @@ function DemandeAssociation({ user, dark, onClose }) {
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
+            fontSize: isMobile ? 16 : 14,
           }}
         >
           {sending ? <Loader size={16} className="animate-spin" /> : <UserPlus size={16} />}
@@ -365,7 +370,7 @@ function DemandeAssociation({ user, dark, onClose }) {
 
       {demandes.length > 0 && (
         <div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 12 }}>
+          <h3 style={{ fontSize: isMobile ? 17 : 16, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 12 }}>
             Mes demandes
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -376,7 +381,7 @@ function DemandeAssociation({ user, dark, onClose }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "10px 14px",
+                  padding: isMobile ? "12px 14px" : "10px 14px",
                   borderRadius: 8,
                   border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                   background: dark ? "#1E293B" : "#FFFFFF",
@@ -386,7 +391,7 @@ function DemandeAssociation({ user, dark, onClose }) {
                   {demande.status === "pending" && <Clock size={16} color="#F59E0B" />}
                   {demande.status === "approved" && <CheckCircle2 size={16} color="#10B981" />}
                   {demande.status === "rejected" && <XCircle size={16} color="#EF4444" />}
-                  <span style={{ fontSize: 14, color: dark ? "#F1F5F9" : "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: isMobile ? 15 : 14, color: dark ? "#F1F5F9" : "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {demande.status === "pending" && "En attente"}
                     {demande.status === "approved" && "Approuvée"}
                     {demande.status === "rejected" && "Rejetée"}
@@ -400,7 +405,7 @@ function DemandeAssociation({ user, dark, onClose }) {
                       border: "none",
                       color: "#EF4444",
                       cursor: "pointer",
-                      fontSize: 13,
+                      fontSize: isMobile ? 14 : 13,
                       fontWeight: 500,
                       flexShrink: 0,
                     }}
@@ -417,7 +422,7 @@ function DemandeAssociation({ user, dark, onClose }) {
   );
 }
 
-// ===== Liste des enfants (avec bouton d'ajout) =====
+// ===== Liste des enfants =====
 function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMobile, dark, search, setSearch, onAddChild }) {
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
@@ -458,10 +463,10 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
       <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <Users size={48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
+          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
             Aucun enfant associé
           </h2>
-          <p style={{ color: textSecondary, fontSize: 14 }}>
+          <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
             Vous pouvez demander l'association d'un enfant à votre compte en fournissant son matricule.
           </p>
           <button
@@ -471,13 +476,14 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              padding: "10px 20px",
+              padding: isMobile ? "12px 20px" : "10px 20px",
               background: accent,
               color: "white",
               border: "none",
               borderRadius: 8,
               fontWeight: 600,
               cursor: "pointer",
+              fontSize: isMobile ? 16 : 14,
             }}
           >
             <UserPlus size={18} /> Associer un enfant
@@ -491,10 +497,10 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
     return (
       <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
         <Users size={48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
+        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
           Aucun enfant trouvé
         </h2>
-        <p style={{ color: textSecondary, fontSize: 14 }}>Essayez un autre nom.</p>
+        <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>Essayez un autre nom.</p>
       </div>
     );
   }
@@ -503,7 +509,7 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
     <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: isMobile ? 24 : 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+          <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
             Mes enfants
           </h2>
           <p style={{ color: textSecondary, marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
@@ -516,33 +522,33 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
             display: "flex",
             alignItems: "center",
             gap: 6,
-            padding: "8px 16px",
+            padding: isMobile ? "12px 16px" : "8px 16px",
             background: accent,
             color: "white",
             border: "none",
             borderRadius: 8,
             fontWeight: 600,
             cursor: "pointer",
-            fontSize: 14,
+            fontSize: isMobile ? 14 : 14,
           }}
         >
           <UserPlus size={18} /> Ajouter un enfant
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
-        <StatCardMini icon={<Users size={18} />} value={stats.totalEnfants} label="Enfants" color={accent} dark={dark} />
-        <StatCardMini icon={<ClipboardList size={18} />} value={stats.totalPunitions} label="Punitions" color={warning} dark={dark} />
-        <StatCardMini icon={<AlertTriangle size={18} />} value={stats.totalGraves} label="Graves" color={danger} dark={dark} />
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
+        <StatCardMini icon={<Users size={18} />} value={stats.totalEnfants} label="Enfants" color={accent} dark={dark} isMobile={isMobile} />
+        <StatCardMini icon={<ClipboardList size={18} />} value={stats.totalPunitions} label="Punitions" color={warning} dark={dark} isMobile={isMobile} />
+        <StatCardMini icon={<AlertTriangle size={18} />} value={stats.totalGraves} label="Graves" color={danger} dark={dark} isMobile={isMobile} />
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 10, padding: "8px 12px", marginBottom: 20, gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 10, padding: isMobile ? "12px 12px" : "8px 12px", marginBottom: 20, gap: 8 }}>
         <Search size={16} color={textSecondary} />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Rechercher un enfant..."
-          style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: 14, color: textPrimary }}
+          style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: isMobile ? 16 : 14, color: textPrimary }}
         />
         {search && (
           <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary, padding: 4 }}>
@@ -564,7 +570,7 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
               style={{
                 background: cardBg,
                 borderRadius: 16,
-                padding: isMobile ? "16px" : "20px",
+                padding: isMobile ? "14px 16px" : "20px",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
@@ -572,11 +578,13 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
                 cursor: "pointer",
                 transition: "box-shadow 0.15s, transform 0.1s",
                 border: `1px solid ${hasGrave ? danger : cardBorder}`,
+                flexDirection: isMobile ? "column" : "row",
+                gap: 8,
               }}
               onMouseEnter={(e) => { e.currentTarget.style.boxShadow = shadowHover; e.currentTarget.style.transform = "translateY(-1px)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.boxShadow = shadow; e.currentTarget.style.transform = "translateY(0)"; }}
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0, width: "100%" }}>
                 <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 16, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {enfant.nom} {enfant.postnom} {enfant.prenom && <span style={{ fontWeight: 400, color: textSecondary }}>{enfant.prenom}</span>}
                 </div>
@@ -584,7 +592,7 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
                   Classe {enfant.classe}
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginLeft: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginLeft: isMobile ? 0 : 8, width: isMobile ? "100%" : "auto", justifyContent: isMobile ? "space-between" : "flex-start" }}>
                 {nbPunitions > 0 && (
                   <span style={{
                     background: hasGrave ? (dark ? "#7F1D1D" : "#FEE2E2") : (dark ? "#312E81" : "#EEF2FF"),
@@ -611,19 +619,19 @@ function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMo
 }
 
 // ===== StatCardMini =====
-function StatCardMini({ icon, value, label, color, dark }) {
+function StatCardMini({ icon, value, label, color, dark, isMobile }) {
   return (
     <div style={{
       background: dark ? "#1E293B" : "#FFFFFF",
       borderRadius: 12,
-      padding: 12,
+      padding: isMobile ? 10 : 12,
       textAlign: "center",
       border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
       boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
     }}>
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 4, color }}>{icon}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
-      <div style={{ fontSize: 12, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
+      <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
+      <div style={{ fontSize: isMobile ? 11 : 12, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
     </div>
   );
 }
@@ -745,7 +753,7 @@ function DossierEnfant({ enfant, punitions, fautes, ecoleId, anneeId, userId, on
             <div style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 48,
+              padding: isMobile ? 32 : 48,
               textAlign: "center",
               boxShadow: shadow,
               color: textSecondary,

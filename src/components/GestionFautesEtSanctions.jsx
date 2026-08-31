@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStyles } from "../styles/theme";
+import { useIsMobile } from "../hooks/useIsMobile"; // <-- Import du hook
 import { useConfirm } from "../hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
@@ -17,6 +18,7 @@ export function GestionFautesEtSanctions({
   userId,
 }) {
   const { dark } = useStyles();
+  const isMobile = useIsMobile(); // Détection mobile
   const { confirm, dialogProps } = useConfirm();
   const [subTab, setSubTab] = useState("fautes");
 
@@ -148,45 +150,64 @@ export function GestionFautesEtSanctions({
     }
   };
 
+  // Styles adaptatifs
   const inputStyle = {
     width: "100%",
-    padding: "10px 14px",
+    padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${cardBorder}`,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     marginBottom: 16,
     outline: "none",
     background: inputBg,
     color: inputText,
     transition: "border-color 0.2s, background-color 0.3s",
+    boxSizing: "border-box",
   };
 
-  // Style pour la barre de recherche
   const searchStyle = {
     display: "flex",
     alignItems: "center",
     background: inputBg,
     border: `1px solid ${cardBorder}`,
     borderRadius: 8,
-    padding: "8px 12px",
+    padding: isMobile ? "12px 14px" : "8px 12px",
     marginBottom: 16,
     gap: 8,
   };
 
+  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  const titleSize = isMobile ? 22 : 28;
+  const subtitleSize = isMobile ? 14 : 14;
+  const headerMarginBottom = isMobile ? 20 : 32;
+  const tabPadding = isMobile ? "10px 12px" : "12px 20px";
+  const tabFontSize = isMobile ? 14 : 16;
+  const formCardPadding = isMobile ? 16 : 24;
+  const listCardPadding = isMobile ? "12px 14px" : "16px 20px";
+  const listItemFlexDirection = isMobile ? "column" : "row";
+  const listItemGap = isMobile ? 8 : 0;
+  const listItemAlignItems = isMobile ? "stretch" : "center";
+  const actionButtonPadding = isMobile ? "10px 12px" : "6px 12px";
+  const actionButtonFontSize = isMobile ? 14 : 14;
+  const submitButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const submitButtonFontSize = isMobile ? 16 : 14;
+  const formButtonsFlexDirection = isMobile ? "column" : "row";
+  const formButtonsWidth = isMobile ? "100%" : "auto";
+
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: containerPadding }}>
       {/* En-tête */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+      <div style={{ marginBottom: headerMarginBottom }}>
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Discipline
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: 14 }}>
+        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
           Gérez les types de fautes et les sanctions
         </p>
       </div>
 
       {/* Onglets */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: isMobile ? 16 : 24, overflowX: "auto", whiteSpace: "nowrap" }}>
         {[
           { id: "fautes", label: "Types de fautes" },
           { id: "sanctions", label: "Sanctions" },
@@ -198,7 +219,7 @@ export function GestionFautesEtSanctions({
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: "12px 20px",
+              padding: tabPadding,
               border: "none",
               background: "transparent",
               color: subTab === t.id ? (dark ? "#818CF8" : "#4F46E5") : textSecondary,
@@ -206,6 +227,8 @@ export function GestionFautesEtSanctions({
               borderBottom: subTab === t.id ? `3px solid ${dark ? "#818CF8" : "#4F46E5"}` : "3px solid transparent",
               cursor: "pointer",
               transition: "all 0.2s",
+              fontSize: tabFontSize,
+              flexShrink: 0,
             }}
           >
             {t.label}
@@ -221,25 +244,25 @@ export function GestionFautesEtSanctions({
             style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 24,
+              padding: formCardPadding,
               boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
               border: `1px solid ${cardBorder}`,
-              marginBottom: 24,
+              marginBottom: isMobile ? 16 : 24,
               transition: "background-color 0.3s",
             }}
           >
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
+            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
               {editMode ? "Modifier la faute" : "Nouvelle faute"}
             </h3>
             <form onSubmit={handleSubmit}>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Libellé</label>
+              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>Libellé</label>
               <input
                 style={inputStyle}
                 placeholder="Ex: Chewing-gum"
                 value={libelle}
                 onChange={(e) => setLibelle(e.target.value)}
               />
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Gravité</label>
+              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>Gravité</label>
               <select
                 value={gravite}
                 onChange={(e) => setGravite(e.target.value)}
@@ -249,21 +272,24 @@ export function GestionFautesEtSanctions({
                 <option value="Moyenne">Moyenne</option>
                 <option value="Grave">Grave</option>
               </select>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, flexDirection: formButtonsFlexDirection }}>
                 <button
                   type="submit"
                   disabled={addingFaute || !libelle.trim()}
                   style={{
                     display: "flex",
                     alignItems: "center",
+                    justifyContent: "center",
                     gap: 6,
-                    padding: "10px 20px",
+                    padding: submitButtonPadding,
                     background: addingFaute ? "#A5B4FC" : editMode ? buttonEditBg : buttonPrimaryBg,
                     color: "white",
                     border: "none",
                     borderRadius: 10,
                     fontWeight: 600,
                     cursor: addingFaute ? "not-allowed" : "pointer",
+                    fontSize: submitButtonFontSize,
+                    width: formButtonsWidth,
                   }}
                 >
                   {addingFaute ? (
@@ -281,13 +307,15 @@ export function GestionFautesEtSanctions({
                     type="button"
                     onClick={resetForm}
                     style={{
-                      padding: "10px 20px",
+                      padding: submitButtonPadding,
                       background: buttonSecondaryBg,
                       border: "none",
                       borderRadius: 10,
                       fontWeight: 500,
                       cursor: "pointer",
                       color: buttonSecondaryText,
+                      fontSize: submitButtonFontSize,
+                      width: formButtonsWidth,
                     }}
                   >
                     Annuler
@@ -304,7 +332,7 @@ export function GestionFautesEtSanctions({
               value={searchFaute}
               onChange={(e) => setSearchFaute(e.target.value)}
               placeholder="Rechercher une faute..."
-              style={{ border: "none", outline: "none", background: "transparent", width: "100%", color: inputText }}
+              style={{ border: "none", outline: "none", background: "transparent", width: "100%", color: inputText, fontSize: isMobile ? 16 : 14 }}
             />
             {searchFaute && (
               <button onClick={() => setSearchFaute("")} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}>
@@ -314,13 +342,13 @@ export function GestionFautesEtSanctions({
           </div>
 
           {/* Liste des fautes */}
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
             {filteredFautes.length === 0 && (
               <div
                 style={{
                   background: cardBg,
                   borderRadius: 16,
-                  padding: 48,
+                  padding: isMobile ? 32 : 48,
                   textAlign: "center",
                   boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
                   border: `1px solid ${cardBorder}`,
@@ -336,16 +364,18 @@ export function GestionFautesEtSanctions({
                 style={{
                   background: cardBg,
                   borderRadius: 12,
-                  padding: "16px 20px",
+                  padding: listCardPadding,
                   display: "flex",
+                  flexDirection: listItemFlexDirection,
                   justifyContent: "space-between",
-                  alignItems: "center",
+                  alignItems: listItemAlignItems,
+                  gap: listItemGap,
                   boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
                   border: `1px solid ${cardBorder}`,
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>{f.libelle}</div>
+                  <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 16, color: textPrimary }}>{f.libelle}</div>
                   <span
                     style={{
                       display: "inline-block",
@@ -374,14 +404,14 @@ export function GestionFautesEtSanctions({
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     onClick={() => startEdit(f)}
-                    style={{ background: buttonPrimaryBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
+                    style={{ background: buttonPrimaryBg, color: "white", border: "none", borderRadius: 6, padding: actionButtonPadding, cursor: "pointer", fontSize: actionButtonFontSize }}
                     title="Modifier"
                   >
                     <Edit2 size={16} />
                   </button>
                   <button
                     onClick={() => deleteFaute(f._id)}
-                    style={{ background: buttonDangerBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
+                    style={{ background: buttonDangerBg, color: "white", border: "none", borderRadius: 6, padding: actionButtonPadding, cursor: "pointer", fontSize: actionButtonFontSize }}
                     title="Supprimer"
                   >
                     <Trash2 size={16} />
@@ -401,38 +431,41 @@ export function GestionFautesEtSanctions({
             style={{
               background: cardBg,
               borderRadius: 16,
-              padding: 24,
+              padding: formCardPadding,
               boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
               border: `1px solid ${cardBorder}`,
-              marginBottom: 24,
+              marginBottom: isMobile ? 16 : 24,
             }}
           >
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
+            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
               {editSanctionMode ? "Modifier la sanction" : "Nouvelle sanction"}
             </h3>
             <form onSubmit={handleSanctionSubmit}>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary }}>Libellé</label>
+              <label style={{ display: "block", marginBottom: 6, fontWeight: 500, color: textSecondary, fontSize: isMobile ? 15 : 14 }}>Libellé</label>
               <input
                 style={inputStyle}
                 placeholder="Ex: Retenue"
                 value={sanctionLibelle}
                 onChange={(e) => setSanctionLibelle(e.target.value)}
               />
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, flexDirection: formButtonsFlexDirection }}>
                 <button
                   type="submit"
                   disabled={addingSanction || !sanctionLibelle.trim()}
                   style={{
                     display: "flex",
                     alignItems: "center",
+                    justifyContent: "center",
                     gap: 6,
-                    padding: "10px 20px",
+                    padding: submitButtonPadding,
                     background: addingSanction ? "#A5B4FC" : editSanctionMode ? buttonEditBg : buttonPrimaryBg,
                     color: "white",
                     border: "none",
                     borderRadius: 10,
                     fontWeight: 600,
                     cursor: addingSanction ? "not-allowed" : "pointer",
+                    fontSize: submitButtonFontSize,
+                    width: formButtonsWidth,
                   }}
                 >
                   {addingSanction ? (
@@ -450,13 +483,15 @@ export function GestionFautesEtSanctions({
                     type="button"
                     onClick={resetSanctionForm}
                     style={{
-                      padding: "10px 20px",
+                      padding: submitButtonPadding,
                       background: buttonSecondaryBg,
                       border: "none",
                       borderRadius: 10,
                       fontWeight: 500,
                       cursor: "pointer",
                       color: buttonSecondaryText,
+                      fontSize: submitButtonFontSize,
+                      width: formButtonsWidth,
                     }}
                   >
                     Annuler
@@ -473,7 +508,7 @@ export function GestionFautesEtSanctions({
               value={searchSanction}
               onChange={(e) => setSearchSanction(e.target.value)}
               placeholder="Rechercher une sanction..."
-              style={{ border: "none", outline: "none", background: "transparent", width: "100%", color: inputText }}
+              style={{ border: "none", outline: "none", background: "transparent", width: "100%", color: inputText, fontSize: isMobile ? 16 : 14 }}
             />
             {searchSanction && (
               <button onClick={() => setSearchSanction("")} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}>
@@ -483,13 +518,13 @@ export function GestionFautesEtSanctions({
           </div>
 
           {/* Liste des sanctions */}
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
             {filteredSanctions.length === 0 && (
               <div
                 style={{
                   background: cardBg,
                   borderRadius: 16,
-                  padding: 48,
+                  padding: isMobile ? 32 : 48,
                   textAlign: "center",
                   boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
                   border: `1px solid ${cardBorder}`,
@@ -505,26 +540,28 @@ export function GestionFautesEtSanctions({
                 style={{
                   background: cardBg,
                   borderRadius: 12,
-                  padding: "16px 20px",
+                  padding: listCardPadding,
                   display: "flex",
+                  flexDirection: listItemFlexDirection,
                   justifyContent: "space-between",
-                  alignItems: "center",
+                  alignItems: listItemAlignItems,
+                  gap: listItemGap,
                   boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
                   border: `1px solid ${cardBorder}`,
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>{s.libelle}</div>
+                <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 16, color: textPrimary }}>{s.libelle}</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     onClick={() => startEditSanction(s)}
-                    style={{ background: buttonPrimaryBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
+                    style={{ background: buttonPrimaryBg, color: "white", border: "none", borderRadius: 6, padding: actionButtonPadding, cursor: "pointer", fontSize: actionButtonFontSize }}
                     title="Modifier"
                   >
                     <Edit2 size={16} />
                   </button>
                   <button
                     onClick={() => handleDeleteSanction(s._id)}
-                    style={{ background: buttonDangerBg, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}
+                    style={{ background: buttonDangerBg, color: "white", border: "none", borderRadius: 6, padding: actionButtonPadding, cursor: "pointer", fontSize: actionButtonFontSize }}
                     title="Supprimer"
                   >
                     <Trash2 size={16} />
