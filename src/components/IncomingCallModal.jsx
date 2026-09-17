@@ -86,7 +86,6 @@ function buildTokens(dark) {
     avatarFg: dark ? "#818CF8" : "#4F46E5",
     primary: dark ? "#818CF8" : "#4F46E5",
     primaryBorder: dark ? "#1E293B" : "#FFFFFF",
-    // Gradients pour les boutons
     rejectGradient: "linear-gradient(135deg, #EF4444, #DC2626)",
     rejectShadow: "0 6px 18px rgba(239,68,68,0.4)",
     acceptGradient: "linear-gradient(135deg, #10B981, #059669)",
@@ -114,13 +113,19 @@ function getInitials(name) {
   ).toUpperCase();
 }
 
-function createRingtone(ctx) {
+/**
+ * ✅ FIX : accepte un `masterGain` node pour permettre le mute global.
+ * Le gain individuel du ringtone reste à 0.15, mais le masterGain
+ * multiplie tout (0 = muted, 1 = normal).
+ */
+function createRingtone(ctx, masterGain) {
   const oscillator = ctx.createOscillator();
   const gain = ctx.createGain();
   oscillator.frequency.value = 425;
   oscillator.type = "sine";
   oscillator.connect(gain);
-  gain.connect(ctx.destination);
+  // ✅ Connecte au masterGain (qui gère le mute) au lieu de ctx.destination
+  gain.connect(masterGain);
   gain.gain.setValueAtTime(0, ctx.currentTime);
   gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.02);
   gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.35);
@@ -250,9 +255,13 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
   const audioRef = useRef(null);
   const webAudioCtxRef = useRef(null);
   const webAudioIntervalRef = useRef(null);
+  // ✅ FIX : ref vers le GainNode maître (permet le mute global)
+  const webAudioMasterGainRef = useRef(null);
   const timerRef = useRef(null);
 
   const hasEndedRef = useRef(false);
+  // ✅ Ref pour lire `muted` sans re-déclencher le useEffect de démarrage
+  const mutedRef = useRef(muted);
   const onRejectRef = useRef(onReject);
   const onAcceptRef = useRef(onAccept);
 
@@ -260,6 +269,11 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
     onRejectRef.current = onReject;
     onAcceptRef.current = onAccept;
   }, [onReject, onAccept]);
+
+  // ✅ Sync mutedRef avec muted (pour lecture dans le useEffect audio)
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   // ════════════════════════════════════════════════════════════════════
   // STOP AUDIO
@@ -281,6 +295,8 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
       } catch {}
       webAudioCtxRef.current = null;
     }
+    // ✅ Reset master gain
+    webAudioMasterGainRef.current = null;
   }, []);
 
   const handleAccept = useCallback(() => {
@@ -319,8 +335,10 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
   }, [secondsLeft, handleReject]);
 
   // ════════════════════════════════════════════════════════════════════
-  // AUDIO (démarrage au montage)
+  // AUDIO — Démarrage (une seule fois au montage)
   // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX : `muted` retiré des deps → ne redémarre plus à chaque toggle
+  //          Le volume est ajusté séparément (useEffect ci-dessous).
   useEffect(() => {
     let cancelled = false;
 
@@ -329,7 +347,8 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
       if (!audio) return;
 
       audio.loop = true;
-      audio.volume = muted ? 0 : 1;
+      // ✅ Utilise mutedRef.current (valeur actuelle sans dépendance)
+      audio.volume = mutedRef.current ? 0 : 1;
 
       try {
         await audio.play();
@@ -350,12 +369,19 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
             }
           }
 
-          createRingtone(ctx);
+          // ✅ FIX : masterGain qui permet de muter tout le ringtone
+          const masterGain = ctx.createGain();
+          masterGain.gain.value = mutedRef.current ? 0 : 1;
+          masterGain.connect(ctx.destination);
+          webAudioMasterGainRef.current = masterGain;
+
+          createRingtone(ctx, masterGain);
 
           webAudioIntervalRef.current = setInterval(() => {
             const c = webAudioCtxRef.current;
-            if (c && c.state === "running") {
-              createRingtone(c);
+            const g = webAudioMasterGainRef.current;
+            if (c && g && c.state === "running") {
+              createRingtone(c, g);
             }
           }, 3000);
         } catch (fallbackErr) {
@@ -374,13 +400,24 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
       cancelled = true;
       stopAllAudio();
     };
-  }, [stopAllAudio, muted]);
+  }, [stopAllAudio]);
 
-  // ✅ Mute (ajuste volume uniquement)
+  // ════════════════════════════════════════════════════════════════════
+  // AUDIO — Volume (indépendant du démarrage)
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX : ajuste `<audio>` ET le masterGain Web Audio
   useEffect(() => {
     const audio = audioRef.current;
     if (audio) {
       audio.volume = muted ? 0 : 1;
+    }
+    const masterGain = webAudioMasterGainRef.current;
+    if (masterGain) {
+      try {
+        masterGain.gain.value = muted ? 0 : 1;
+      } catch (err) {
+        console.warn("[IncomingCallModal] masterGain update failed:", err);
+      }
     }
   }, [muted]);
 
@@ -413,7 +450,6 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
 
   const progress = ((RING_DURATION - secondsLeft) / RING_DURATION) * 100;
 
-  // ✅ FIX — Initiales 2 lettres (cohérent avec le reste de l'app)
   const initials = useMemo(() => {
     if (!callerUser?.nom) return null;
     return getInitials(callerUser.nom);
@@ -449,7 +485,6 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
           alignItems: "center",
           justifyContent: "center",
           zIndex: 9999,
-          // ✅ Safe-area iOS
           paddingTop: "calc(16px + env(safe-area-inset-top, 0px))",
           paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
           paddingLeft: 16,
@@ -479,7 +514,6 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
               marginBottom: 20,
             }}
           >
-            {/* Halo animé (derrière l'avatar) */}
             <div
               className="icm-halo"
               style={{
@@ -493,7 +527,6 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
               aria-hidden="true"
             />
 
-            {/* Avatar */}
             <div
               style={{
                 width: isMobile ? 96 : 112,
@@ -516,7 +549,6 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
               {initials || <User size={isMobile ? 40 : 48} />}
             </div>
 
-            {/* Pastille "appel entrant" — shake animé */}
             <div
               className="icm-shake"
               style={{

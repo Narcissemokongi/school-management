@@ -290,7 +290,6 @@ export default defineSchema({
 
   // ========== APPELS ==========
   appels: defineTable({
-    ecoleId: v.id("ecoles"),
     callerId: v.id("users"),
     calleeId: v.optional(v.id("users")),
     channelName: v.string(),
@@ -298,29 +297,22 @@ export default defineSchema({
       v.literal("ringing"),
       v.literal("accepted"),
       v.literal("rejected"),
-      v.literal("ended"),
-      v.literal("missed")
+      v.literal("missed"),
+      v.literal("ended")
     ),
-    type: v.optional(v.union(v.literal("audio"), v.literal("video"))),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+    type: v.union(v.literal("audio"), v.literal("video")),
     isGroup: v.optional(v.boolean()),
     groupId: v.optional(v.string()),
     participants: v.optional(v.array(v.id("users"))),
-    duration: v.optional(v.number()),
-    callDirection: v.optional(v.union(v.literal("incoming"), v.literal("outgoing"))),
-    missedReason: v.optional(v.string()),
+    callDirection: v.optional(v.string()),
     ipMasked: v.optional(v.boolean()),
     createdAt: v.string(),
-    anneeId: v.optional(v.id("anneesScolaires")),
   })
     .index("by_caller", ["callerId"])
     .index("by_callee", ["calleeId"])
-    .index("by_group", ["groupId"])
-    .index("by_status", ["status"])
-    // 🔴 CRITIQUE : nécessaire pour `agora.generateToken` → vérif participant
-    .index("by_channelName", ["channelName"])
-    // 🟢 AJOUT : optimise `cleanupExpiredCalls`
-    .index("by_status_createdAt", ["status", "createdAt"]),
-
+    .index("by_channelName", ["channelName"]),
   // ========== MESSAGES ==========
   messages: defineTable({
     ecoleId: v.id("ecoles"),

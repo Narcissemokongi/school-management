@@ -13,7 +13,6 @@ const RING_DURATION = 60; // secondes
 
 // ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level (injectés UNE SEULE FOIS)
-// 2 variantes de pulse (light/dark) — évite de recréer le keyframe
 // ════════════════════════════════════════════════════════════════════
 const OutgoingCallModalKeyframes = (
   <style>{`
@@ -83,7 +82,6 @@ function buildTokens(dark) {
     kbdBg: dark ? "#0F172A" : "#F1F5F9",
     kbdBorder: dark ? "#334155" : "#E2E8F0",
     kbdText: dark ? "#CBD5E1" : "#475569",
-    // Progress
     progress: {
       safe: "#10B981",
       warn: "#F59E0B",
@@ -93,15 +91,30 @@ function buildTokens(dark) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// FALLBACK AUDIO (bip Web Audio API si dialtone.mp3 absent)
+// HELPERS
 // ════════════════════════════════════════════════════════════════════
-function createRingtone(ctx) {
+// ✅ FIX : 2 lettres (cohérent avec IncomingCallModal)
+function getInitials(name) {
+  if (!name) return "?";
+  const parts = String(name).trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (
+    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+  ).toUpperCase();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// FALLBACK AUDIO (dialtone Web Audio API si dialtone.mp3 absent)
+// ════════════════════════════════════════════════════════════════════
+// ✅ FIX : accepte un masterGain node pour permettre le mute global
+function createRingtone(ctx, masterGain) {
   const oscillator = ctx.createOscillator();
   const gain = ctx.createGain();
   oscillator.frequency.value = 425;
   oscillator.type = "sine";
   oscillator.connect(gain);
-  gain.connect(ctx.destination);
+  // ✅ Connecte au masterGain (qui gère le mute) au lieu de ctx.destination
+  gain.connect(masterGain);
   gain.gain.setValueAtTime(0, ctx.currentTime);
   gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.02);
   gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.35);
@@ -141,7 +154,6 @@ function RoundActionButton({
         opacity: disabled ? 0.5 : 1,
       };
     }
-    // ghost (mute)
     return {
       background: disabled
         ? "transparent"
@@ -209,14 +221,11 @@ function RoundActionButton({
           alignItems: "center",
           justifyContent: "center",
           padding: 0,
-          // ✅ transition + transform via state
           transition:
             "background 0.15s ease, transform 0.1s ease, color 0.15s ease",
           transform: pressed && !disabled ? "scale(0.94)" : "scale(1)",
-          // ✅ Focus visible
           outline: focused ? `2px solid ${tokens.primary}` : "none",
           outlineOffset: 3,
-          // ✅ Anti-flash sur tap mobile
           WebkitTapHighlightColor: "transparent",
           ...styleByVariant,
         }}
@@ -259,15 +268,24 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
   const audioRef = useRef(null);
   const webAudioCtxRef = useRef(null);
   const webAudioIntervalRef = useRef(null);
+  // ✅ FIX : ref vers le GainNode maître (permet le mute global)
+  const webAudioMasterGainRef = useRef(null);
   const timerRef = useRef(null);
 
   // ✅ Refs pour éviter les doubles appels en Strict Mode
   const hasEndedRef = useRef(false);
+  // ✅ Ref pour lire `muted` sans re-déclencher le useEffect de démarrage
+  const mutedRef = useRef(muted);
   const onCancelRef = useRef(onCancel);
 
   useEffect(() => {
     onCancelRef.current = onCancel;
   }, [onCancel]);
+
+  // ✅ Sync mutedRef avec muted
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   // ════════════════════════════════════════════════════════════════════
   // ARRÊT AUDIO
@@ -289,6 +307,8 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
       } catch {}
       webAudioCtxRef.current = null;
     }
+    // ✅ Reset master gain
+    webAudioMasterGainRef.current = null;
   }, []);
 
   const handleCancel = useCallback(() => {
@@ -319,8 +339,9 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
   }, [secondsLeft, handleCancel]);
 
   // ════════════════════════════════════════════════════════════════════
-  // AUDIO (start + mute combinés)
+  // AUDIO — Démarrage (une seule fois au montage)
   // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX : `muted` n'est plus lu directement (via mutedRef)
   useEffect(() => {
     let cancelled = false;
 
@@ -328,8 +349,8 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
       const audio = audioRef.current;
       if (audio) {
         audio.loop = true;
-        // ✅ FIX — volume initial respecte `muted`
-        audio.volume = muted ? 0 : 1;
+        // ✅ Utilise mutedRef.current (valeur actuelle sans dépendance)
+        audio.volume = mutedRef.current ? 0 : 1;
         try {
           await audio.play();
           return;
@@ -353,12 +374,19 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
               }
             }
 
-            createRingtone(ctx);
+            // ✅ FIX : masterGain qui permet de muter tout le ringtone
+            const masterGain = ctx.createGain();
+            masterGain.gain.value = mutedRef.current ? 0 : 1;
+            masterGain.connect(ctx.destination);
+            webAudioMasterGainRef.current = masterGain;
+
+            createRingtone(ctx, masterGain);
 
             webAudioIntervalRef.current = setInterval(() => {
               const c = webAudioCtxRef.current;
-              if (c && c.state === "running") {
-                createRingtone(c);
+              const g = webAudioMasterGainRef.current;
+              if (c && g && c.state === "running") {
+                createRingtone(c, g);
               }
             }, 3000);
           } catch (fallbackErr) {
@@ -380,11 +408,22 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
     };
   }, [stopAllAudio]);
 
-  // ✅ Effet séparé pour mute (ne rejoue pas le son)
+  // ════════════════════════════════════════════════════════════════════
+  // AUDIO — Volume (indépendant du démarrage)
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX : ajuste `<audio>` ET le masterGain Web Audio
   useEffect(() => {
     const audio = audioRef.current;
     if (audio) {
       audio.volume = muted ? 0 : 1;
+    }
+    const masterGain = webAudioMasterGainRef.current;
+    if (masterGain) {
+      try {
+        masterGain.gain.value = muted ? 0 : 1;
+      } catch (err) {
+        console.warn("[OutgoingCallModal] masterGain update failed:", err);
+      }
     }
   }, [muted]);
 
@@ -413,7 +452,12 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
   };
 
   const progress = ((RING_DURATION - secondsLeft) / RING_DURATION) * 100;
-  const initials = calleeUser?.nom?.charAt(0).toUpperCase() || null;
+
+  // ✅ FIX : utilise getInitials() (2 lettres) comme IncomingCallModal
+  const initials = useMemo(() => {
+    if (!calleeUser?.nom) return null;
+    return getInitials(calleeUser.nom);
+  }, [calleeUser?.nom]);
 
   const progressColor =
     progress < 70
@@ -422,7 +466,7 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
       ? tokens.progress.warn
       : tokens.progress.danger;
 
-  // ✅ Pulse class selon le mode (pas de keyframe dynamique)
+  // ✅ Pulse class selon le mode
   const pulseClass = dark ? "ocm-pulse-dark" : "ocm-pulse-light";
 
   // ════════════════════════════════════════════════════════════════════
@@ -446,7 +490,6 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
           alignItems: "center",
           justifyContent: "center",
           zIndex: 9999,
-          // ✅ Safe-area iOS
           paddingTop: "calc(16px + env(safe-area-inset-top, 0px))",
           paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
           paddingLeft: 16,
@@ -492,13 +535,13 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
                 border: `3px solid ${tokens.primaryBorder}`,
                 position: "relative",
                 zIndex: 1,
+                letterSpacing: "-0.02em",
               }}
               aria-hidden="true"
             >
               {initials || <User size={isMobile ? 40 : 48} />}
             </div>
 
-            {/* Pastille "appel sortant" */}
             <div
               style={{
                 position: "absolute",
@@ -588,7 +631,6 @@ export function OutgoingCallModal({ callId, calleeId, onCancel }) {
                 height: "100%",
                 background: progressColor,
                 borderRadius: 2,
-                // ✅ transition plus courte pour un rendu fluide
                 transition:
                   "width 0.3s ease, background-color 0.3s ease",
               }}

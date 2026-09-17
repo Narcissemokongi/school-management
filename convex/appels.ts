@@ -85,6 +85,30 @@ async function sendPushNotification(
   }
 }
 
+/**
+ * 🔴 FIX MAJEUR : helper qui vérifie si un user participe à un appel.
+ * Utilisé partout pour éviter la logique dupliquée.
+ *
+ * Un user participe si :
+ * - Appel individuel : il est caller OU callee
+ * - Appel groupe : il est caller OU dans participants[]
+ *
+ * MAIS : si le user a explicitement refusé (`declinedBy[]`), il ne participe plus.
+ */
+function isUserParticipant(
+  call: Doc<"appels">,
+  userId: Id<"users">
+): boolean {
+  if (call.isGroup) {
+    if (call.callerId === userId) return true;
+    if (!call.participants?.includes(userId)) return false;
+    // S'il a refusé, il n'est plus participant actif
+    if (call.declinedBy?.includes(userId)) return false;
+    return true;
+  }
+  return call.callerId === userId || call.calleeId === userId;
+}
+
 // ========== APPEL INDIVIDUEL ==========
 export const createCall = mutation({
   args: {
@@ -197,6 +221,7 @@ export const createGroupCall = mutation({
       isGroup: true,
       groupId: args.groupId,
       participants: args.participantIds,
+      declinedBy: [], // ✅ NOUVEAU : tracker les refus individuels
       type: args.type,
       callDirection: "outgoing",
       ipMasked: true,
@@ -224,22 +249,39 @@ export const acceptCall = mutation({
   args: { callId: v.id("appels"), userId: v.id("users") },
   handler: async (ctx, args) => {
     const call = await ctx.db.get(args.callId);
-    if (!call || call.status !== "ringing") {
-      throw new Error("Appel introuvable ou déjà terminé");
+    if (!call) {
+      throw new Error("Appel introuvable");
     }
     await requireAuth(ctx, args.userId);
+
+    if (call.status === "ended" || call.status === "rejected") {
+      throw new Error("Appel déjà terminé");
+    }
 
     if (call.isGroup) {
       if (!call.participants?.includes(args.userId)) {
         throw new Error("Vous n'êtes pas invité à cet appel");
       }
+      // ✅ S'il a refusé avant, on l'enlève de declinedBy
+      if (call.declinedBy?.includes(args.userId)) {
+        await ctx.db.patch(args.callId, {
+          declinedBy: call.declinedBy.filter((id) => id !== args.userId),
+        });
+      }
+      // ✅ Pour un groupe : le 1er accept fait passer ringing → accepted
+      if (call.status === "ringing") {
+        await ctx.db.patch(args.callId, { status: "accepted" });
+      }
     } else {
       if (call.calleeId !== args.userId) {
         throw new Error("Vous n'êtes pas le destinataire");
       }
+      if (call.status !== "ringing") {
+        throw new Error("Appel introuvable ou déjà terminé");
+      }
+      await ctx.db.patch(args.callId, { status: "accepted" });
     }
 
-    await ctx.db.patch(args.callId, { status: "accepted" });
     return { success: true };
   },
 });
@@ -248,24 +290,49 @@ export const rejectCall = mutation({
   args: { callId: v.id("appels"), userId: v.id("users") },
   handler: async (ctx, args) => {
     const call = await ctx.db.get(args.callId);
-    if (!call || call.status !== "ringing") {
-      throw new Error("Appel introuvable ou déjà terminé");
+    if (!call) {
+      throw new Error("Appel introuvable");
     }
     await requireAuth(ctx, args.userId);
 
     if (call.isGroup) {
-      // Le refus d'un participant ne termine pas l'appel de groupe
-      return { success: true, ignored: true };
+      // ✅ FIX : pour un groupe, on RETIRE le user de la liste de sonnerie
+      if (!call.participants?.includes(args.userId)) {
+        throw new Error("Vous n'êtes pas invité à cet appel");
+      }
+      const declinedBy = [...(call.declinedBy ?? []), args.userId];
+      await ctx.db.patch(args.callId, { declinedBy });
+
+      // ✅ Si TOUS les invités ont refusé → appel terminé
+      const stillRinging = (call.participants ?? []).filter(
+        (p) =>
+          p !== call.callerId &&
+          !declinedBy.includes(p)
+      );
+      if (stillRinging.length === 0 && call.status === "ringing") {
+        await ctx.db.patch(args.callId, { status: "rejected" });
+      }
+      return { success: true, ignored: false };
     }
 
     if (call.calleeId !== args.userId) {
       throw new Error("Vous n'êtes pas le destinataire");
+    }
+    if (call.status !== "ringing") {
+      throw new Error("Appel introuvable ou déjà terminé");
     }
     await ctx.db.patch(args.callId, { status: "rejected" });
     return { success: true };
   },
 });
 
+/**
+ * 🔴 FIX MAJEUR : `endCall` était utilisé pour TOUT (individuel ET groupe).
+ * Pour un groupe, 1 raccrochage terminait l'appel pour TOUS les participants.
+ *
+ * Maintenant : `endCall` refuse les appels de groupe.
+ * Utiliser `leaveGroupCall` à la place.
+ */
 export const endCall = mutation({
   args: { callId: v.id("appels"), userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -273,9 +340,15 @@ export const endCall = mutation({
     if (!call) return { success: true, alreadyEnded: true };
     await requireAuth(ctx, args.userId);
 
-    const isParticipant = call.isGroup
-      ? call.participants?.includes(args.userId) || call.callerId === args.userId
-      : call.callerId === args.userId || call.calleeId === args.userId;
+    // 🔴 FIX : refuse explicitement les groupes
+    if (call.isGroup) {
+      throw new Error(
+        "Utilisez leaveGroupCall pour quitter un appel de groupe."
+      );
+    }
+
+    const isParticipant =
+      call.callerId === args.userId || call.calleeId === args.userId;
 
     if (!isParticipant) {
       throw new Error("Vous ne pouvez pas terminer cet appel");
@@ -283,6 +356,56 @@ export const endCall = mutation({
 
     await ctx.db.patch(args.callId, { status: "ended" });
     return { success: true };
+  },
+});
+
+/**
+ * ✅ NOUVEAU : quitter un appel de groupe SANS terminer pour les autres.
+ *
+ * - Retire le user de `participants[]`
+ * - Si le user était le caller → il reste (callerId inchangé)
+ * - Si plus AUCUN participant actif → statut "ended"
+ * - Si c'était le dernier → on peut patcher à "ended"
+ */
+export const leaveGroupCall = mutation({
+  args: { callId: v.id("appels"), userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.callId);
+    if (!call) return { success: true, alreadyEnded: true };
+    if (!call.isGroup) {
+      throw new Error("Cet appel n'est pas un appel de groupe.");
+    }
+    await requireAuth(ctx, args.userId);
+
+    // Vérifier que le user participe
+    const isCaller = call.callerId === args.userId;
+    const isInParticipants = call.participants?.includes(args.userId) ?? false;
+    if (!isCaller && !isInParticipants) {
+      throw new Error("Vous ne participez pas à cet appel.");
+    }
+
+    // Retirer le user des participants actifs
+    const remainingParticipants = (call.participants ?? []).filter(
+      (p) => p !== args.userId
+    );
+
+    // Si le caller quitte OU s'il ne reste plus personne → terminer
+    const noOneLeft = remainingParticipants.length === 0;
+
+    if (noOneLeft) {
+      await ctx.db.patch(args.callId, { status: "ended" });
+      return { success: true, ended: true };
+    }
+
+    await ctx.db.patch(args.callId, {
+      participants: remainingParticipants,
+      // Si c'était le caller, on transfère au 1er restant (optionnel)
+      ...(isCaller
+        ? { callerId: remainingParticipants[0] }
+        : {}),
+    });
+
+    return { success: true, ended: false };
   },
 });
 
@@ -302,11 +425,7 @@ export const markCallMissed = mutation({
 
     const caller = await requireAuth(ctx, args.userId);
 
-    const isParticipant = call.isGroup
-      ? call.participants?.includes(args.userId) || call.callerId === args.userId
-      : call.callerId === args.userId || call.calleeId === args.userId;
-
-    if (!isParticipant && !isSuperAdmin(caller)) {
+    if (!isUserParticipant(call, args.userId) && !isSuperAdmin(caller)) {
       throw new Error("Vous ne pouvez pas modifier cet appel");
     }
 
@@ -319,22 +438,11 @@ export const markCallMissed = mutation({
 
 /**
  * ✅ FIX — `cleanupExpiredCalls` accessible à tout utilisateur authentifié.
- *
- * C'est une opération de MAINTENANCE technique :
- * - Idempotente : relancer ne casse rien (marque "missed" uniquement les
- *   appels ringing vieux de plus de 60s)
- * - Sans impact métier : ne modifie que le statut d'appels fantômes
- * - Ne retourne aucune donnée sensible (juste un count)
- *
- * AVANT : réservé au super-admin → non-exécuté pour 99% des utilisateurs
- *         → accumulation d'appels fantômes en base
- * APRÈS : tout utilisateur connecté peut le déclencher
- *         → auto-nettoyage à chaque ouverture de l'onglet Appels
+ * ...
  */
 export const cleanupExpiredCalls = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    // ✅ Vérifie seulement que l'utilisateur est authentifié
     await requireAuth(ctx, args.userId);
 
     const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
@@ -359,6 +467,7 @@ export const cleanupExpiredCalls = mutation({
 export const getPendingCall = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
+    // Appel direct en sonnerie pour ce user
     const direct = await ctx.db
       .query("appels")
       .withIndex("by_callee", (q) => q.eq("calleeId", args.userId))
@@ -367,6 +476,7 @@ export const getPendingCall = query({
       .first();
     if (direct) return direct;
 
+    // Appel groupe en sonnerie pour ce user
     const allRinging = await ctx.db
       .query("appels")
       .filter((q) => q.eq(q.field("status"), "ringing"))
@@ -374,7 +484,12 @@ export const getPendingCall = query({
 
     return (
       allRinging.find(
-        (c) => c.isGroup && c.participants?.includes(args.userId)
+        (c) =>
+          c.isGroup &&
+          c.callerId !== args.userId &&
+          c.participants?.includes(args.userId) &&
+          // ✅ FIX : ne pas re-proposer si déjà refusé
+          !c.declinedBy?.includes(args.userId)
       ) || null
     );
   },
@@ -389,23 +504,14 @@ export const getActiveCall = query({
       .take(MAX_APPELS);
 
     return (
-      allAccepted.find((c) =>
-        c.isGroup
-          ? c.participants?.includes(args.userId) || c.callerId === args.userId
-          : c.callerId === args.userId || c.calleeId === args.userId
-      ) || null
+      allAccepted.find((c) => isUserParticipant(c, args.userId)) || null
     );
   },
 });
 
-/**
- * 🔴 FIX : `.take()` au lieu de `.collect()`.
- * 🟡 Note : filtrer par école est déjà fait via l'index `by_ecoleId`.
- */
 export const listContacts = query({
   args: { ecoleId: v.id("ecoles"), userId: v.id("users") },
   handler: async (ctx, args) => {
-    // 🟡 Vérif que l'appelant appartient bien à cette école
     const caller = await getUser(ctx, args.userId);
     if (!caller) throw new Error("Authentification requise");
     if (!isSuperAdmin(caller) && caller.ecoleId !== args.ecoleId) {
@@ -417,7 +523,6 @@ export const listContacts = query({
       .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
       .take(MAX_CONTACTS);
 
-    // Ne pas retourner les champs sensibles
     return users
       .filter((u) => u._id !== args.userId)
       .map(({ password, loginAttempts, lockedUntil, ...safe }) => safe);
@@ -439,6 +544,9 @@ export const getOutgoingCall = query({
 export const listHistory = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
+    const caller = await requireAuth(ctx, args.userId);
+    const callerEcole = caller.ecoleId;
+
     const directCalls = await ctx.db
       .query("appels")
       .filter((q) =>
@@ -450,13 +558,22 @@ export const listHistory = query({
       .order("desc")
       .take(MAX_HISTORY);
 
+    // ✅ FIX : filtrer par école pour éviter la fuite PII
     const groupCalls = await ctx.db
       .query("appels")
-      .filter((q) => q.eq(q.field("isGroup"), true))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("isGroup"), true),
+          callerEcole
+            ? q.eq(q.field("ecoleId"), callerEcole)
+            : q.eq(q.field("ecoleId"), undefined)
+        )
+      )
       .take(MAX_APPELS);
 
     const userGroupCalls = groupCalls.filter((c) =>
-      c.participants?.includes(args.userId)
+      c.participants?.includes(args.userId) ||
+      c.callerId === args.userId
     );
 
     return [...directCalls, ...userGroupCalls]
@@ -468,14 +585,6 @@ export const listHistory = query({
   },
 });
 
-/**
- * 🟢 NOUVEAU : récupérer un appel par son `channelName`.
- * Utilisé par `agora.generateToken` pour vérifier que l'appelant
- * est bien participant de l'appel avant de générer un token Agora.
- *
- * 🔴 Sécurité : sans cette vérification, un client authentifié pourrait
- * générer un token valide pour n'importe quel channel → espionnage.
- */
 export const getByChannelName = query({
   args: { channelName: v.string() },
   handler: async (ctx, args) => {

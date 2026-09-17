@@ -1,3 +1,4 @@
+// convex/agora.ts
 "use node";
 
 import { action } from "./_generated/server";
@@ -6,12 +7,37 @@ import { api } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 /**
- * 🔴 FIX CRITIQUE : vérifier que l'appelant est bien participant de l'appel
+ * 🔴 FIX CRITIQUE #1 : vérifier que l'appelant est bien participant de l'appel
  * identifié par `channelName` avant de générer un token.
  *
  * Avant : n'importe quel client authentifié pouvait générer un token pour
  * n'importe quel channel → espionnage d'appels.
+ *
+ * 🔴 FIX CRITIQUE #2 (NOUVEAU) : le token utilisait uid=0 (wildcard), mais le
+ * client faisait `join(APP_ID, channel, token, null)` → Agora acceptait la
+ * connexion (compteur tourne) mais rejetait SILENCIEUSEMENT tous les médias
+ * (audio/vidéo ne passent pas).
+ *
+ * Solution : dériver un uid numérique STABLE depuis userId et l'utiliser
+ * AUSSI BIEN dans le token que dans le join côté client.
  */
+
+/**
+ * Convertit un userId (string ObjectId Convex) en uid numérique uint32.
+ * Le même userId produira TOUJOURS le même uid.
+ *
+ * Note : Agora exige un uid dans la plage [1, 2^32-1], donc on évite 0.
+ */
+function userIdToUid(userId: string): number {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = (hash * 31 + userId.charCodeAt(i)) | 0;
+  }
+  // Math.abs + modulo pour rentrer dans uint32 valide, et éviter 0
+  const uid = Math.abs(hash) % 2147483646;
+  return uid === 0 ? 1 : uid + 1;
+}
+
 export const generateToken = action({
   args: {
     channelName: v.string(),
@@ -116,19 +142,23 @@ export const generateToken = action({
       );
     }
 
-    // 6. Génération du token
-    // Note : uid=0 → Agora assigne un uid automatique au join.
-    // Si tu veux un uid stable par utilisateur (pour du tracking), il faut
-    // calculer un uint32 depuis user._id — pas critique pour l'instant.
+    // 6. 🔴 FIX CRITIQUE : uid explicite et stable
+    // On dérive un uid numérique unique depuis userId pour que :
+    // - le token contienne CE uid précis
+    // - le client fasse join() avec CE MÊME uid
+    // → Agora sait qui publie quoi → audio/vidéo fonctionnent.
+    const uid = userIdToUid(args.userId);
+
     const token = RtcTokenBuilder.buildTokenWithUid(
       appId,
       appCertificate,
       args.channelName,
-      0,
+      uid,                // ✅ uid explicite (pas 0)
       RtcRole.PUBLISHER,
       privilegeExpiredTs
     );
 
-    return token;
+    // ✅ Retourner AUSSI l'uid pour que le client l'utilise au join()
+    return { token, uid };
   },
 });

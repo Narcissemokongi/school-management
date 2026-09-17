@@ -92,6 +92,7 @@ export function AppelVideo({
     if (onCallEndRef.current) onCallEndRef.current();
   }, [endCallMutation, callId, userId, cleanupLocal]);
 
+  // ✅ Retourne maintenant { token, uid } au lieu d'un string
   const generateTokenCallback = useCallback(
     async (channel, uid) => {
       try {
@@ -117,9 +118,13 @@ export function AppelVideo({
 
     const init = async () => {
       let token;
+      let agoraUid;
       try {
         setConnectionState("CONNECTING");
-        token = await generateTokenCallback(channelName, userId);
+        // ✅ FIX : le backend retourne { token, uid }
+        const result = await generateTokenCallback(channelName, userId);
+        token = result.token;
+        agoraUid = result.uid;
       } catch (err) {
         setConnectionState("ERROR");
         toast.error(err.message);
@@ -145,7 +150,9 @@ export function AppelVideo({
       });
 
       try {
-        await agoraClient.join(APP_ID, channelName, token, null);
+        // ✅ FIX CRITIQUE : on utilise agoraUid (numérique stable) au lieu de null
+        console.log("[AppelVideo] joining with uid:", agoraUid);
+        await agoraClient.join(APP_ID, channelName, token, agoraUid);
         if (destroyedRef.current) {
           try {
             agoraClient.leave();
@@ -369,6 +376,14 @@ export function AppelVideo({
 
   const isAudioCall = callType === "audio";
 
+  // ✅ Style miroir pour la caméra frontale (selfie = inversé comme iOS)
+  const localVideoMirrorStyle = {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    transform: isFrontCamera && !isAudioCall ? "scaleX(-1)" : "scaleX(1)",
+  };
+
   // Style flottant pour la vidéo locale
   const localFloatingStyle = {
     position: "absolute",
@@ -388,7 +403,8 @@ export function AppelVideo({
       style={{
         position: "relative",
         width: "100%",
-        height: "100vh",
+        // ✅ FIX iOS : 100dvh (dynamic viewport) évite que la barre Safari cache le bas
+        height: "100dvh",
         background: "#0F172A",
         color: "white",
         overflow: "hidden",
@@ -579,7 +595,7 @@ export function AppelVideo({
               <div style={localFloatingStyle}>
                 <div
                   ref={localVideoRef}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={localVideoMirrorStyle}
                 />
                 {isVideoOff && (
                   <div
@@ -623,7 +639,7 @@ export function AppelVideo({
             >
               <div
                 ref={localVideoRef}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                style={localVideoMirrorStyle}
               />
               {isVideoOff && (
                 <div
@@ -663,31 +679,37 @@ export function AppelVideo({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: isMobile ? 12 : 20,
+          gap: isMobile ? 10 : 20,
           padding: isMobile ? "8px 8px" : "12px 16px",
+          // ✅ FIX iOS : safe-area pour le notch en bas
+          paddingBottom: isMobile
+            ? "calc(8px + env(safe-area-inset-bottom, 0px))"
+            : "12px",
           background: "rgba(15,23,42,0.95)",
           borderTop: "1px solid rgba(255,255,255,0.08)",
+          flexWrap: "nowrap",
+          minWidth: 0,
         }}
       >
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 6,
             color: "#94A3B8",
-            fontSize: 15,
+            fontSize: isMobile ? 12 : 15,
             marginRight: "auto",
+            flexShrink: 0,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {connectionState === "CONNECTED" ? (
-            <Wifi size={16} color="#10B981" />
+            <Wifi size={isMobile ? 12 : 16} color="#10B981" />
           ) : (
-            <WifiOff size={16} color="#EF4444" />
+            <WifiOff size={isMobile ? 12 : 16} color="#EF4444" />
           )}
-          <Clock size={18} />
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>
-            {formatDuration(callDuration)}
-          </span>
+          <Clock size={isMobile ? 14 : 18} />
+          <span>{formatDuration(callDuration)}</span>
         </div>
 
         <button
@@ -695,23 +717,35 @@ export function AppelVideo({
           style={controlButtonStyle(isMuted ? "red" : "default", isMobile)}
           aria-label={isMuted ? "Activer le micro" : "Couper le micro"}
         >
-          {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
+          {isMuted ? (
+            <MicOff size={isMobile ? 18 : 22} />
+          ) : (
+            <Mic size={isMobile ? 18 : 22} />
+          )}
         </button>
         <button
           onClick={toggleVideo}
           style={controlButtonStyle(isVideoOff ? "red" : "default", isMobile)}
           aria-label={isVideoOff ? "Activer la caméra" : "Couper la caméra"}
         >
-          {isVideoOff ? <VideoOff size={22} /> : <Video size={22} />}
+          {isVideoOff ? (
+            <VideoOff size={isMobile ? 18 : 22} />
+          ) : (
+            <Video size={isMobile ? 18 : 22} />
+          )}
         </button>
-        <button
-          onClick={toggleSpeaker}
-          style={controlButtonStyle(isSpeakerOn ? "default" : "red", isMobile)}
-          aria-label={isSpeakerOn ? "Couper le haut-parleur" : "Activer le haut-parleur"}
-        >
-          {isSpeakerOn ? <Volume2 size={22} /> : <VolumeX size={22} />}
-        </button>
-        {!isAudioCall && (
+        {/* ✅ FIX : bouton haut-parleur caché sur mobile (hardware controls) */}
+        {!isMobile && (
+          <button
+            onClick={toggleSpeaker}
+            style={controlButtonStyle(isSpeakerOn ? "default" : "red", isMobile)}
+            aria-label={isSpeakerOn ? "Couper le haut-parleur" : "Activer le haut-parleur"}
+          >
+            {isSpeakerOn ? <Volume2 size={22} /> : <VolumeX size={22} />}
+          </button>
+        )}
+        {/* ✅ FIX : bouton switch camera caché sur mobile (overflow) */}
+        {!isAudioCall && !isMobile && (
           <button
             onClick={switchCamera}
             style={controlButtonStyle("default", isMobile)}
@@ -725,7 +759,11 @@ export function AppelVideo({
           style={controlButtonStyle(isOnHold ? "blue" : "default", isMobile)}
           aria-label={isOnHold ? "Reprendre l'appel" : "Mettre en attente"}
         >
-          {isOnHold ? <Play size={22} /> : <Pause size={22} />}
+          {isOnHold ? (
+            <Play size={isMobile ? 18 : 22} />
+          ) : (
+            <Pause size={isMobile ? 18 : 22} />
+          )}
         </button>
         {!isMobile && (
           <button
@@ -742,12 +780,12 @@ export function AppelVideo({
             ...controlButtonStyle("red", isMobile),
             background: "#EF4444",
             borderColor: "#EF4444",
-            width: isMobile ? 48 : 56,
-            height: isMobile ? 48 : 56,
+            width: isMobile ? 46 : 56,
+            height: isMobile ? 46 : 56,
           }}
           aria-label="Terminer l'appel"
         >
-          <PhoneOff size={26} />
+          <PhoneOff size={isMobile ? 22 : 26} />
         </button>
       </div>
     </div>
@@ -812,7 +850,7 @@ function RemoteVideo({ user, fullscreen }) {
 }
 
 function controlButtonStyle(variant, isMobile) {
-  const size = isMobile ? 44 : 52;
+  const size = isMobile ? 42 : 52;
   const base = {
     width: size,
     height: size,
@@ -826,6 +864,7 @@ function controlButtonStyle(variant, isMobile) {
     cursor: "pointer",
     transition: "all 0.2s",
     backdropFilter: "blur(4px)",
+    flexShrink: 0,
   };
   if (variant === "red") {
     return {

@@ -35,7 +35,10 @@ export function AppelGroupe({
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [isOnHold, setIsOnHold] = useState(false);
 
-  const endCallMutation = useMutation(api.appels.endCall);
+  // ✅ FIX CRITIQUE : leaveGroupCall au lieu de endCall
+  // endCall → termine pour TOUS les participants (bug)
+  // leaveGroupCall → retire uniquement l'utilisateur courant
+  const leaveGroupMutation = useMutation(api.appels.leaveGroupCall);
   const generateToken = useAction(api.agora.generateToken);
 
   const localVideoRef = useRef(null);
@@ -80,26 +83,33 @@ export function AppelGroupe({
     setIsOnHold(false);
   }, []);
 
+  // ✅ FIX CRITIQUE : utilise leaveGroupCall (n'éjecte que ce user)
   const handleEndCall = useCallback(async () => {
     if (destroyedRef.current) return;
     destroyedRef.current = true;
     try {
-      await endCallMutation({ callId, userId });
+      await leaveGroupMutation({ callId, userId });
     } catch (err) {
-      if (!err.message.includes("Appel introuvable")) {
-        console.error("[AppelGroupe] endCall failed:", err);
+      const msg = err?.message ?? "";
+      // On ignore silencieusement les cas "déjà parti"
+      if (
+        !msg.includes("Appel introuvable") &&
+        !msg.includes("ne participez pas") &&
+        !msg.includes("alreadyEnded")
+      ) {
+        console.error("[AppelGroupe] leaveGroupCall failed:", err);
       }
     }
     cleanupLocal();
     if (onCallEndRef.current) onCallEndRef.current();
-  }, [endCallMutation, callId, userId, cleanupLocal]);
+  }, [leaveGroupMutation, callId, userId, cleanupLocal]);
 
+  // ✅ Retourne { token, uid }
   const generateTokenCallback = useCallback(
     async (channel, uid) => {
       try {
         return await generateToken({ channelName: channel, userId: uid });
       } catch (err) {
-        // 🟡 FIX : ne pas propager le message backend au client
         console.error("[AppelGroupe] generateToken failed:", err);
         throw new Error("Impossible de générer le token d'appel");
       }
@@ -119,9 +129,12 @@ export function AppelGroupe({
 
     const init = async () => {
       let token;
+      let agoraUid;
       try {
         setConnectionState("CONNECTING");
-        token = await generateTokenCallback(channelName, userId);
+        const result = await generateTokenCallback(channelName, userId);
+        token = result.token;
+        agoraUid = result.uid;
       } catch (err) {
         setConnectionState("ERROR");
         toast.error(err.message);
@@ -147,7 +160,8 @@ export function AppelGroupe({
       });
 
       try {
-        await agoraClient.join(APP_ID, channelName, token, null);
+        console.log("[AppelGroupe] joining with uid:", agoraUid);
+        await agoraClient.join(APP_ID, channelName, token, agoraUid);
         if (destroyedRef.current) {
           try {
             agoraClient.leave();
@@ -172,9 +186,10 @@ export function AppelGroupe({
         if (callType === "audio") {
           tracks[1].setEnabled(false);
           setIsVideoOff(true);
+          await agoraClient.publish([tracks[0]]);
+        } else {
+          await agoraClient.publish([tracks[0], tracks[1]]);
         }
-
-        await agoraClient.publish([tracks[0], tracks[1]]);
 
         if (callType === "video" && localVideoRef.current && tracks[1]) {
           tracks[1].play(localVideoRef.current);
@@ -206,9 +221,11 @@ export function AppelGroupe({
         setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
       });
 
-      setTimeout(() => {
+      // Rattrapage : users déjà présents à l'arrivée
+      const retrySubscribe = (attempt = 0) => {
         if (destroyedRef.current || !agoraClient) return;
-        agoraClient.remoteUsers.forEach((user) => {
+        const existing = agoraClient.remoteUsers ?? [];
+        existing.forEach((user) => {
           agoraClient.subscribe(user, "video").catch(() => {});
           agoraClient.subscribe(user, "audio").catch(() => {});
           setRemoteUsers((prev) => {
@@ -216,7 +233,11 @@ export function AppelGroupe({
             return prev;
           });
         });
-      }, 800);
+        if (attempt < 2) {
+          setTimeout(() => retrySubscribe(attempt + 1), 800);
+        }
+      };
+      setTimeout(() => retrySubscribe(0), 800);
 
       timerRef.current = setInterval(() => {
         setCallDuration((prev) => prev + 1);
@@ -248,20 +269,25 @@ export function AppelGroupe({
 
   const toggleVideo = () => {
     const videoTrack = localTracksRef.current[1];
-    if (videoTrack) {
-      const newVideoOff = !isVideoOff;
-      videoTrack.setEnabled(!newVideoOff);
-      setIsVideoOff(newVideoOff);
-      if (!newVideoOff && localVideoRef.current) {
-        videoTrack.play(localVideoRef.current);
+    if (!videoTrack) return;
+
+    const newVideoOff = !isVideoOff;
+    videoTrack.setEnabled(!newVideoOff);
+    setIsVideoOff(newVideoOff);
+
+    if (!newVideoOff && localVideoRef.current) {
+      videoTrack.play(localVideoRef.current);
+      if (callType === "audio" && clientRef.current) {
+        clientRef.current.publish(videoTrack).catch((err) => {
+          console.warn("[AppelGroupe] publish video failed:", err);
+          toast.error("Impossible d'activer la vidéo");
+          videoTrack.setEnabled(false);
+          setIsVideoOff(true);
+        });
       }
     }
   };
 
-  /**
-   * 🟢 FIX : `getTrackLabel()` n'existe pas sur les tracks Agora.
-   * Utilise la bonne API : `getMediaStreamTrack().getSettings().deviceId`
-   */
   const switchCamera = async () => {
     if (localTracksRef.current[1]) {
       try {
@@ -357,21 +383,34 @@ export function AppelGroupe({
     unknown: "#94A3B8",
   }[networkQuality];
 
-  // Styles adaptatifs
-  const controlButtonSize = isMobile ? 44 : 52;
-  const controlGap = isMobile ? 10 : 20;
+  // Compteur réel (utilisateurs connectés)
+  const connectedCount = remoteUsers.length + 1;
+  const isWaitingForOthers = remoteUsers.length === 0;
+
+  // Styles mobile
+  const controlButtonSize = isMobile ? 42 : 52;
+  const controlGap = isMobile ? 8 : 20;
   const topPadding = isMobile ? "8px 12px" : "12px 16px";
   const gridGap = isMobile ? 8 : 12;
   const gridPadding = isMobile ? 8 : 16;
   const gridMin = isMobile ? "140px" : "200px";
   const bottomPadding = isMobile ? "8px 8px" : "12px 16px";
+  const iconSize = isMobile ? 18 : 22;
+
+  // ✅ Miroir caméra frontale pour la vidéo locale
+  const localVideoMirrorStyle = {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    transform: isFrontCamera && !isVideoOff ? "scaleX(-1)" : "scaleX(1)",
+  };
 
   return (
     <div
       style={{
         position: "relative",
         width: "100%",
-        height: "100vh",
+        height: "100dvh",
         background: "#0F172A",
         color: "white",
         overflow: "hidden",
@@ -379,10 +418,14 @@ export function AppelGroupe({
         flexDirection: "column",
       }}
     >
-      {/* 🟢 FIX : keyframes préfixés `ag-*` + classe utilitaire */}
       <style>{`
         @keyframes ag-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes ag-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
         .ag-spin { animation: ag-spin 1s linear infinite; }
+        .ag-pulse { animation: ag-pulse 1.6s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .ag-spin, .ag-pulse { animation: none !important; }
+        }
       `}</style>
 
       {/* Overlay de connexion */}
@@ -390,10 +433,7 @@ export function AppelGroupe({
         <div
           style={{
             position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            inset: 0,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -414,10 +454,7 @@ export function AppelGroupe({
         <div
           style={{
             position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            inset: 0,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -460,7 +497,7 @@ export function AppelGroupe({
           zIndex: 10,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
           <div
             style={{
               width: isMobile ? 32 : 36,
@@ -470,16 +507,40 @@ export function AppelGroupe({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              flexShrink: 0,
             }}
           >
             <Users size={isMobile ? 16 : 20} color="#94A3B8" />
           </div>
-          <span style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16 }}>
-            {groupName || "Appel de groupe"}
-          </span>
-          <span style={{ fontSize: isMobile ? 11 : 13, color: "#94A3B8" }}>
-            ({participants.length + 1} participants)
-          </span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                fontSize: isMobile ? 14 : 16,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {groupName || "Appel de groupe"}
+            </div>
+            <div
+              style={{
+                fontSize: isMobile ? 11 : 12,
+                color: "#94A3B8",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              {connectedCount} connecté{connectedCount > 1 ? "s" : ""}
+              {participants.length + 1 > connectedCount && (
+                <span style={{ color: "#F59E0B" }}>
+                  · {participants.length + 1 - connectedCount} en attente
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <div
           style={{
@@ -488,6 +549,7 @@ export function AppelGroupe({
             gap: 6,
             color: networkQualityColor,
             fontSize: isMobile ? 11 : 13,
+            flexShrink: 0,
           }}
         >
           <Wifi size={isMobile ? 14 : 16} />
@@ -504,8 +566,35 @@ export function AppelGroupe({
           gap: gridGap,
           padding: gridPadding,
           overflowY: "auto",
+          position: "relative",
         }}
       >
+        {isWaitingForOthers && connectionState === "CONNECTED" && (
+          <div
+            style={{
+              position: "absolute",
+              top: 12,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "rgba(79,70,229,0.15)",
+              border: "1px solid rgba(129,140,248,0.4)",
+              color: "#C7D2FE",
+              padding: "6px 14px",
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              zIndex: 5,
+              pointerEvents: "none",
+            }}
+          >
+            <span className="ag-pulse">●</span>
+            En attente des autres participants…
+          </div>
+        )}
+
         {/* Vidéo locale */}
         <div
           style={{
@@ -519,7 +608,7 @@ export function AppelGroupe({
         >
           <div
             ref={localVideoRef}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            style={localVideoMirrorStyle}
           />
           {isVideoOff && (
             <div
@@ -569,27 +658,32 @@ export function AppelGroupe({
           background: "rgba(15,23,42,0.95)",
           backdropFilter: "blur(8px)",
           borderTop: "1px solid rgba(255,255,255,0.08)",
+          paddingBottom: isMobile
+            ? "calc(8px + env(safe-area-inset-bottom, 0px))"
+            : "12px",
+          flexWrap: "nowrap",
+          minWidth: 0,
         }}
       >
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 6,
             color: "#94A3B8",
-            fontSize: isMobile ? 13 : 15,
+            fontSize: isMobile ? 12 : 15,
             marginRight: "auto",
+            flexShrink: 0,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {connectionState === "CONNECTED" ? (
-            <Wifi size={isMobile ? 14 : 16} color="#10B981" />
+            <Wifi size={isMobile ? 12 : 16} color="#10B981" />
           ) : (
-            <WifiOff size={isMobile ? 14 : 16} color="#EF4444" />
+            <WifiOff size={isMobile ? 12 : 16} color="#EF4444" />
           )}
-          <Clock size={isMobile ? 16 : 18} />
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>
-            {formatDuration(callDuration)}
-          </span>
+          <Clock size={isMobile ? 14 : 18} />
+          <span>{formatDuration(callDuration)}</span>
         </div>
 
         <button
@@ -597,22 +691,14 @@ export function AppelGroupe({
           style={controlButtonStyle(isMuted ? "red" : "default", controlButtonSize)}
           aria-label={isMuted ? "Activer le micro" : "Couper le micro"}
         >
-          {isMuted ? (
-            <MicOff size={isMobile ? 18 : 22} />
-          ) : (
-            <Mic size={isMobile ? 18 : 22} />
-          )}
+          {isMuted ? <MicOff size={iconSize} /> : <Mic size={iconSize} />}
         </button>
         <button
           onClick={toggleVideo}
           style={controlButtonStyle(isVideoOff ? "red" : "default", controlButtonSize)}
           aria-label={isVideoOff ? "Activer la caméra" : "Couper la caméra"}
         >
-          {isVideoOff ? (
-            <VideoOff size={isMobile ? 18 : 22} />
-          ) : (
-            <Video size={isMobile ? 18 : 22} />
-          )}
+          {isVideoOff ? <VideoOff size={iconSize} /> : <Video size={iconSize} />}
         </button>
         {!isMobile && (
           <button
@@ -621,32 +707,26 @@ export function AppelGroupe({
             title="Changer de caméra"
             aria-label="Changer de caméra"
           >
-            <SwitchCamera size={22} />
+            <SwitchCamera size={iconSize} />
           </button>
         )}
-        <button
-          onClick={toggleSpeaker}
-          style={controlButtonStyle(isSpeakerOn ? "default" : "red", controlButtonSize)}
-          title="Haut-parleur"
-          aria-label={isSpeakerOn ? "Couper le haut-parleur" : "Activer le haut-parleur"}
-        >
-          {isSpeakerOn ? (
-            <Volume2 size={isMobile ? 18 : 22} />
-          ) : (
-            <VolumeX size={isMobile ? 18 : 22} />
-          )}
-        </button>
+        {!isMobile && (
+          <button
+            onClick={toggleSpeaker}
+            style={controlButtonStyle(isSpeakerOn ? "default" : "red", controlButtonSize)}
+            title="Haut-parleur"
+            aria-label={isSpeakerOn ? "Couper le haut-parleur" : "Activer le haut-parleur"}
+          >
+            {isSpeakerOn ? <Volume2 size={iconSize} /> : <VolumeX size={iconSize} />}
+          </button>
+        )}
         <button
           onClick={toggleHold}
           style={controlButtonStyle(isOnHold ? "blue" : "default", controlButtonSize)}
           title="Mettre en attente"
           aria-label={isOnHold ? "Reprendre l'appel" : "Mettre en attente"}
         >
-          {isOnHold ? (
-            <Play size={isMobile ? 18 : 22} />
-          ) : (
-            <Pause size={isMobile ? 18 : 22} />
-          )}
+          {isOnHold ? <Play size={iconSize} /> : <Pause size={iconSize} />}
         </button>
         {!isMobile && (
           <button
@@ -654,7 +734,7 @@ export function AppelGroupe({
             style={controlButtonStyle(isScreenSharing ? "blue" : "default", controlButtonSize)}
             aria-label={isScreenSharing ? "Arrêter le partage" : "Partager l'écran"}
           >
-            {isScreenSharing ? <MonitorOff size={22} /> : <Monitor size={22} />}
+            {isScreenSharing ? <MonitorOff size={iconSize} /> : <Monitor size={iconSize} />}
           </button>
         )}
         <button
@@ -663,10 +743,10 @@ export function AppelGroupe({
             ...controlButtonStyle("red", controlButtonSize),
             background: "#EF4444",
             borderColor: "#EF4444",
-            width: isMobile ? 48 : 56,
-            height: isMobile ? 48 : 56,
+            width: isMobile ? 46 : 56,
+            height: isMobile ? 46 : 56,
           }}
-          aria-label="Terminer l'appel"
+          aria-label="Quitter l'appel"
         >
           <PhoneOff size={isMobile ? 22 : 26} />
         </button>
@@ -750,6 +830,7 @@ function controlButtonStyle(variant, size = 52) {
     cursor: "pointer",
     transition: "all 0.2s",
     backdropFilter: "blur(4px)",
+    flexShrink: 0,
   };
   if (variant === "red") {
     return {

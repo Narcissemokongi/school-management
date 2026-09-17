@@ -24,6 +24,8 @@ ios/capacitor-cordova-ios-plugins/
 .env
 .env.local
 .env*.local
+.env.production
+.env*.production
 
 # Logs
 logs
