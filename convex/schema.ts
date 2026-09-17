@@ -22,7 +22,11 @@ export default defineSchema({
     nom: v.string(),
     ecoleId: v.id("ecoles"),
     estActive: v.boolean(),
-  }).index("by_ecoleId", ["ecoleId"]),
+    dateLimitePassage: v.optional(v.string()),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    // 🟢 AJOUT : optimise `getActive`
+    .index("by_ecoleId_estActive", ["ecoleId", "estActive"]),
 
   // ========== UTILISATEURS ==========
   users: defineTable({
@@ -46,7 +50,13 @@ export default defineSchema({
     permissions: v.optional(v.array(v.string())),
   })
     .index("by_login", ["login"])
-    .index("by_ecoleId", ["ecoleId"]),
+    .index("by_ecoleId", ["ecoleId"])
+    // 🟢 AJOUT : optimise `listPendingUsers` (filtre école + status)
+    .index("by_ecoleId_status", ["ecoleId", "status"])
+    // 🟢 AJOUT : optimise `listAllPendingUsers` (tous les pending sans filtre école)
+    .index("by_status", ["status"])
+    // 🟢 AJOUT : optimise `listByEcole` par rôle
+    .index("by_ecoleId_role", ["ecoleId", "role"]),
 
   settings: defineTable({
     appName: v.string(),
@@ -129,10 +139,31 @@ export default defineSchema({
     ),
     classeDestinationPropose: v.optional(v.string()),
     dateSoumission: v.string(),
+    statutValidation: v.optional(v.union(
+      v.literal("soumise"),
+      v.literal("validee"),
+      v.literal("modifiee"),
+      v.literal("rejetee")
+    )),
+    statutFinal: v.optional(v.union(
+      v.literal("passant"),
+      v.literal("redoublant"),
+      v.literal("transfere"),
+      v.literal("exclu"),
+      v.literal("diplome")
+    )),
+    classeDestinationFinale: v.optional(v.string()),
+    commentaireDirecteur: v.optional(v.string()),
+    valideePar: v.optional(v.id("users")),
+    valideeLe: v.optional(v.string()),
+    enConseilDiscipline: v.optional(v.boolean()),
+    derniereModificationEnseignant: v.optional(v.string()),
   })
     .index("by_ecole_annee", ["ecoleId", "anneeId"])
     .index("by_enseignant", ["enseignantId"])
-    .index("by_eleve_annee", ["eleveId", "anneeId"]),
+    .index("by_eleve_annee", ["eleveId", "anneeId"])
+    .index("by_statut_validation", ["statutValidation"])
+    .index("by_ecole_annee_validation", ["ecoleId", "anneeId", "statutValidation"]),
 
   // ========== CLASSES ==========
   classes: defineTable({
@@ -193,8 +224,7 @@ export default defineSchema({
     montantTotal: v.float64(),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
-  })
-    .index("by_ecole_classe", ["ecoleId", "classe"]),
+  }).index("by_ecole_classe", ["ecoleId", "classe"]),
 
   // ========== NOTES ==========
   notes: defineTable({
@@ -285,7 +315,11 @@ export default defineSchema({
     .index("by_caller", ["callerId"])
     .index("by_callee", ["calleeId"])
     .index("by_group", ["groupId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    // 🔴 CRITIQUE : nécessaire pour `agora.generateToken` → vérif participant
+    .index("by_channelName", ["channelName"])
+    // 🟢 AJOUT : optimise `cleanupExpiredCalls`
+    .index("by_status_createdAt", ["status", "createdAt"]),
 
   // ========== MESSAGES ==========
   messages: defineTable({
@@ -353,6 +387,7 @@ export default defineSchema({
   parentLinkRequests: defineTable({
     parentId: v.id("users"),
     eleveId: v.id("eleves"),
+    ecoleId: v.optional(v.id("ecoles")),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
@@ -362,5 +397,8 @@ export default defineSchema({
     reviewedBy: v.optional(v.id("users")),
   })
     .index("by_parentId", ["parentId"])
-    .index("by_eleveId", ["eleveId"]),
+    .index("by_eleveId", ["eleveId"])
+    .index("by_status", ["status"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_ecoleId_status", ["ecoleId", "status"]),
 });

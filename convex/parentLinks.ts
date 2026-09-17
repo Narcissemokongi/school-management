@@ -2,7 +2,17 @@ import { v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
-// Vérifier que l'utilisateur est admin de la même école que l'élève, ou super admin principal
+// ════════════════════════════════════════════════════════════════════
+// Helpers internes
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Vérifie que l'appelant est admin d'école (même école que l'élève)
+ * ou super admin principal.
+ *
+ * CORRECTIF : un superAdmin AVEC permissions était rejeté à tort par
+ * l'ancienne version. Désormais tout superAdmin passe.
+ */
 async function assertAdminEcole(
   ctx: MutationCtx,
   adminId: Id<"users">,
@@ -11,15 +21,15 @@ async function assertAdminEcole(
   const admin = await ctx.db.get(adminId);
   if (!admin) throw new Error("Admin introuvable");
 
-  // Super admin principal : role "admin" sans ecoleId, ou role "superAdmin" sans permissions
-  const isSuperAdminPrincipal =
-    (admin.role === "admin" && !admin.ecoleId) ||
-    (admin.role === "superAdmin" && (!admin.permissions || admin.permissions.length === 0));
+  const isSuperAdmin =
+    admin.role === "superAdmin" ||
+    (admin.role === "admin" && !admin.ecoleId);
 
-  // Admin d'école : role "admin" ou "directeur" avec ecoleId
-  const isAdminEcole = admin.ecoleId !== undefined && (admin.role === "admin" || admin.role === "directeur");
+  const isAdminEcole =
+    !!admin.ecoleId &&
+    (admin.role === "admin" || admin.role === "directeur");
 
-  if (!isSuperAdminPrincipal && !isAdminEcole) {
+  if (!isSuperAdmin && !isAdminEcole) {
     throw new Error("Non autorisé");
   }
 
@@ -27,11 +37,62 @@ async function assertAdminEcole(
   if (!eleve) throw new Error("Élève introuvable");
 
   if (isAdminEcole && admin.ecoleId !== eleve.ecoleId) {
-    throw new Error("Vous n'êtes pas autorisé à gérer cet élève (école différente).");
+    throw new Error(
+      "Vous n'êtes pas autorisé à gérer cet élève (école différente)."
+    );
   }
 }
 
-// Créer une demande d'association parent-enfant
+/**
+ * Variante sans vérification d'élève — utile pour les boucles
+ * (évite N lectures admin identiques).
+ */
+async function assertAdmin(ctx: MutationCtx, adminId: Id<"users">) {
+  const admin = await ctx.db.get(adminId);
+  if (!admin) throw new Error("Admin introuvable");
+
+  const isSuperAdmin =
+    admin.role === "superAdmin" ||
+    (admin.role === "admin" && !admin.ecoleId);
+
+  const isAdminEcole =
+    !!admin.ecoleId &&
+    (admin.role === "admin" || admin.role === "directeur");
+
+  if (!isSuperAdmin && !isAdminEcole) throw new Error("Non autorisé");
+
+  return { admin, isSuperAdmin };
+}
+
+/**
+ * Audit — ⚠️ À ADAPTER au schéma réel de ta table `audit`.
+ * Échec silencieux volontaire : on ne casse jamais une action métier
+ * parce que l'audit a échoué.
+ */
+async function logAudit(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  action: string,
+  targetId: string,
+  details?: Record<string, unknown>
+) {
+  try {
+    await ctx.db.insert("audit", {
+      userId,
+      action,
+      targetId,
+      details: details ? JSON.stringify(details) : undefined,
+      timestamp: Date.now(),
+    } as any); // ⚠️ retire le `as any` quand le shape sera aligné
+  } catch (err) {
+    console.error("[parentLinks] audit failed:", err);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Côté parent
+// ════════════════════════════════════════════════════════════════════
+
 export const createParentLinkRequest = mutation({
   args: {
     parentId: v.id("users"),
@@ -39,15 +100,18 @@ export const createParentLinkRequest = mutation({
   },
   handler: async (ctx, args) => {
     const parent = await ctx.db.get(args.parentId);
-    if (!parent || parent.role !== "parent") throw new Error("Parent introuvable");
+    if (!parent || parent.role !== "parent") {
+      throw new Error("Parent introuvable");
+    }
 
     const eleve = await ctx.db
       .query("eleves")
-      .withIndex("by_code", (q) => q.eq("code", args.eleveMatricule.toUpperCase()))
+      .withIndex("by_code", (q) =>
+        q.eq("code", args.eleveMatricule.toUpperCase())
+      )
       .first();
     if (!eleve) throw new Error("Matricule invalide.");
 
-    // Vérifier que le parent et l'élève sont de la même école
     if (parent.ecoleId !== eleve.ecoleId) {
       throw new Error("Vous n'appartenez pas à la même école que cet élève.");
     }
@@ -71,6 +135,7 @@ export const createParentLinkRequest = mutation({
     await ctx.db.insert("parentLinkRequests", {
       parentId: args.parentId,
       eleveId: eleve._id,
+      ecoleId: eleve.ecoleId, // ← dénormalisé (fix perf)
       status: "pending",
       createdAt: new Date().toISOString(),
     });
@@ -79,39 +144,94 @@ export const createParentLinkRequest = mutation({
   },
 });
 
-// Lister les demandes pour un parent
 export const listByParent = query({
   args: { parentId: v.id("users") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const requests = await ctx.db
       .query("parentLinkRequests")
       .withIndex("by_parentId", (q) => q.eq("parentId", args.parentId))
-      .collect();
+      .take(200);
+
+    // Tri par date desc (fix #8)
+    return requests.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 });
 
-// Admin : lister toutes les demandes en attente (filtrées par école si admin d'école)
-export const listAllPending = query({
-  args: { ecoleId: v.optional(v.id("ecoles")) },
+// ════════════════════════════════════════════════════════════════════
+// Côté admin
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔴 SÉCURITÉ — `adminId` désormais requis.
+ * L'ancien paramètre `ecoleId` (fourni par le client) permettait à
+ * n'importe qui de lire les demandes de toutes les écoles.
+ *
+ * ⚠️ L'ancienne signature est SUPPRIMÉE. Le frontend DOIT être mis à
+ * jour en même temps que ce déploiement :
+ *   useQuery(api.parentLinks.listAll, { adminId: user._id, status })
+ */
+export const listAll = query({
+  args: {
+    adminId: v.id("users"),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("rejected"),
+        v.literal("all")
+      )
+    ),
+  },
   handler: async (ctx, args) => {
-    let requests = await ctx.db
-      .query("parentLinkRequests")
-      .filter((q) => q.eq(q.field("status"), "pending"))
-      .collect();
-
-    if (args.ecoleId) {
-      const eleveIds = requests.map((r) => r.eleveId);
-      const eleves = await Promise.all(eleveIds.map((id) => ctx.db.get(id)));
-      requests = requests.filter((req) => {
-        const eleve = eleves.find((e) => e && e._id === req.eleveId);
-        return eleve?.ecoleId === args.ecoleId;
-      });
+    const admin = await ctx.db.get(args.adminId);
+    if (!admin) {
+      throw new Error(
+        "Session expirée ou version obsolète. Rechargez l'application."
+      );
     }
-    return requests;
+
+    const isSuperAdmin =
+      admin.role === "superAdmin" ||
+      (admin.role === "admin" && !admin.ecoleId);
+
+    const isAdminEcole =
+      !!admin.ecoleId &&
+      (admin.role === "admin" || admin.role === "directeur");
+
+    if (!isSuperAdmin && !isAdminEcole) {
+      throw new Error("Non autorisé");
+    }
+
+    const statusFilter =
+      args.status && args.status !== "all" ? args.status : undefined;
+
+    // Filtrage école via index dénormalisé
+    if (!isSuperAdmin && admin.ecoleId) {
+      if (statusFilter) {
+        return await ctx.db
+          .query("parentLinkRequests")
+          .withIndex("by_ecoleId_status", (q) =>
+            q.eq("ecoleId", admin.ecoleId).eq("status", statusFilter)
+          )
+          .take(500);
+      }
+      return await ctx.db
+        .query("parentLinkRequests")
+        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", admin.ecoleId))
+        .take(500);
+    }
+
+    // Super admin : tout voir
+    if (statusFilter) {
+      return await ctx.db
+        .query("parentLinkRequests")
+        .withIndex("by_status", (q) => q.eq("status", statusFilter))
+        .take(500);
+    }
+    return await ctx.db.query("parentLinkRequests").take(500);
   },
 });
 
-// Admin : approuver une demande
 export const approveParentLinkRequest = mutation({
   args: {
     requestId: v.id("parentLinkRequests"),
@@ -119,9 +239,21 @@ export const approveParentLinkRequest = mutation({
   },
   handler: async (ctx, args) => {
     const request = await ctx.db.get(args.requestId);
-    if (!request || request.status !== "pending") throw new Error("Demande introuvable");
+    if (!request || request.status !== "pending") {
+      throw new Error("Demande introuvable");
+    }
 
     await assertAdminEcole(ctx, args.adminId, request.eleveId);
+
+    // 🔴 FIX : empêche l'écrasement silencieux d'un parent existant
+    const eleve = await ctx.db.get(request.eleveId);
+    if (!eleve) throw new Error("Élève introuvable");
+
+    if (eleve.parentId && eleve.parentId !== request.parentId) {
+      throw new Error(
+        "Cet élève est déjà associé à un autre parent. Détachez-le d'abord."
+      );
+    }
 
     await ctx.db.patch(request.eleveId, { parentId: request.parentId });
     await ctx.db.patch(args.requestId, {
@@ -129,11 +261,15 @@ export const approveParentLinkRequest = mutation({
       reviewedBy: args.adminId,
     });
 
+    await logAudit(ctx, args.adminId, "approve_parent_link", args.requestId, {
+      eleveId: request.eleveId,
+      parentId: request.parentId,
+    });
+
     return { success: true };
   },
 });
 
-// Admin : rejeter une demande
 export const rejectParentLinkRequest = mutation({
   args: {
     requestId: v.id("parentLinkRequests"),
@@ -141,7 +277,9 @@ export const rejectParentLinkRequest = mutation({
   },
   handler: async (ctx, args) => {
     const request = await ctx.db.get(args.requestId);
-    if (!request || request.status !== "pending") throw new Error("Demande introuvable");
+    if (!request || request.status !== "pending") {
+      throw new Error("Demande introuvable");
+    }
 
     await assertAdminEcole(ctx, args.adminId, request.eleveId);
 
@@ -150,11 +288,19 @@ export const rejectParentLinkRequest = mutation({
       reviewedBy: args.adminId,
     });
 
+    await logAudit(ctx, args.adminId, "reject_parent_link", args.requestId, {
+      eleveId: request.eleveId,
+      parentId: request.parentId,
+    });
+
     return { success: true };
   },
 });
 
-// Admin : associer directement un ou plusieurs enfants à un parent existant
+/**
+ * Association en masse. Retourne désormais un rapport détaillé
+ * (fix #4) : l'admin sait ce qui a échoué et pourquoi.
+ */
 export const linkEnfantsToParent = mutation({
   args: {
     parentId: v.id("users"),
@@ -163,26 +309,59 @@ export const linkEnfantsToParent = mutation({
   },
   handler: async (ctx, args) => {
     const parent = await ctx.db.get(args.parentId);
-    if (!parent || parent.role !== "parent") throw new Error("Parent introuvable");
+    if (!parent || parent.role !== "parent") {
+      throw new Error("Parent introuvable");
+    }
+
+    const { admin, isSuperAdmin } = await assertAdmin(ctx, args.adminId);
+
+    const attached: { id: Id<"eleves">; nom: string }[] = [];
+    const skipped: { id: Id<"eleves">; reason: string }[] = [];
 
     for (const eleveId of args.eleveIds) {
       const eleve = await ctx.db.get(eleveId);
-      if (!eleve) continue;
-      if (eleve.parentId) continue;
-
-      await assertAdminEcole(ctx, args.adminId, eleveId);
+      if (!eleve) {
+        skipped.push({ id: eleveId, reason: "introuvable" });
+        continue;
+      }
+      if (eleve.parentId) {
+        skipped.push({ id: eleveId, reason: "déjà associé à un parent" });
+        continue;
+      }
+      if (!isSuperAdmin && admin.ecoleId !== eleve.ecoleId) {
+        skipped.push({ id: eleveId, reason: "école différente de la vôtre" });
+        continue;
+      }
       if (parent.ecoleId !== eleve.ecoleId) {
-        throw new Error(`L'élève ${eleve.nom} n'appartient pas à la même école que le parent.`);
+        skipped.push({ id: eleveId, reason: "parent d'une autre école" });
+        continue;
       }
 
       await ctx.db.patch(eleveId, { parentId: args.parentId });
+      attached.push({ id: eleveId, nom: eleve.nom });
     }
 
-    return { success: true };
+    if (attached.length > 0) {
+      await logAudit(
+        ctx,
+        args.adminId,
+        "link_enfants_to_parent",
+        args.parentId,
+        {
+          attached: attached.map((a) => a.id),
+          skippedCount: skipped.length,
+        }
+      );
+    }
+
+    return {
+      success: true,
+      attached: attached.length,
+      skipped,
+    };
   },
 });
 
-// Admin : dissocier un enfant de son parent
 export const unlinkParent = mutation({
   args: {
     eleveId: v.id("eleves"),
@@ -192,43 +371,40 @@ export const unlinkParent = mutation({
     await assertAdminEcole(ctx, args.adminId, args.eleveId);
 
     const eleve = await ctx.db.get(args.eleveId);
-    if (!eleve || !eleve.parentId) throw new Error("Aucun parent associé à cet enfant.");
+    if (!eleve || !eleve.parentId) {
+      throw new Error("Aucun parent associé à cet enfant.");
+    }
 
+    const previousParentId = eleve.parentId;
     await ctx.db.patch(args.eleveId, { parentId: undefined });
+
+    await logAudit(ctx, args.adminId, "unlink_parent", args.eleveId, {
+      previousParentId,
+    });
+
     return { success: true };
   },
 });
 
-// Lister toutes les demandes (avec filtre statut et école)
-export const listAll = query({
-  args: {
-    status: v.optional(v.union(
-      v.literal("pending"),
-      v.literal("approved"),
-      v.literal("rejected"),
-      v.literal("all")
-    )),
-    ecoleId: v.optional(v.id("ecoles")),
-  },
-  handler: async (ctx, args) => {
-    let requests;
-    if (args.status && args.status !== "all") {
-      requests = await ctx.db
-        .query("parentLinkRequests")
-        .filter((q) => q.eq(q.field("status"), args.status))
-        .collect();
-    } else {
-      requests = await ctx.db.query("parentLinkRequests").collect();
+// ════════════════════════════════════════════════════════════════════
+// Migration one-shot — à exécuter UNE SEULE FOIS après déploiement
+// du schéma avec `ecoleId` optionnel.
+// ════════════════════════════════════════════════════════════════════
+
+export const backfillParentLinkEcoleId = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const requests = await ctx.db.query("parentLinkRequests").take(500);
+    let updated = 0;
+
+    for (const req of requests) {
+      if (req.ecoleId) continue; // déjà rempli
+      const eleve = await ctx.db.get(req.eleveId);
+      if (!eleve) continue;
+      await ctx.db.patch(req._id, { ecoleId: eleve.ecoleId });
+      updated += 1;
     }
 
-    if (args.ecoleId) {
-      const eleveIds = requests.map((r) => r.eleveId);
-      const eleves = await Promise.all(eleveIds.map((id) => ctx.db.get(id)));
-      requests = requests.filter((req) => {
-        const eleve = eleves.find((e) => e && e._id === req.eleveId);
-        return eleve?.ecoleId === args.ecoleId;
-      });
-    }
-    return requests;
+    return { updated, remaining: Math.max(0, requests.length - updated) };
   },
 });

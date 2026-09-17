@@ -1,8 +1,10 @@
-import { useState, useMemo, useEffect } from "react";
-import { useQuery, useMutation } from "convex/react";
+// src/components/ComptableApp.jsx
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Layout } from "./Layout";
 import { DashboardComptable } from "./DashboardComptable";
 import { GestionFrais } from "./GestionFrais";
@@ -12,15 +14,44 @@ import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { Aide } from "./Aide";
 import { MentionsLegales } from "./MentionsLegales";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { useAppStore } from "@/store/appStore";
 import {
   DollarSign, BarChart3, MessageCircle, Phone, HelpCircle,
-  FileText, Shield, User, Calendar, TrendingUp, AlertCircle,
-  Download, Search, Filter,
+  FileText, Shield, User, Calendar, AlertTriangle,
 } from "lucide-react";
-import toast from "react-hot-toast";
-import * as XLSX from "xlsx";
 
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const VALID_COMPTABLE_TABS = [
+  "dashboard",
+  "frais",
+  "messagerie",
+  "appels",
+  "profil",
+  "aide",
+  "mentions",
+  "confidentialite",
+];
+
+const DEFAULT_COMPTABLE_TAB = "dashboard";
+const COMPTABLE_BASE = "/comptable";
+
+// Onglets qui nécessitent une année active
+const TABS_REQUIRING_YEAR = ["dashboard", "frais"];
+
+// ════════════════════════════════════════════════════════════════════
+// HELPER — Parse URL
+// ════════════════════════════════════════════════════════════════════
+function parseComptableUrl(pathname) {
+  const match = pathname.match(/^\/comptable\/([^\/]+)/);
+  if (!match) return null;
+  const candidate = match[1];
+  return VALID_COMPTABLE_TABS.includes(candidate) ? candidate : null;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT
+// ════════════════════════════════════════════════════════════════════
 export function ComptableApp({
   user,
   ecoleId,
@@ -31,100 +62,245 @@ export function ComptableApp({
   toggle,
   handleLogout,
 }) {
-  const { S } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const tab = useAppStore((state) => state.comptableTab);
-  const setTab = useAppStore((state) => state.setComptableTab);
-  const messagingContactId = useAppStore((state) => state.messagingContactId);
-  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
+  const userId = user?._id;
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatut, setFilterStatut] = useState("all");
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX PERF — Tab lu depuis l'URL
+  // ════════════════════════════════════════════════════════════════════
+  const tabFromUrl = useMemo(
+    () => parseComptableUrl(location.pathname),
+    [location.pathname]
+  );
 
-  const handleNavigateToMessaging = (contactId) => {
-    setMessagingContactId(contactId);
-    setTab("messagerie");
-  };
+  const tab = tabFromUrl || DEFAULT_COMPTABLE_TAB;
 
-  const menu = [
-    { id: "dashboard", label: "Tableau de bord", icon: <BarChart3 size={20} /> },
-    { id: "frais", label: "Frais", icon: <DollarSign size={20} /> },
-    { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
-    { id: "appels", label: "Appels", icon: <Phone size={20} /> },
-    { id: "profil", label: "Profil", icon: <User size={20} /> },
-    { id: "aide", label: "Aide", icon: <HelpCircle size={20} /> },
-    { id: "mentions", label: "Mentions légales", icon: <FileText size={20} /> },
-    { id: "confidentialite", label: "Confidentialité", icon: <Shield size={20} /> },
-  ];
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX PERF — navigateRef stable
+  // ════════════════════════════════════════════════════════════════════
+  const navigateRef = useRef(navigate);
+  useEffect(() => {
+    navigateRef.current = navigate;
+  }, [navigate]);
 
-  const fraisQuery = useQuery(api.frais.listByEcole, {
-    ecoleId,
-    anneeId,
-  });
-  const frais = fraisQuery ?? [];
+  const setTab = useCallback((newTab) => {
+    if (VALID_COMPTABLE_TABS.includes(newTab)) {
+      navigateRef.current(`${COMPTABLE_BASE}/${newTab}`);
+    }
+  }, []);
 
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX PERF — Redirection UNE SEULE FOIS
+  // ════════════════════════════════════════════════════════════════════
+  const hasRedirectedRef = useRef(false);
+  useEffect(() => {
+    if (!tabFromUrl && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
+      navigateRef.current(`${COMPTABLE_BASE}/${DEFAULT_COMPTABLE_TAB}`, {
+        replace: true,
+      });
+    }
+  }, [tabFromUrl]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX PERF — Args stables pour Convex
+  // ════════════════════════════════════════════════════════════════════
+  const fraisArgs = useMemo(
+    () =>
+      ecoleId && anneeId && userId
+        ? { ecoleId, anneeId, userId }
+        : "skip",
+    [ecoleId, anneeId, userId]
+  );
+
+  const fraisRaw = useQuery(api.frais.listByEcole, fraisArgs);
+  const fraisList = useMemo(() => fraisRaw ?? [], [fraisRaw]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // STATS (mémoïsées)
+  // ════════════════════════════════════════════════════════════════════
   const stats = useMemo(() => {
     const totalEleves = eleves?.length ?? 0;
-    const totalFrais = frais.reduce((sum, f) => sum + (f.montantTotal || 0), 0);
-    const totalPaye = frais.reduce((sum, f) => sum + (f.montantPaye || 0), 0);
-    const totalRestant = totalFrais - totalPaye;
-    const tauxRecouvrement = totalFrais > 0 ? ((totalPaye / totalFrais) * 100).toFixed(1) : 0;
-    const elevesEnRetard = frais.filter(f => (f.montantRestant || 0) > 0).length;
-    return { totalEleves, totalFrais, totalPaye, totalRestant, tauxRecouvrement, elevesEnRetard };
-  }, [frais, eleves]);
 
-  const filteredFrais = useMemo(() => {
-    let result = frais;
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      result = result.filter(f =>
-        (f.eleveNom && f.eleveNom.toLowerCase().includes(q)) ||
-        (f.libelle && f.libelle.toLowerCase().includes(q))
-      );
+    let totalFrais = 0;
+    let totalPaye = 0;
+    let elevesEnRetard = 0;
+
+    for (const f of fraisList) {
+      const mt = f.montantTotal || 0;
+      const mp = f.montantPaye || 0;
+      totalFrais += mt;
+      totalPaye += mp;
+      if (mt - mp > 0) elevesEnRetard++;
     }
-    if (filterStatut === "paye") result = result.filter(f => (f.montantRestant || 0) === 0);
-    else if (filterStatut === "impaye") result = result.filter(f => (f.montantRestant || 0) > 0);
-    else if (filterStatut === "partiel") result = result.filter(f => (f.montantPaye || 0) > 0 && (f.montantRestant || 0) > 0);
-    return result;
-  }, [frais, searchTerm, filterStatut]);
 
-  const totalPages = Math.ceil(filteredFrais.length / pageSize);
-  const paginatedFrais = filteredFrais.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const totalRestant = totalFrais - totalPaye;
+    const tauxRecouvrement =
+      totalFrais > 0 ? ((totalPaye / totalFrais) * 100).toFixed(1) : "0";
 
-  const handleExportExcel = () => {
-    const data = filteredFrais.map(f => ({
-      "Élève": f.eleveNom || "",
-      "Libellé": f.libelle || "",
-      "Montant Total": f.montantTotal || 0,
-      "Montant Payé": f.montantPaye || 0,
-      "Reste": f.montantRestant || 0,
-      "Statut": (f.montantRestant || 0) === 0 ? "Payé" : (f.montantPaye || 0) > 0 ? "Partiel" : "Impayé",
-    }));
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Frais");
-    XLSX.writeFile(workbook, "frais.xlsx");
-    toast.success("Export Excel réussi");
-  };
+    return {
+      totalEleves,
+      totalFrais,
+      totalPaye,
+      totalRestant,
+      tauxRecouvrement,
+      elevesEnRetard,
+    };
+  }, [fraisList, eleves]);
 
+  // ════════════════════════════════════════════════════════════════════
+  // HANDLERS navigation
+  // ════════════════════════════════════════════════════════════════════
+  const handleNavigateToMessaging = useCallback((contactId) => {
+    if (contactId) {
+      navigateRef.current(`/comptable/messagerie/chat/${contactId}`);
+    } else {
+      navigateRef.current("/comptable/messagerie");
+    }
+  }, []);
+
+  // ════════════════════════════════════════════════════════════════════
+  // TOKENS
+  // ════════════════════════════════════════════════════════════════════
+  const tokens = useMemo(
+    () => ({
+      text: dark ? "#F1F5F9" : "#1E293B",
+      textMuted: dark ? "#94A3B8" : "#64748B",
+      warning: "#F59E0B",
+      warningBg: dark ? "#78350F" : "#FEF3C7",
+      warningText: dark ? "#FBBF24" : "#92400E",
+    }),
+    [dark]
+  );
+
+  // ════════════════════════════════════════════════════════════════════
+  // MENU (mémoïsé)
+  // ════════════════════════════════════════════════════════════════════
+  const menu = useMemo(
+    () => [
+      { id: "dashboard", label: "Tableau de bord", icon: <BarChart3 size={20} /> },
+      { id: "frais", label: "Frais", icon: <DollarSign size={20} /> },
+      { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
+      { id: "appels", label: "Appels", icon: <Phone size={20} /> },
+      { id: "profil", label: "Profil", icon: <User size={20} /> },
+      { id: "aide", label: "Aide", icon: <HelpCircle size={20} /> },
+      { id: "mentions", label: "Mentions légales", icon: <FileText size={20} /> },
+      { id: "confidentialite", label: "Confidentialité", icon: <Shield size={20} /> },
+    ],
+    []
+  );
+
+  // ════════════════════════════════════════════════════════════════════
+  // GUARD : session invalide
+  // ════════════════════════════════════════════════════════════════════
+  if (!user || !userId) {
+    return (
+      <Layout
+        menu={menu}
+        activeTab={tab}
+        onTabChange={setTab}
+        user={user}
+        dark={dark}
+        onToggleTheme={toggle}
+        onLogout={handleLogout}
+      >
+        <div
+          style={{
+            maxWidth: 1280,
+            margin: "0 auto",
+            padding: isMobile ? "24px 16px" : "32px 24px",
+            textAlign: "center",
+          }}
+        >
+          <User
+            size={isMobile ? 40 : 48}
+            color="#F59E0B"
+            style={{ marginBottom: 16 }}
+          />
+          <h2
+            style={{
+              fontSize: isMobile ? 20 : 24,
+              fontWeight: 600,
+              color: tokens.text,
+              margin: "0 0 8px",
+            }}
+          >
+            Session invalide
+          </h2>
+          <p
+            style={{
+              color: tokens.textMuted,
+              fontSize: isMobile ? 13 : 14,
+            }}
+          >
+            Veuillez vous reconnecter.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // COMPUTED
+  // ════════════════════════════════════════════════════════════════════
+  const tabNeedsYear = TABS_REQUIRING_YEAR.includes(tab);
+  const showBanner = !anneeId && !tabNeedsYear;
+
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU CONTENU
+  // ════════════════════════════════════════════════════════════════════
   const renderContent = () => {
-    if ((tab === "dashboard" || tab === "frais") && !anneeId) {
+    // Message complet pour les onglets qui nécessitent une année
+    if (!anneeId && tabNeedsYear) {
       return (
-        <div style={{
-          maxWidth: 1280,
-          margin: "0 auto",
-          padding: isMobile ? "24px 16px" : "32px 24px",
-          textAlign: "center",
-        }}>
-          <Calendar size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: "#1E293B", margin: "0 0 8px" }}>
+        <div
+          style={{
+            maxWidth: 520,
+            margin: "0 auto",
+            padding: isMobile ? "40px 16px" : "60px 24px",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: "50%",
+              background: tokens.warningBg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 16px",
+            }}
+          >
+            <Calendar size={30} color={tokens.warning} />
+          </div>
+          <h2
+            style={{
+              fontSize: isMobile ? 17 : 20,
+              fontWeight: 700,
+              color: tokens.text,
+              margin: "0 0 6px",
+            }}
+          >
             Aucune année scolaire active
           </h2>
-          <p style={{ color: "#64748B", fontSize: isMobile ? 13 : 14 }}>
-            Veuillez demander à l'administrateur d'activer une année scolaire pour accéder aux données financières.
+          <p
+            style={{
+              color: tokens.textMuted,
+              fontSize: isMobile ? 13 : 14,
+              margin: 0,
+              maxWidth: 400,
+              marginLeft: "auto",
+              marginRight: "auto",
+              lineHeight: 1.5,
+            }}
+          >
+            Veuillez demander à l'administrateur d'activer une année scolaire
+            pour accéder aux données financières.
           </p>
         </div>
       );
@@ -138,95 +314,23 @@ export function ComptableApp({
             eleves={eleves}
             anneeId={anneeId}
             anneeActive={anneeActive}
-            stats={stats}
           />
         );
+
       case "frais":
         return (
-          <div>
-            {/* Barre d'outils frais - adaptée mobile */}
-            <div style={{
-              display: "flex",
-              flexDirection: isMobile ? "column" : "row",
-              flexWrap: "wrap",
-              gap: isMobile ? 8 : 12,
-              marginBottom: isMobile ? 12 : 16,
-              padding: isMobile ? "0 12px" : "0 24px",
-            }}>
-              <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200, position: "relative" }}>
-                <Search size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
-                <input
-                  placeholder="Rechercher un élève ou un frais..."
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                  style={{
-                    width: "100%",
-                    padding: isMobile ? "10px 12px 10px 34px" : "8px 12px 8px 34px",
-                    borderRadius: 8,
-                    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                    background: dark ? "#1E293B" : "#FFFFFF",
-                    color: dark ? "#F1F5F9" : "#1E293B",
-                    fontSize: isMobile ? 16 : 14,
-                    outline: "none",
-                  }}
-                />
-              </div>
-              <div style={{ display: "flex", gap: isMobile ? 8 : 12, flexDirection: isMobile ? "column" : "row" }}>
-                <select
-                  value={filterStatut}
-                  onChange={(e) => { setFilterStatut(e.target.value); setCurrentPage(1); }}
-                  style={{
-                    padding: isMobile ? "10px 12px" : "8px 12px",
-                    borderRadius: 8,
-                    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                    background: dark ? "#1E293B" : "#FFFFFF",
-                    color: dark ? "#F1F5F9" : "#1E293B",
-                    cursor: "pointer",
-                    fontSize: isMobile ? 16 : 14,
-                  }}
-                >
-                  <option value="all">Tous</option>
-                  <option value="paye">Payé</option>
-                  <option value="impaye">Impayé</option>
-                  <option value="partiel">Partiel</option>
-                </select>
-                <button
-                  onClick={handleExportExcel}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                    padding: isMobile ? "10px 12px" : "8px 12px",
-                    background: dark ? "#334155" : "#F1F5F9",
-                    border: "none",
-                    borderRadius: 8,
-                    color: dark ? "#F1F5F9" : "#1E293B",
-                    cursor: "pointer",
-                    fontSize: isMobile ? 15 : 13,
-                    width: isMobile ? "100%" : "auto",
-                  }}
-                >
-                  <Download size={isMobile ? 18 : 16} /> Exporter Excel
-                </button>
-              </div>
-            </div>
-
-            <GestionFrais
-              ecoleId={ecoleId}
-              eleves={eleves}
-              anneeId={anneeId}
-              anneeActive={anneeActive}
-              user={user}
-              frais={paginatedFrais}
-              totalPages={totalPages}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-            />
-          </div>
+          <GestionFrais
+            ecoleId={ecoleId}
+            eleves={eleves}
+            anneeId={anneeId}
+            anneeActive={anneeActive}
+            user={user}
+          />
         );
+
       case "messagerie":
-        return <MessagerieApp user={user} ecoleId={ecoleId} initialSelectedUserId={messagingContactId} />;
+        return <MessagerieApp user={user} ecoleId={ecoleId} />;
+
       case "appels":
         return (
           <Appels
@@ -236,19 +340,27 @@ export function ComptableApp({
             onNavigateToMessaging={handleNavigateToMessaging}
           />
         );
+
       case "profil":
         return <ProfilUtilisateur user={user} />;
+
       case "aide":
         return <Aide user={user} />;
+
       case "mentions":
         return <MentionsLegales />;
+
       case "confidentialite":
         return <PolitiqueConfidentialite />;
+
       default:
         return null;
     }
   };
 
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU PRINCIPAL
+  // ════════════════════════════════════════════════════════════════════
   return (
     <Layout
       menu={menu}
@@ -259,49 +371,32 @@ export function ComptableApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {!anneeId && (
-        <div style={{
-          background: "#FEF3C7",
-          color: "#92400E",
-          padding: isMobile ? "10px 12px" : "10px 20px",
-          fontSize: isMobile ? 12 : 13,
-          fontWeight: 500,
-          textAlign: "center",
-          borderRadius: "0 0 12px 12px",
-          margin: isMobile ? "0 12px 12px" : "0 24px 16px",
-        }}>
-          ⚠️ Aucune année scolaire active. Les données financières sont indisponibles.
+      {/* Bannière : uniquement sur les onglets SANS message complet */}
+      {showBanner && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: tokens.warningBg,
+            color: tokens.warningText,
+            padding: isMobile ? "10px 12px" : "10px 16px",
+            fontSize: isMobile ? 12 : 13,
+            fontWeight: 500,
+            borderRadius: 10,
+            marginBottom: isMobile ? 12 : 16,
+            lineHeight: 1.4,
+            border: `1px solid ${dark ? "rgba(251,191,36,0.3)" : "rgba(245,158,11,0.2)"}`,
+          }}
+          role="alert"
+        >
+          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+          <span>
+            Aucune année scolaire active. Les données financières sont
+            indisponibles.
+          </span>
         </div>
       )}
-
-      {/* Cartes de résumé financier - adaptées mobile */}
-      {anneeId && tab === "dashboard" && (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: isMobile ? 12 : 16,
-          padding: isMobile ? "0 12px" : "0 24px",
-          marginBottom: isMobile ? 16 : 24,
-        }}>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Total élèves</div>
-            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{stats.totalEleves}</div>
-          </div>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Total facturé</div>
-            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: "#3B82F6" }}>{stats.totalFrais.toLocaleString()} FC</div>
-          </div>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Total payé</div>
-            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: "#10B981" }}>{stats.totalPaye.toLocaleString()} FC</div>
-          </div>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>Reste à payer</div>
-            <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: "#EF4444" }}>{stats.totalRestant.toLocaleString()} FC</div>
-          </div>
-        </div>
-      )}
-
       {renderContent()}
     </Layout>
   );

@@ -1,80 +1,488 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
-  Plus, Trash2, BookOpen, Filter, Loader, Edit2, Search,
+  Plus, BookOpen, Loader, Search,
+  ChevronRight, X, SlidersHorizontal, RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { AddCoursModal, DetailCoursModal } from "./CoursModals";
 
+// ============================================================
+// HELPER ERREUR
+// ============================================================
+function extractErrMsg(err, fallback = "Erreur inconnue") {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && err.message) return err.message;
+  return fallback;
+}
+
+// ============================================================
+// CARTE COURS COMPACTE
+// ============================================================
+function CoursCard({ cours, dark, isMobile, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{
+        background: dark ? "#1E293B" : "#FFFFFF",
+        borderRadius: 12,
+        padding: isMobile ? "10px 12px" : "12px 14px",
+        boxShadow: dark
+          ? "0 1px 2px rgba(0,0,0,0.25)"
+          : "0 1px 2px rgba(0,0,0,0.04)",
+        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        display: "flex",
+        alignItems: "center",
+        gap: isMobile ? 10 : 12,
+        cursor: "pointer",
+        transition: "border-color 0.15s, transform 0.1s",
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+        minWidth: 0,
+      }}
+      onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.99)")}
+      onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: "50%",
+          background: dark ? "#312E81" : "#EEF2FF",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: dark ? "#A5B4FC" : "#4F46E5",
+          flexShrink: 0,
+        }}
+      >
+        <BookOpen size={18} />
+      </div>
+
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div
+          style={{
+            fontWeight: 600,
+            fontSize: isMobile ? 13.5 : 14,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {cours.nom}
+        </div>
+        <div
+          style={{
+            fontSize: isMobile ? 11 : 11.5,
+            color: dark ? "#94A3B8" : "#64748B",
+            marginTop: 2,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {cours.classe}
+          {cours.coefficient ? ` · Coeff. ${cours.coefficient}` : ""}
+          {cours.bareme ? ` · Barème ${cours.bareme}` : ""}
+        </div>
+      </div>
+
+      <ChevronRight
+        size={18}
+        color={dark ? "#475569" : "#CBD5E1"}
+        style={{ flexShrink: 0 }}
+      />
+    </div>
+  );
+}
+
+// ============================================================
+// BOTTOM SHEET FILTRES
+// ============================================================
+function CoursFiltersSheet({
+  open,
+  onClose,
+  dark,
+  searchTerm,
+  setSearchTerm,
+  classeFiltre,
+  setClasseFiltre,
+  sortedClasses,
+  onReset,
+}) {
+  if (!open) return null;
+
+  const labelStyle = {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 600,
+    color: dark ? "#94A3B8" : "#64748B",
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  };
+
+  const fieldStyle = {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+    background: dark ? "#0F172A" : "#F8FAFC",
+    color: dark ? "#F1F5F9" : "#1E293B",
+    fontSize: 15,
+    outline: "none",
+    boxSizing: "border-box",
+    appearance: "none",
+    WebkitAppearance: "none",
+  };
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.45)",
+          zIndex: 1100,
+          animation: "gc-fadeIn 0.18s ease-out",
+        }}
+      />
+      <div
+        className="gc-slideUp"
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: dark ? "#1E293B" : "#FFFFFF",
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          padding: "12px 16px 24px",
+          zIndex: 1101,
+          maxHeight: "85vh",
+          overflowY: "auto",
+          boxShadow: "0 -8px 30px rgba(0,0,0,0.25)",
+          animation: "gc-slideUp 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
+        <div
+          style={{
+            width: 40,
+            height: 4,
+            borderRadius: 2,
+            background: dark ? "#475569" : "#CBD5E1",
+            margin: "0 auto 16px",
+          }}
+        />
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 18,
+          }}
+        >
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 17,
+              fontWeight: 700,
+              color: dark ? "#F1F5F9" : "#1E293B",
+            }}
+          >
+            Filtrer les cours
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: dark ? "#94A3B8" : "#64748B",
+              padding: 4,
+            }}
+            aria-label="Fermer"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Recherche</label>
+          <div style={{ position: "relative" }}>
+            <Search
+              size={16}
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: dark ? "#94A3B8" : "#64748B",
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Nom du cours…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ ...fieldStyle, paddingLeft: 36 }}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Classe</label>
+          <select
+            value={classeFiltre}
+            onChange={(e) => setClasseFiltre(e.target.value)}
+            style={fieldStyle}
+          >
+            <option value="">Toutes les classes</option>
+            {sortedClasses.map((c) => (
+              <option key={c._id} value={c.nom}>
+                {c.nom}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={() => {
+              onReset();
+              onClose();
+            }}
+            style={{
+              flex: 1,
+              padding: "14px 16px",
+              borderRadius: 12,
+              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+              background: "transparent",
+              color: dark ? "#CBD5E1" : "#475569",
+              fontWeight: 600,
+              fontSize: 14,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            <RotateCcw size={16} />
+            Réinitialiser
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 2,
+              padding: "14px 16px",
+              borderRadius: 12,
+              border: "none",
+              background: dark ? "#818CF8" : "#4F46E5",
+              color: "#FFFFFF",
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            Voir les résultats
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============================================================
+// COMPOSANT PRINCIPAL
+// ============================================================
 export function GestionCours({ ecoleId, classes, user, anneeId, anneeActive }) {
   const { dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
-  // ================= TOUS LES HOOKS EN PREMIER =================
-  const [mode, setMode] = useState("individuel");
+  const userId = user?._id;
+
+  // États
   const [classeFiltre, setClasseFiltre] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [editData, setEditData] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addModalMode, setAddModalMode] = useState("individuel");
+  const [editingCours, setEditingCours] = useState(null);
+  const [detailCours, setDetailCours] = useState(null);
 
-  const cours = useQuery(
+  // ✅ Query avec userId + garde
+  const coursRaw = useQuery(
     api.cours.list,
-    { ecoleId, classe: classeFiltre || undefined, anneeId }
-  ) ?? [];
+    ecoleId && userId
+      ? {
+          ecoleId,
+          classe: classeFiltre || undefined,
+          anneeId,
+          userId,
+        }
+      : "skip"
+  );
+
+  const cours = useMemo(() => coursRaw ?? [], [coursRaw]);
 
   const addCours = useMutation(api.cours.add);
   const addBulk = useMutation(api.cours.addBulk);
   const removeCours = useMutation(api.cours.remove);
   const updateCours = useMutation(api.cours.update);
 
-  // ================= COULEURS ADAPTATIVES =================
+  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const inputBg = dark ? "#0F172A" : "#F8FAFC";
-  const inputText = dark ? "#F1F5F9" : "#1E293B";
   const accent = dark ? "#818CF8" : "#4F46E5";
-  const danger = "#EF4444";
   const warning = "#F59E0B";
 
-  // ================= TRI DES CLASSES =================
-  const sortedClasses = useMemo(() => {
-    return [...classes].sort((a, b) =>
-      a.nom.localeCompare(b.nom, undefined, { numeric: true, sensitivity: "base" })
-    );
-  }, [classes]);
+  // Tri des classes
+  const sortedClasses = useMemo(
+    () =>
+      [...classes].sort((a, b) =>
+        a.nom.localeCompare(b.nom, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+      ),
+    [classes]
+  );
 
-  // ================= FILTRAGE PAR RECHERCHE =================
+  // Filtrage local (recherche par nom uniquement)
   const filteredCours = useMemo(() => {
     if (!searchTerm.trim()) return cours;
-    return cours.filter(c =>
-      c.nom.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const q = searchTerm.toLowerCase();
+    return cours.filter((c) => c.nom.toLowerCase().includes(q));
   }, [cours, searchTerm]);
 
-  // ================= CONDITIONS APRÈS TOUS LES HOOKS =================
+  const activeFiltersCount = useMemo(() => {
+    let n = 0;
+    if (searchTerm.trim()) n++;
+    if (classeFiltre) n++;
+    return n;
+  }, [searchTerm, classeFiltre]);
+
+  // Handlers
+  const resetFilters = useCallback(() => {
+    setSearchTerm("");
+    setClasseFiltre("");
+  }, []);
+
+  const handleOpenAdd = (mode = "individuel", initialData = null) => {
+    setAddModalMode(mode);
+    setEditingCours(initialData);
+    setShowAddModal(true);
+  };
+
+  const handleCloseAdd = () => {
+    setShowAddModal(false);
+    setEditingCours(null);
+  };
+
+  const handleDeleteCours = useCallback(
+    async (c) => {
+      if (!userId) {
+        toast.error("Session invalide.");
+        return;
+      }
+      const ok = await confirm(
+        "Supprimer le cours",
+        `Voulez-vous vraiment supprimer le cours "${c.nom}" ?`
+      );
+      if (!ok) return;
+      try {
+        await removeCours({ id: c._id, userId });
+        toast.success("Cours supprimé");
+        setDetailCours(null);
+      } catch (err) {
+        toast.error(extractErrMsg(err, "Impossible de supprimer le cours"));
+      }
+    },
+    [userId, confirm, removeCours]
+  );
+
+  // ==================== RENDU PRÉCOCE : session invalide ====================
+  if (!user || !userId) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          padding: 40,
+        }}
+      >
+        <style>{`
+          @keyframes gc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          .gc-spin { animation: gc-spin 1s linear infinite; }
+          @media (prefers-reduced-motion: reduce) {
+            .gc-spin { animation: none !important; }
+          }
+        `}</style>
+        <Loader size={28} className="gc-spin" style={{ color: accent }} />
+      </div>
+    );
+  }
+
+  // ==================== RENDU PRÉCOCE : pas d'année ====================
   if (!anneeId) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px" }}>
-        <div style={{
-          background: cardBg,
-          borderRadius: 16,
-          padding: isMobile ? 32 : 48,
-          textAlign: "center",
-          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-          border: `1px solid ${cardBorder}`,
-          transition: "background-color 0.3s",
-        }}>
-          <BookOpen size={isMobile ? 40 : 48} color={warning} style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
+      <div
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "20px 12px" : "32px 24px",
+        }}
+      >
+        <div
+          style={{
+            background: cardBg,
+            borderRadius: 16,
+            padding: isMobile ? 32 : 48,
+            textAlign: "center",
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            border: `1px solid ${cardBorder}`,
+          }}
+        >
+          <BookOpen
+            size={isMobile ? 40 : 48}
+            color={warning}
+            style={{ marginBottom: 16 }}
+          />
+          <h2
+            style={{
+              fontSize: isMobile ? 17 : 22,
+              fontWeight: 700,
+              color: textPrimary,
+              margin: "0 0 8px",
+            }}
+          >
             Aucune année scolaire active
           </h2>
-          <p style={{ color: textSecondary, fontSize: isMobile ? 14 : 14 }}>
+          <p style={{ color: textSecondary, fontSize: 13.5, margin: 0 }}>
             Veuillez créer ou activer une année scolaire dans les paramètres.
           </p>
         </div>
@@ -82,503 +490,467 @@ export function GestionCours({ ecoleId, classes, user, anneeId, anneeActive }) {
     );
   }
 
+  // ==================== RENDU PRINCIPAL ====================
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+    <div
+      style={{
+        maxWidth: 1280,
+        margin: "0 auto",
+        padding: isMobile ? "10px 8px 90px" : "20px 16px",
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Keyframes préfixés gc-* */}
+      <style>{`
+        @keyframes gc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .gc-spin { animation: gc-spin 1s linear infinite; }
+        @keyframes gc-slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes gc-fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) {
+          .gc-spin, .gc-slideUp { animation: none !important; }
+        }
+      `}</style>
 
       {/* En-tête */}
-      <div style={{ marginBottom: isMobile ? 20 : 32 }}>
-        <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
-          Gestion des cours
-        </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
-          {filteredCours.length} cours {anneeActive ? `· ${anneeActive.nom}` : ""}
-        </p>
-      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+          marginBottom: isMobile ? 12 : 20,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <h2
+            style={{
+              fontSize: isMobile ? 17 : 22,
+              fontWeight: 700,
+              color: textPrimary,
+              margin: 0,
+              lineHeight: 1.2,
+            }}
+          >
+            Gestion des cours
+          </h2>
+          <p
+            style={{
+              color: textSecondary,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 11.5 : 13,
+            }}
+          >
+            {filteredCours.length} cours
+            {anneeActive ? ` · ${anneeActive.nom}` : ""}
+          </p>
+        </div>
 
-      {/* Sélecteur de mode */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: isMobile ? 16 : 24, overflowX: "auto", whiteSpace: "nowrap", WebkitOverflowScrolling: "touch" }}>
-        {[
-          { id: "individuel", label: "Ajout individuel" },
-          { id: "groupe", label: "Ajout groupé" },
-        ].map((tab) => (
+        {!isMobile && (
           <button
-            key={tab.id}
-            onClick={() => { setMode(tab.id); setEditData(null); }}
+            onClick={() => handleOpenAdd("individuel")}
             style={{
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: isMobile ? "10px 12px" : "12px 20px",
+              padding: "8px 14px",
+              borderRadius: 8,
+              background: accent,
+              color: "#FFF",
               border: "none",
-              background: "transparent",
-              color: mode === tab.id ? accent : textSecondary,
-              fontWeight: mode === tab.id ? 600 : 400,
-              borderBottom: mode === tab.id ? `3px solid ${accent}` : "3px solid transparent",
+              fontWeight: 600,
               cursor: "pointer",
-              transition: "all 0.2s",
-              fontSize: isMobile ? 14 : 16,
-              flexShrink: 0,
+              fontSize: 13,
             }}
           >
-            {tab.label}
+            <Plus size={15} /> Ajouter un cours
           </button>
-        ))}
+        )}
       </div>
 
-      {/* Formulaire */}
-      {mode === "individuel" ? (
-        <AddCoursIndividuel
-          classes={sortedClasses}
-          addCours={addCours}
-          updateCours={updateCours}
-          ecoleId={ecoleId}
-          anneeId={anneeId}
-          userId={user._id}
-          initialData={editData}
-          onSuccess={() => setEditData(null)}
-          dark={dark}
-          isMobile={isMobile}
-        />
+      {/* Barre outils */}
+      {isMobile ? (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 12,
+            alignItems: "stretch",
+          }}
+        >
+          <div style={{ position: "relative", flex: 1 }}>
+            <Search
+              size={16}
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: textSecondary,
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Rechercher…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px 12px 12px 38px",
+                borderRadius: 12,
+                border: `1px solid ${cardBorder}`,
+                background: cardBg,
+                color: textPrimary,
+                fontSize: 16,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          <button
+            onClick={() => setShowFilters(true)}
+            style={{
+              position: "relative",
+              padding: "0 14px",
+              borderRadius: 12,
+              border: `1px solid ${
+                activeFiltersCount > 0 ? accent : cardBorder
+              }`,
+              background:
+                activeFiltersCount > 0
+                  ? dark
+                    ? "#312E81"
+                    : "#EEF2FF"
+                  : cardBg,
+              color:
+                activeFiltersCount > 0
+                  ? dark
+                    ? "#C7D2FE"
+                    : "#4F46E5"
+                  : textPrimary,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 600,
+              fontSize: 13,
+            }}
+          >
+            <SlidersHorizontal size={16} />
+            {activeFiltersCount > 0 && (
+              <span
+                style={{
+                  background: accent,
+                  color: "#FFF",
+                  borderRadius: 10,
+                  padding: "1px 6px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}
+              >
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+        </div>
       ) : (
-        <AddCoursGroupe
-          classes={sortedClasses}
-          addBulk={addBulk}
-          ecoleId={ecoleId}
-          anneeId={anneeId}
-          userId={user._id}
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            marginBottom: 16,
+            alignItems: "stretch",
+          }}
+        >
+          <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
+            <Search
+              size={16}
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: textSecondary,
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Rechercher un cours…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px 10px 38px",
+                borderRadius: 8,
+                border: `1px solid ${cardBorder}`,
+                background: cardBg,
+                color: textPrimary,
+                fontSize: 14,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          <select
+            value={classeFiltre}
+            onChange={(e) => setClasseFiltre(e.target.value)}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: `1px solid ${cardBorder}`,
+              background: cardBg,
+              color: textPrimary,
+              fontSize: 14,
+              cursor: "pointer",
+              minWidth: 180,
+            }}
+          >
+            <option value="">Toutes les classes</option>
+            {sortedClasses.map((c) => (
+              <option key={c._id} value={c.nom}>
+                {c.nom}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Puces filtres actifs */}
+      {activeFiltersCount > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            marginBottom: 12,
+          }}
+        >
+          {searchTerm.trim() && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 10px",
+                background: dark ? "#312E81" : "#EEF2FF",
+                color: dark ? "#C7D2FE" : "#4F46E5",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              « {searchTerm} »
+              <X
+                size={12}
+                style={{ cursor: "pointer" }}
+                onClick={() => setSearchTerm("")}
+              />
+            </span>
+          )}
+          {classeFiltre && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 10px",
+                background: dark ? "#312E81" : "#EEF2FF",
+                color: dark ? "#C7D2FE" : "#4F46E5",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              {classeFiltre}
+              <X
+                size={12}
+                style={{ cursor: "pointer" }}
+                onClick={() => setClasseFiltre("")}
+              />
+            </span>
+          )}
+          <button
+            onClick={resetFilters}
+            style={{
+              padding: "4px 10px",
+              background: "transparent",
+              border: `1px solid ${cardBorder}`,
+              color: textSecondary,
+              borderRadius: 20,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Tout effacer
+          </button>
+        </div>
+      )}
+
+      {/* Liste des cours */}
+      {coursRaw === undefined ? (
+        // ✅ Loader correct
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            padding: isMobile ? 40 : 60,
+          }}
+        >
+          <Loader
+            size={28}
+            className="gc-spin"
+            style={{ color: accent }}
+          />
+        </div>
+      ) : filteredCours.length === 0 ? (
+        <div
+          style={{
+            background: cardBg,
+            borderRadius: 16,
+            padding: isMobile ? 32 : 48,
+            textAlign: "center",
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            border: `1px solid ${cardBorder}`,
+            color: textSecondary,
+          }}
+        >
+          <BookOpen
+            size={isMobile ? 28 : 32}
+            style={{ marginBottom: 8, opacity: 0.5 }}
+          />
+          <p style={{ margin: 0, fontSize: 13.5 }}>
+            {searchTerm
+              ? `Aucun cours trouvé pour "${searchTerm}"`
+              : classeFiltre
+              ? `Aucun cours pour la classe ${classeFiltre}`
+              : "Aucun cours enregistré"}
+          </p>
+          {(searchTerm || classeFiltre) && (
+            <button
+              onClick={resetFilters}
+              style={{
+                marginTop: 12,
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: `1px solid ${cardBorder}`,
+                background: "transparent",
+                color: textPrimary,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Réinitialiser les filtres
+            </button>
+          )}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile
+              ? "1fr"
+              : "repeat(auto-fill, minmax(320px, 1fr))",
+            gap: isMobile ? 8 : 12,
+          }}
+        >
+          {filteredCours.map((c) => (
+            <CoursCard
+              key={c._id}
+              cours={c}
+              dark={dark}
+              isMobile={isMobile}
+              onClick={() => setDetailCours(c)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* FAB ajouter (mobile) */}
+      {isMobile && (
+        <button
+          onClick={() => handleOpenAdd("individuel")}
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 20,
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: accent,
+            color: "#FFFFFF",
+            border: "none",
+            boxShadow: "0 6px 20px rgba(79,70,229,0.4)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 900,
+            transition: "transform 0.15s ease",
+          }}
+          onMouseDown={(e) =>
+            (e.currentTarget.style.transform = "scale(0.94)")
+          }
+          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.transform = "scale(1)")
+          }
+          title="Ajouter un cours"
+        >
+          <Plus size={26} />
+        </button>
+      )}
+
+      {/* Bottom sheet filtres */}
+      <CoursFiltersSheet
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        dark={dark}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        classeFiltre={classeFiltre}
+        setClasseFiltre={setClasseFiltre}
+        sortedClasses={sortedClasses}
+        onReset={resetFilters}
+      />
+
+      {/* Modale ajout / édition */}
+      <AddCoursModal
+        open={showAddModal}
+        onClose={handleCloseAdd}
+        initialMode={addModalMode}
+        initialData={editingCours}
+        classes={sortedClasses}
+        addCours={addCours}
+        updateCours={updateCours}
+        addBulk={addBulk}
+        ecoleId={ecoleId}
+        anneeId={anneeId}
+        userId={userId}
+        dark={dark}
+        isMobile={isMobile}
+      />
+
+      {/* Modale détail */}
+      {detailCours && (
+        <DetailCoursModal
+          cours={detailCours}
+          onClose={() => setDetailCours(null)}
+          onEdit={() => {
+            setDetailCours(null);
+            handleOpenAdd("individuel", detailCours);
+          }}
+          onDelete={() => handleDeleteCours(detailCours)}
           dark={dark}
           isMobile={isMobile}
         />
       )}
 
-      {/* Filtres */}
-      <div style={{
-        background: cardBg,
-        borderRadius: 16,
-        padding: isMobile ? 12 : "16px 20px",
-        margin: isMobile ? "16px 0" : "24px 0",
-        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-        border: `1px solid ${cardBorder}`,
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: 12,
-        flexDirection: isMobile ? "column" : "row",
-      }}>
-        <Filter size={isMobile ? 18 : 18} color={textSecondary} />
-        <select
-          value={classeFiltre}
-          onChange={(e) => setClasseFiltre(e.target.value)}
-          style={{
-            padding: isMobile ? "10px 12px" : "8px 12px",
-            border: `1px solid ${cardBorder}`,
-            borderRadius: 8,
-            fontSize: isMobile ? 16 : 14,
-            minWidth: isMobile ? "100%" : 180,
-            outline: "none",
-            background: inputBg,
-            color: inputText,
-            width: isMobile ? "100%" : "auto",
-          }}
-        >
-          <option value="">Toutes les classes</option>
-          {sortedClasses.map((c) => (
-            <option key={c._id} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c.nom}</option>
-          ))}
-        </select>
-
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          background: inputBg,
-          borderRadius: 8,
-          padding: isMobile ? "10px 12px" : "4px 8px",
-          border: `1px solid ${cardBorder}`,
-          flex: 1,
-          minWidth: isMobile ? "100%" : 200,
-        }}>
-          <Search size={isMobile ? 16 : 16} color={textSecondary} />
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Rechercher un cours..."
-            style={{
-              border: "none",
-              outline: "none",
-              marginLeft: 6,
-              fontSize: isMobile ? 16 : 14,
-              width: "100%",
-              background: "transparent",
-              color: inputText,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Liste des cours */}
-      <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
-        {filteredCours.length === 0 && (
-          <div style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: isMobile ? 32 : 48,
-            textAlign: "center",
-            boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-            border: `1px solid ${cardBorder}`,
-            color: textSecondary,
-          }}>
-            <BookOpen size={isMobile ? 28 : 32} style={{ marginBottom: 8 }} />
-            <p>
-              {searchTerm
-                ? `Aucun cours trouvé pour "${searchTerm}"`
-                : classeFiltre
-                  ? `Aucun cours pour la classe ${classeFiltre}`
-                  : "Aucun cours enregistré"}
-            </p>
-          </div>
-        )}
-        {filteredCours.map((c) => (
-          <div
-            key={c._id}
-            style={{
-              background: cardBg,
-              borderRadius: 12,
-              padding: isMobile ? "12px 14px" : "16px 20px",
-              display: "flex",
-              flexDirection: isMobile ? "column" : "row",
-              justifyContent: "space-between",
-              alignItems: isMobile ? "stretch" : "center",
-              gap: isMobile ? 8 : 0,
-              boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-              border: `1px solid ${cardBorder}`,
-              transition: "box-shadow 0.15s, background-color 0.3s",
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.boxShadow = dark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.08)"}
-            onMouseLeave={(e) => e.currentTarget.style.boxShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)"}
-          >
-            <div>
-              <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 16, color: textPrimary }}>
-                {c.nom}{" "}
-                <span style={{ fontWeight: 400, fontSize: isMobile ? 12 : 13, color: textSecondary }}>
-                  {c.coefficient ? `coeff. ${c.coefficient}` : ""}
-                  {c.bareme ? ` · bar. ${c.bareme}` : ""}
-                </span>
-              </div>
-              <div style={{ color: textSecondary, fontSize: isMobile ? 13 : 13 }}>Classe {c.classe}</div>
-            </div>
-            <div style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-end" : "flex-start" }}>
-              <button
-                onClick={() => {
-                  setEditData(c);
-                  setMode("individuel");
-                }}
-                style={{
-                  background: accent,
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: isMobile ? "10px 12px" : 8,
-                  cursor: "pointer",
-                }}
-                title="Modifier le cours"
-              >
-                <Edit2 size={16} />
-              </button>
-              <button
-                onClick={async () => {
-                  const ok = await confirm(
-                    "Supprimer le cours",
-                    `Voulez-vous vraiment supprimer le cours "${c.nom}" ?`
-                  );
-                  if (ok) {
-                    try {
-                      await removeCours({ id: c._id, userId: user._id });
-                      toast.success("Cours supprimé");
-                    } catch (err) {
-                      toast.error(err.message);
-                    }
-                  }
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: danger,
-                  cursor: "pointer",
-                  padding: isMobile ? "10px 12px" : 8,
-                  borderRadius: 8,
-                }}
-                title="Supprimer le cours"
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
       <ConfirmDialog {...dialogProps} />
-    </div>
-  );
-}
-
-// ================= SOUS-COMPOSANTS =================
-
-function AddCoursIndividuel({
-  classes,
-  addCours,
-  updateCours,
-  ecoleId,
-  anneeId,
-  userId,
-  initialData,
-  onSuccess,
-  dark,
-  isMobile,
-}) {
-  const [nom, setNom] = useState(initialData?.nom || "");
-  const [classe, setClasse] = useState(initialData?.classe || "");
-  const [coefficient, setCoefficient] = useState(initialData?.coefficient?.toString() || "1");
-  const [bareme, setBareme] = useState(initialData?.bareme?.toString() || "20");
-  const [adding, setAdding] = useState(false);
-  const [editId, setEditId] = useState(initialData?._id || null);
-
-  const resetForm = () => {
-    setNom("");
-    setClasse("");
-    setCoefficient("1");
-    setBareme("20");
-    setEditId(null);
-    if (onSuccess) onSuccess();
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!nom.trim() || !classe) {
-      toast.error("Veuillez remplir tous les champs obligatoires.");
-      return;
-    }
-    const coeffNum = parseFloat(coefficient);
-    const baremeNum = parseFloat(bareme);
-    if (isNaN(coeffNum) || coeffNum <= 0) {
-      toast.error("Coefficient invalide.");
-      return;
-    }
-    if (isNaN(baremeNum) || baremeNum <= 0) {
-      toast.error("Barème invalide.");
-      return;
-    }
-
-    setAdding(true);
-    try {
-      if (editId) {
-        await updateCours({
-          id: editId,
-          nom: nom.trim(),
-          classe,
-          coefficient: coeffNum,
-          bareme: baremeNum,
-          userId,
-        });
-        toast.success("Cours mis à jour");
-      } else {
-        await addCours({
-          nom: nom.trim(),
-          classe,
-          coefficient: coeffNum,
-          bareme: baremeNum,
-          ecoleId,
-          anneeId,
-          userId,
-        });
-        toast.success("Cours ajouté");
-      }
-      resetForm();
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const inputStyle = {
-    width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-    borderRadius: 8,
-    fontSize: isMobile ? 16 : 14,
-    marginBottom: 16,
-    outline: "none",
-    background: dark ? "#0F172A" : "#F8FAFC",
-    color: dark ? "#F1F5F9" : "#1E293B",
-    boxSizing: "border-box",
-  };
-
-  const cardPadding = isMobile ? 16 : 24;
-  const titleSize = isMobile ? 16 : 18;
-  const labelSize = isMobile ? 15 : 14;
-  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const buttonFontSize = isMobile ? 16 : 14;
-  const buttonWidth = isMobile ? "100%" : "100%";
-
-  return (
-    <div style={{
-      background: dark ? "#1E293B" : "#FFFFFF",
-      borderRadius: 16,
-      padding: cardPadding,
-      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-      marginBottom: 24,
-    }}>
-      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
-        {editId ? "Modifier le cours" : "Ajouter un cours à une classe"}
-      </h3>
-      <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Nom du cours</label>
-        <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Mathématiques" style={inputStyle} />
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Classe</label>
-        <select value={classe} onChange={(e) => setClasse(e.target.value)} style={inputStyle}>
-          <option value="">-- Choisir une classe --</option>
-          {classes.map((c) => (
-            <option key={c._id} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c.nom}</option>
-          ))}
-        </select>
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Coefficient</label>
-        <input type="number" step="0.5" min="0.5" value={coefficient} onChange={(e) => setCoefficient(e.target.value)} style={inputStyle} />
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Barème (note max)</label>
-        <input type="number" step="1" min="1" value={bareme} onChange={(e) => setBareme(e.target.value)} style={inputStyle} />
-
-        <button type="submit" disabled={adding || !nom.trim() || !classe} style={{
-          background: adding ? "#A5B4FC" : (dark ? "#818CF8" : "#4F46E5"),
-          color: "white", border: "none", borderRadius: 10,
-          padding: buttonPadding, fontWeight: 600,
-          cursor: adding ? "not-allowed" : "pointer", width: buttonWidth,
-          fontSize: buttonFontSize, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        }}>
-          {adding ? <Loader size={16} className="animate-spin" /> : null}
-          {adding ? "Enregistrement..." : editId ? "Mettre à jour" : "Ajouter le cours"}
-        </button>
-        {editId && (
-          <button type="button" onClick={resetForm} style={{
-            background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 10,
-            padding: buttonPadding, fontWeight: 500, cursor: "pointer", width: buttonWidth, marginTop: 8,
-            color: dark ? "#F1F5F9" : "#1E293B", fontSize: buttonFontSize,
-          }}>
-            Annuler
-          </button>
-        )}
-      </form>
-    </div>
-  );
-}
-
-function AddCoursGroupe({ classes, addBulk, ecoleId, anneeId, userId, dark, isMobile }) {
-  const [bulkNom, setBulkNom] = useState("");
-  const [bulkCoefficient, setBulkCoefficient] = useState("1");
-  const [bulkBareme, setBulkBareme] = useState("20");
-  const [selectedClasses, setSelectedClasses] = useState([]);
-  const [adding, setAdding] = useState(false);
-
-  const toggleClass = (classe) => {
-    setSelectedClasses((prev) =>
-      prev.includes(classe) ? prev.filter((c) => c !== classe) : [...prev, classe]
-    );
-  };
-  const selectAll = () => setSelectedClasses(classes.map((c) => c.nom));
-  const deselectAll = () => setSelectedClasses([]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!bulkNom.trim() || selectedClasses.length === 0) return;
-    const coeffNum = parseFloat(bulkCoefficient);
-    const baremeNum = parseFloat(bulkBareme);
-    if (isNaN(coeffNum) || coeffNum <= 0) { toast.error("Coefficient invalide."); return; }
-    if (isNaN(baremeNum) || baremeNum <= 0) { toast.error("Barème invalide."); return; }
-    setAdding(true);
-    try {
-      await addBulk({
-        nom: bulkNom.trim(), coefficient: coeffNum, bareme: baremeNum,
-        classes: selectedClasses, ecoleId, anneeId, userId,
-      });
-      setBulkNom(""); setBulkCoefficient("1"); setBulkBareme("20"); setSelectedClasses([]);
-      toast.success(`Cours ajouté à ${selectedClasses.length} classe(s)`);
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const inputStyle = {
-    width: "100%", padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-    borderRadius: 8, fontSize: isMobile ? 16 : 14, marginBottom: 16, outline: "none",
-    background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B",
-    boxSizing: "border-box",
-  };
-
-  const cardPadding = isMobile ? 16 : 24;
-  const titleSize = isMobile ? 16 : 18;
-  const labelSize = isMobile ? 15 : 14;
-  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const buttonFontSize = isMobile ? 16 : 14;
-  const checkboxSize = isMobile ? 18 : 16;
-
-  return (
-    <div style={{
-      background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: cardPadding,
-      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, marginBottom: 24,
-    }}>
-      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
-        Ajouter un cours à plusieurs classes
-      </h3>
-      <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Nom du cours</label>
-        <input value={bulkNom} onChange={(e) => setBulkNom(e.target.value)} placeholder="Ex: Mathématiques" style={inputStyle} />
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Coefficient</label>
-        <input type="number" step="0.5" min="0.5" value={bulkCoefficient} onChange={(e) => setBulkCoefficient(e.target.value)} style={inputStyle} />
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Barème (note max)</label>
-        <input type="number" step="1" min="1" value={bulkBareme} onChange={(e) => setBulkBareme(e.target.value)} style={inputStyle} />
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexDirection: isMobile ? "column" : "row", gap: 8 }}>
-          <span style={{ fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Classes concernées</span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={selectAll} style={{ background: "none", border: "none", color: dark ? "#818CF8" : "#4F46E5", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Tout sélectionner</button>
-            <button type="button" onClick={deselectAll} style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Désélectionner</button>
-          </div>
-        </div>
-
-        <div style={{ maxHeight: 220, overflowY: "auto", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 12, padding: 8, marginBottom: 16, background: dark ? "#0F172A" : "#F8FAFC" }}>
-          {classes.map((c) => (
-            <label key={c._id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", fontSize: isMobile ? 15 : 14, cursor: "pointer", borderRadius: 6, color: dark ? "#F1F5F9" : "#1E293B" }}
-              onMouseEnter={(e) => e.currentTarget.style.background = dark ? "#312E81" : "#EEF2FF"}
-              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-              <input type="checkbox" checked={selectedClasses.includes(c.nom)} onChange={() => toggleClass(c.nom)} style={{ width: checkboxSize, height: checkboxSize, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
-              {c.nom}
-            </label>
-          ))}
-        </div>
-
-        <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", marginBottom: 16 }}>
-          {selectedClasses.length} classe(s) sélectionnée(s)
-        </div>
-
-        <button type="submit" disabled={adding || !bulkNom.trim() || selectedClasses.length === 0} style={{
-          background: adding ? "#A5B4FC" : (dark ? "#818CF8" : "#4F46E5"), color: "white",
-          border: "none", borderRadius: 10, padding: buttonPadding, fontWeight: 600,
-          cursor: adding ? "not-allowed" : "pointer", width: "100%", fontSize: buttonFontSize,
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        }}>
-          {adding ? <Loader size={16} className="animate-spin" /> : null}
-          {adding ? "Ajout en cours..." : `Ajouter le cours à ${selectedClasses.length} classe(s)`}
-        </button>
-      </form>
     </div>
   );
 }

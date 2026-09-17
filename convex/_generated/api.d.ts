@@ -22,6 +22,7 @@ import type * as emploiDuTemps from "../emploiDuTemps.js";
 import type * as examens from "../examens.js";
 import type * as fautes from "../fautes.js";
 import type * as frais from "../frais.js";
+import type * as helpers_auth from "../helpers/auth.js";
 import type * as inscriptions from "../inscriptions.js";
 import type * as messages from "../messages.js";
 import type * as notes from "../notes.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   examens: typeof examens;
   fautes: typeof fautes;
   frais: typeof frais;
+  "helpers/auth": typeof helpers_auth;
   inscriptions: typeof inscriptions;
   messages: typeof messages;
   notes: typeof notes;

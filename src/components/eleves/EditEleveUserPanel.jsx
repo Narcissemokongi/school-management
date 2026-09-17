@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// src/components/EditEleveUserPanel.jsx
+import { useState, useEffect, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -7,10 +8,13 @@ import { ConfirmDialog } from "../ConfirmDialog";
 import { Loader, UserPlus, X, Check } from "lucide-react";
 import toast from "react-hot-toast";
 
+// ✅ FIX #1 — cohérent avec AddEleveForm
+const MIN_PASSWORD_LENGTH = 8;
+
 export function EditEleveUserPanel({
   eleveId,
   initialUserId,
-  elevesUsers,
+  elevesUsers = [],   // ✅ FIX #4 — default
   ecoleId,
   userId,
   onClose,
@@ -33,18 +37,26 @@ export function EditEleveUserPanel({
     setUserIdState(initialUserId || "");
   }, [initialUserId]);
 
-  const validate = () => {
+  const validate = useCallback(() => {
     const errs = {};
     if (createUser) {
       if (!newUserNom.trim()) errs.newUserNom = "Requis";
       if (!newUserLogin.trim()) errs.newUserLogin = "Requis";
-      if (!newUserPassword || newUserPassword.length < 4) errs.newUserPassword = "4 caractères min.";
+      // ✅ FIX #1 — aligné sur 8
+      if (!newUserPassword || newUserPassword.length < MIN_PASSWORD_LENGTH) {
+        errs.newUserPassword = `${MIN_PASSWORD_LENGTH} caractères min.`;
+      }
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
-  };
+  }, [createUser, newUserNom, newUserLogin, newUserPassword]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
+    // ✅ FIX #5 — guard eleveId + userId requis
+    if (!eleveId || !userId) {
+      toast.error("Élève ou utilisateur invalide");
+      return;
+    }
     if (!validate()) return;
 
     const ok = await confirm(
@@ -63,20 +75,30 @@ export function EditEleveUserPanel({
           password: newUserPassword,
           role: "eleve",
           ecoleId,
-          userId,
+          // ✅ FIX #2 — requesterId (adapter si backend attend actionUserId)
+          requesterId: userId,
         });
         finalUserId = newUser;
       }
-      // ✅ Correction : suppression du champ actionUserId
-      await updateEleve({ id: eleveId, userId: finalUserId });
+      // ✅ FIX #3 — user d'action ajouté (avant : totalement absent)
+      await updateEleve({
+        id: eleveId,
+        userId: finalUserId,
+        requesterId: userId,
+      });
       toast.success("Compte élève mis à jour");
       onClose();
     } catch (err) {
-      toast.error(err.message);
+      // ✅ FIX #7 — fallback
+      toast.error(err?.message ?? "Erreur lors de la mise à jour");
     } finally {
       setUpdating(false);
     }
-  };
+  }, [
+    eleveId, userId, validate, confirm, userIdState,
+    createUser, newUserNom, newUserLogin, newUserPassword,
+    ecoleId, addUser, updateEleve, onClose,
+  ]);
 
   const inputStyle = (field) => ({
     width: "100%",
@@ -92,20 +114,29 @@ export function EditEleveUserPanel({
   });
 
   return (
-    <div style={{
-      background: dark ? "#1E293B" : "#FFFFFF",
-      borderRadius: 16,
-      padding: 24,
-      marginTop: 24,
-      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-      transition: "background-color 0.3s",
-    }}>
+    <div
+      role="dialog"        // ✅ FIX #9
+      aria-label="Modifier le compte élève"
+      style={{
+        background: dark ? "#1E293B" : "#FFFFFF",
+        borderRadius: 16,
+        padding: 24,
+        marginTop: 24,
+        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        transition: "background-color 0.3s",
+      }}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: dark ? "#F1F5F9" : "#1E293B" }}>
           Modifier le compte élève
         </h3>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: dark ? "#94A3B8" : "#64748B" }}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fermer"
+          style={{ background: "none", border: "none", cursor: "pointer", color: dark ? "#94A3B8" : "#64748B" }}
+        >
           <X size={20} />
         </button>
       </div>
@@ -128,6 +159,7 @@ export function EditEleveUserPanel({
             ))}
           </select>
           <button
+            type="button"
             onClick={() => setCreateUser(true)}
             style={{
               background: "none",
@@ -162,6 +194,7 @@ export function EditEleveUserPanel({
             onChange={(e) => setNewUserNom(e.target.value)}
             placeholder="Nom complet de l'élève"
             style={inputStyle("newUserNom")}
+            autoFocus       // ✅ FIX #9 — focus auto à l'ouverture du sous-formulaire
           />
           {errors.newUserNom && <div style={{ color: "#EF4444", fontSize: 13, marginTop: -6, marginBottom: 8 }}>{errors.newUserNom}</div>}
           <input
@@ -175,11 +208,12 @@ export function EditEleveUserPanel({
             type="password"
             value={newUserPassword}
             onChange={(e) => setNewUserPassword(e.target.value)}
-            placeholder="Mot de passe (min 4 caractères)"
+            placeholder={`Mot de passe (min ${MIN_PASSWORD_LENGTH} caractères)`}
             style={inputStyle("newUserPassword")}
           />
           {errors.newUserPassword && <div style={{ color: "#EF4444", fontSize: 13, marginTop: -6, marginBottom: 8 }}>{errors.newUserPassword}</div>}
           <button
+            type="button"
             onClick={() => setCreateUser(false)}
             style={{
               background: "none",
@@ -196,6 +230,7 @@ export function EditEleveUserPanel({
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={updating}
           style={{
@@ -214,19 +249,25 @@ export function EditEleveUserPanel({
             fontSize: 14,
           }}
         >
-          {updating ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+          {/* ✅ FIX #6 — keyframe eeup-spin scopé */}
+          {updating
+            ? <Loader size={16} style={{ animation: "eeup-spin 0.8s linear infinite" }} />
+            : <Check size={16} />}
           {updating ? "Enregistrement..." : "Enregistrer"}
         </button>
         <button
+          type="button"
           onClick={onClose}
+          disabled={updating}    // ✅ FIX #10 — pas de fermeture en plein update
           style={{
             background: dark ? "#334155" : "#F1F5F9",
             border: "none",
             borderRadius: 8,
             padding: "10px 16px",
-            cursor: "pointer",
+            cursor: updating ? "not-allowed" : "pointer",
             color: dark ? "#F1F5F9" : "#1E293B",
             fontWeight: 500,
+            opacity: updating ? 0.5 : 1,
           }}
         >
           Annuler
@@ -234,6 +275,17 @@ export function EditEleveUserPanel({
       </div>
 
       <ConfirmDialog {...dialogProps} />
+
+      {/* ✅ FIX #6 + #11 — keyframe scopé + reduced-motion */}
+      <style>{`
+        @keyframes eeup-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          button svg[style*="eeup-spin"] { animation: none !important; }
+        }
+      `}</style>
     </div>
   );
 }

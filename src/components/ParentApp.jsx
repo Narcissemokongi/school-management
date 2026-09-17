@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@convex/_generated/api";
+// src/components/ParentApp.jsx
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { Layout } from "./Layout";
@@ -16,14 +16,101 @@ import { Aide } from "./Aide";
 import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { useAppStore } from "@/store/appStore";
 import {
-  Users, MessageCircle, Calendar, Phone, HelpCircle,
-  FileText, Shield, ArrowLeft, BookOpen, DollarSign,
-  AlertTriangle, ClipboardList, Clock, Search, X,
-  User, BarChart3, AlertCircle, UserPlus, CheckCircle2, Loader,
-  XCircle,
+  Users,
+  MessageCircle,
+  Calendar,
+  Phone,
+  HelpCircle,
+  FileText,
+  Shield,
+  UserPlus,
+  X,
+  Search,
+  ClipboardList,
+  AlertTriangle,
+  ChevronRight,
+  DollarSign,
+  BookOpen,
+  Clock,
+  Award,
+  CheckCircle2,
+  TrendingUp,
+  ArrowLeft,
 } from "lucide-react";
-import toast from "react-hot-toast";
+import DemandeAssociation from "./DemandeAssociation";
 
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const VALID_PARENT_TABS = [
+  "enfants",
+  "messagerie",
+  "emploi",
+  "appels",
+  "aide",
+  "mentions",
+  "confidentialite",
+];
+
+const DEFAULT_PARENT_TAB = "enfants";
+const PARENT_BASE = "/parent";
+
+const ParentAppKeyframes = (
+  <style>{`
+    @keyframes pa-fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .pa-fade-in { animation: pa-fade-in 0.25s ease-out; }
+    @media (prefers-reduced-motion: reduce) {
+      .pa-fade-in { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════
+function parseParentUrl(pathname) {
+  // /parent/enfants
+  // /parent/enfants/abc123
+  // /parent/enfants/new
+  // /parent/messagerie
+  const match = pathname.match(/^\/parent\/([^\/]+)(?:\/([^\/]+))?/);
+  if (!match) return { tab: null, sub: null };
+
+  const [, tab, sub] = match;
+  if (!VALID_PARENT_TABS.includes(tab)) return { tab: null, sub: null };
+  return { tab, sub: sub || null };
+}
+
+function buildTokens(dark) {
+  return {
+    bg: dark ? "#0F172A" : "#F8FAFC",
+    surface: dark ? "#1E293B" : "#FFFFFF",
+    surfaceHover: dark ? "#26334D" : "#F8FAFC",
+    border: dark ? "#334155" : "#E2E8F0",
+    text: dark ? "#F1F5F9" : "#1E293B",
+    textMuted: dark ? "#94A3B8" : "#64748B",
+    primary: dark ? "#818CF8" : "#4F46E5",
+    primaryHover: dark ? "#6366F1" : "#4338CA",
+    primarySoft: dark ? "#312E81" : "#EEF2FF",
+    ghostHover: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+    danger: dark ? "#F87171" : "#EF4444",
+    dangerSoft: dark ? "#7F1D1D" : "#FEE2E2",
+    warning: dark ? "#FBBF24" : "#F59E0B",
+    warningSoft: dark ? "#78350F" : "#FEF3C7",
+    success: dark ? "#34D399" : "#10B981",
+    successSoft: dark ? "#064E3B" : "#D1FAE5",
+    shadow: dark
+      ? "0 1px 3px rgba(0,0,0,0.3)"
+      : "0 1px 3px rgba(0,0,0,0.05)",
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export function ParentApp({
   user,
   ecoleId,
@@ -36,116 +123,214 @@ export function ParentApp({
   toggle,
   handleLogout,
 }) {
-  const { S } = useStyles();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // ===== Persistance via le store Zustand =====
-  const tab = useAppStore((state) => state.parentTab);
-  const setTab = useAppStore((state) => state.setParentTab);
+  const userId = user?._id;
+  const tokens = useMemo(() => buildTokens(dark), [dark]);
 
-  const selectedEnfant = useAppStore((state) => state.parentSelectedEnfant);
-  const setSelectedEnfant = useAppStore((state) => state.setParentSelectedEnfant);
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX PERF — Tab lu depuis l'URL
+  // ════════════════════════════════════════════════════════════════════
+  const parsed = useMemo(
+    () => parseParentUrl(location.pathname),
+    [location.pathname]
+  );
+  const tab = parsed.tab || DEFAULT_PARENT_TAB;
+  const sub = parsed.sub;
 
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ navigateRef stable
+  // ════════════════════════════════════════════════════════════════════
+  const navigateRef = useRef(navigate);
+  useEffect(() => {
+    navigateRef.current = navigate;
+  }, [navigate]);
+
+  const setTab = useCallback((newTab) => {
+    if (VALID_PARENT_TABS.includes(newTab)) {
+      navigateRef.current(`${PARENT_BASE}/${newTab}`);
+    }
+  }, []);
+
+  // ✅ Redirection UNE SEULE FOIS
+  const hasRedirectedRef = useRef(false);
+  useEffect(() => {
+    if (!parsed.tab && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
+      navigateRef.current(`${PARENT_BASE}/${DEFAULT_PARENT_TAB}`, {
+        replace: true,
+      });
+    }
+  }, [parsed.tab]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Zustand — uniquement pour le payload messagerie + enfant sélectionné
+  // ════════════════════════════════════════════════════════════════════
   const messagingContactId = useAppStore((state) => state.messagingContactId);
-  const setMessagingContactId = useAppStore((state) => state.setMessagingContactId);
+  const setMessagingContactId = useAppStore(
+    (state) => state.setMessagingContactId
+  );
 
-  const searchEnfant = useAppStore((state) => state.parentSearchEnfant);
-  const setSearchEnfant = useAppStore((state) => state.setParentSearchEnfant);
+  const selectedEnfantZustand = useAppStore(
+    (state) => state.parentSelectedEnfant
+  );
+  const setSelectedEnfant = useAppStore(
+    (state) => state.setParentSelectedEnfant
+  );
 
-  const showAddChild = useAppStore((state) => state.parentShowAddChild);
-  const setShowAddChild = useAppStore((state) => state.setParentShowAddChild);
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ Enfant dérivé de l'URL
+  // ════════════════════════════════════════════════════════════════════
+  const selectedEnfantFromUrl = useMemo(() => {
+    if (tab !== "enfants" || !sub || sub === "new") return null;
+    return eleves.find((e) => e._id === sub) || null;
+  }, [tab, sub, eleves]);
 
-  const handleNavigateToMessaging = (contactId) => {
-    setMessagingContactId(contactId);
-    setTab("messagerie");
-  };
+  // ✅ Sync Zustand ← URL (pour que la tab "emploi" ait accès à l'enfant)
+  useEffect(() => {
+    if (
+      selectedEnfantFromUrl &&
+      selectedEnfantFromUrl._id !== selectedEnfantZustand?._id
+    ) {
+      setSelectedEnfant(selectedEnfantFromUrl);
+    }
+  }, [selectedEnfantFromUrl, selectedEnfantZustand?._id, setSelectedEnfant]);
 
-  const menu = [
-    { id: "enfants", label: "Mes enfants", icon: <Users size={20} /> },
-    { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
-    { id: "emploi", label: "Emploi du temps", icon: <Calendar size={20} /> },
-    { id: "appels", label: "Appels", icon: <Phone size={20} /> },
-    { id: "aide", label: "Aide", icon: <HelpCircle size={20} /> },
-    { id: "mentions", label: "Mentions légales", icon: <FileText size={20} /> },
-    { id: "confidentialite", label: "Confidentialité", icon: <Shield size={20} /> },
-  ];
+  // ════════════════════════════════════════════════════════════════════
+  // HANDLERS navigation
+  // ════════════════════════════════════════════════════════════════════
+  const handleNavigateToMessaging = useCallback(
+    (contactId) => {
+      if (contactId) {
+        navigateRef.current(`/parent/messagerie/chat/${contactId}`);
+      } else {
+        navigateRef.current("/parent/messagerie");
+      }
+    },
+    []
+  );
 
+  const handleSelectEnfant = useCallback(
+    (enfant) => {
+      if (enfant?._id) {
+        setSelectedEnfant(enfant);
+        navigateRef.current(`/parent/enfants/${enfant._id}`);
+      }
+    },
+    [setSelectedEnfant]
+  );
+
+  const handleBackToEnfants = useCallback(() => {
+    navigateRef.current("/parent/enfants");
+  }, []);
+
+  const handleOpenAddChild = useCallback(() => {
+    navigateRef.current("/parent/enfants/new");
+  }, []);
+
+  const handleCloseAddChild = useCallback(() => {
+    navigateRef.current("/parent/enfants");
+  }, []);
+
+  const handleGoToEnfants = useCallback(() => {
+    navigateRef.current("/parent/enfants");
+  }, []);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Menu
+  // ════════════════════════════════════════════════════════════════════
+  const menu = useMemo(
+    () => [
+      { id: "enfants", label: "Mes enfants", icon: <Users size={20} /> },
+      { id: "messagerie", label: "Messages", icon: <MessageCircle size={20} /> },
+      { id: "emploi", label: "Emploi du temps", icon: <Calendar size={20} /> },
+      { id: "appels", label: "Appels", icon: <Phone size={20} /> },
+      { id: "aide", label: "Aide", icon: <HelpCircle size={20} /> },
+      { id: "mentions", label: "Mentions légales", icon: <FileText size={20} /> },
+      {
+        id: "confidentialite",
+        label: "Confidentialité",
+        icon: <Shield size={20} />,
+      },
+    ],
+    []
+  );
+
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU CONTENU
+  // ════════════════════════════════════════════════════════════════════
   const renderContent = () => {
     switch (tab) {
       case "enfants":
-        if (selectedEnfant) {
-          const enfantPunitions = punitions
-            .filter((p) => p.idEleve === selectedEnfant._id)
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        // Sous-route : ajouter un enfant
+        if (sub === "new") {
           return (
-            <DossierEnfant
-              enfant={selectedEnfant}
-              punitions={enfantPunitions}
-              fautes={fautes}
-              ecoleId={ecoleId}
-              anneeId={anneeId}
-              userId={user._id}
-              onBack={() => setSelectedEnfant(null)}
-              S={S}
-              isMobile={isMobile}
+            <DemandeAssociation
+              user={user}
               dark={dark}
+              onClose={handleCloseAddChild}
+              isMobile={isMobile}
             />
           );
         }
-        return showAddChild ? (
-          <DemandeAssociation
-            user={user}
-            dark={dark}
-            onClose={() => setShowAddChild(false)}
-            isMobile={isMobile}
-          />
-        ) : (
+        // Sous-route : dossier d'un enfant
+        if (selectedEnfantFromUrl) {
+          return (
+            <DossierEnfant
+              enfant={selectedEnfantFromUrl}
+              punitions={punitions}
+              fautes={fautes}
+              ecoleId={ecoleId}
+              anneeId={anneeId}
+              user={user}
+              onBack={handleBackToEnfants}
+              isMobile={isMobile}
+              dark={dark}
+              tokens={tokens}
+            />
+          );
+        }
+        // Vue par défaut : liste
+        return (
           <ListeEnfants
             eleves={eleves}
             punitions={punitions}
             fautes={fautes}
             user={user}
-            onSelectEnfant={setSelectedEnfant}
-            S={S}
+            onSelectEnfant={handleSelectEnfant}
             isMobile={isMobile}
             dark={dark}
-            search={searchEnfant}
-            setSearch={setSearchEnfant}
-            onAddChild={() => setShowAddChild(true)}
+            tokens={tokens}
+            onAddChild={handleOpenAddChild}
           />
         );
-      case "emploi":
-        if (!selectedEnfant) {
+
+      case "emploi": {
+        const enfantPourEmploi = selectedEnfantFromUrl || selectedEnfantZustand;
+        if (!enfantPourEmploi) {
           return (
-            <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "24px", textAlign: "center" }}>
-              <Calendar size={48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 16 }} />
-              <h2 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 8 }}>
-                Emploi du temps
-              </h2>
-              <p style={{ color: dark ? "#94A3B8" : "#64748B", marginBottom: 24, fontSize: isMobile ? 14 : 16 }}>
-                Veuillez d'abord sélectionner un enfant dans la section "Mes enfants".
-              </p>
-              <button
-                onClick={() => setTab("enfants")}
-                style={{
-                  padding: isMobile ? "12px 20px" : "10px 20px",
-                  background: dark ? "#818CF8" : "#4F46E5",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: isMobile ? 16 : 14,
-                }}
-              >
-                Choisir un enfant
-              </button>
-            </div>
+            <EmptyEmploi
+              tokens={tokens}
+              isMobile={isMobile}
+              onGoToEnfants={handleGoToEnfants}
+            />
           );
         }
-        return <ConsultationEmploiDuTemps ecoleId={ecoleId} classe={selectedEnfant.classe} />;
+        return (
+          <ConsultationEmploiDuTemps
+            ecoleId={ecoleId}
+            classe={enfantPourEmploi.classe}
+            anneeId={anneeId}
+            user={user}
+          />
+        );
+      }
+
       case "messagerie":
-        return <MessagerieApp user={user} ecoleId={ecoleId} initialSelectedUserId={messagingContactId} />;
+        return <MessagerieApp user={user} ecoleId={ecoleId} />;
+
       case "appels":
         return (
           <Appels
@@ -155,17 +340,24 @@ export function ParentApp({
             onNavigateToMessaging={handleNavigateToMessaging}
           />
         );
+
       case "aide":
         return <Aide user={user} />;
+
       case "mentions":
         return <MentionsLegales />;
+
       case "confidentialite":
         return <PolitiqueConfidentialite />;
+
       default:
         return null;
     }
   };
 
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU PRINCIPAL
+  // ════════════════════════════════════════════════════════════════════
   return (
     <Layout
       menu={menu}
@@ -176,625 +368,1039 @@ export function ParentApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      <div style={{ padding: isMobile ? "0 12px" : "0" }}>
-        {renderContent()}
-      </div>
+      {ParentAppKeyframes}
+      <div className="pa-fade-in">{renderContent()}</div>
     </Layout>
   );
 }
 
-// ===== Composant de demande d'association parent-enfant =====
-function DemandeAssociation({ user, dark, onClose, isMobile }) {
-  const [matricule, setMatricule] = useState("");
-  const [sending, setSending] = useState(false);
-  const [alert, setAlert] = useState(null);
-
-  const createRequest = useMutation(api.parentLinks.createParentLinkRequest);
-  const cancelRequest = useMutation(api.parentLinks.cancelParentLinkRequest);
-
-  const demandes = useQuery(api.parentLinks.listByParent, { parentId: user._id }) ?? [];
-
-  const getErrorMessage = (err) => {
-    if (typeof err === "string") return err;
-    if (err?.data?.message) return err.data.message;
-    if (err?.message) return err.message;
-    return "Une erreur inconnue est survenue.";
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setAlert(null);
-
-    if (!matricule.trim()) {
-      setAlert({ type: "error", message: "Veuillez saisir le matricule de l'enfant." });
-      return;
-    }
-
-    setSending(true);
-    try {
-      await createRequest({
-        parentId: user._id,
-        eleveMatricule: matricule.trim().toUpperCase(),
-      });
-      setAlert({ type: "success", message: "Demande envoyée. L'administration va la traiter." });
-      toast.success("Demande envoyée.");
-      setMatricule("");
-    } catch (err) {
-      const raw = getErrorMessage(err);
-      let message = raw;
-      let type = "error";
-
-      if (raw.includes("Vous êtes déjà associé")) {
-        message = "Cet enfant est déjà associé à votre compte.";
-        type = "info";
-      } else if (raw.includes("Cet enfant est déjà associé")) {
-        message = "Cet enfant est déjà associé à un autre parent. Contactez l'administration si nécessaire.";
-      } else if (raw.includes("demande est déjà en attente")) {
-        message = "Une demande est déjà en attente pour cet enfant. Vous pouvez la consulter ci-dessous.";
-        type = "info";
-      } else if (raw.includes("Matricule invalide")) {
-        message = "Le matricule saisi n'existe pas. Vérifiez auprès de l'école.";
-      } else if (raw.includes("n'appartenez pas à la même école")) {
-        message = "Cet enfant n'appartient pas à votre établissement.";
-      }
-
-      setAlert({ type, message });
-      toast.error(message);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleCancel = async (id) => {
-    try {
-      await cancelRequest({ requestId: id, parentId: user._id });
-      toast.success("Demande annulée.");
-      setAlert({ type: "success", message: "Demande annulée." });
-    } catch (err) {
-      const msg = getErrorMessage(err);
-      setAlert({ type: "error", message: msg });
-      toast.error(msg);
-    }
-  };
-
-  const alertStyles = {
-    error: {
-      background: dark ? "#7F1D1D" : "#FEE2E2",
-      color: dark ? "#F87171" : "#B91C1C",
-      icon: <AlertCircle size={16} />,
-    },
-    info: {
-      background: dark ? "#1E3A8A" : "#DBEAFE",
-      color: dark ? "#60A5FA" : "#1D4ED8",
-      icon: <Clock size={16} />,
-    },
-    success: {
-      background: dark ? "#064E3B" : "#D1FAE5",
-      color: dark ? "#34D399" : "#065F46",
-      icon: <CheckCircle2 size={16} />,
-    },
-  };
-
-  const currentAlert = alert ? alertStyles[alert.type] : null;
-
-  const inputStyle = {
-    width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${alert?.type === "error" ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`,
-    borderRadius: 8,
-    fontSize: isMobile ? 16 : 14,
-    outline: "none",
-    background: dark ? "#0F172A" : "#F9FAFB",
-    color: dark ? "#F1F5F9" : "#1E293B",
-    marginBottom: 12,
-  };
-
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANT : Empty state Emploi
+// ════════════════════════════════════════════════════════════════════
+function EmptyEmploi({ tokens, isMobile, onGoToEnfants }) {
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", padding: isMobile ? "0 12px" : "0 16px" }}>
-      {onClose && (
-        <button
-          onClick={onClose}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: dark ? "#94A3B8" : "#64748B",
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            fontSize: isMobile ? 14 : 14,
-            marginBottom: 16,
-          }}
-        >
-          <ArrowLeft size={16} /> Retour
-        </button>
-      )}
-
-      <form onSubmit={handleSubmit} style={{ marginBottom: 24 }}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: dark ? "#CBD5E1" : "#374151" }}>
-          Matricule de l'enfant
-        </label>
-        <input
-          type="text"
-          placeholder="Ex: A1B2C3"
-          value={matricule}
-          onChange={(e) => {
-            setMatricule(e.target.value);
-            if (alert) setAlert(null);
-          }}
-          style={inputStyle}
-          required
-        />
-
-        {currentAlert && (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: currentAlert.background,
-            color: currentAlert.color,
-            padding: isMobile ? "12px 14px" : "10px 14px",
-            borderRadius: 8,
-            fontSize: isMobile ? 14 : 13,
-            fontWeight: 500,
-            marginBottom: 12,
-          }}>
-            {currentAlert.icon}
-            <span>{alert.message}</span>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={sending}
-          style={{
-            width: "100%",
-            padding: isMobile ? "12px 16px" : "10px 16px",
-            background: sending ? "#94A3B8" : dark ? "#818CF8" : "#4F46E5",
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: sending ? "not-allowed" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            fontSize: isMobile ? 16 : 14,
-          }}
-        >
-          {sending ? <Loader size={16} className="animate-spin" /> : <UserPlus size={16} />}
-          {sending ? "Envoi..." : "Demander l'association"}
-        </button>
-      </form>
-
-      {demandes.length > 0 && (
-        <div>
-          <h3 style={{ fontSize: isMobile ? 17 : 16, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 12 }}>
-            Mes demandes
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {demandes.map((demande) => (
-              <div
-                key={demande._id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: isMobile ? "12px 14px" : "10px 14px",
-                  borderRadius: 8,
-                  border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                  background: dark ? "#1E293B" : "#FFFFFF",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
-                  {demande.status === "pending" && <Clock size={16} color="#F59E0B" />}
-                  {demande.status === "approved" && <CheckCircle2 size={16} color="#10B981" />}
-                  {demande.status === "rejected" && <XCircle size={16} color="#EF4444" />}
-                  <span style={{ fontSize: isMobile ? 15 : 14, color: dark ? "#F1F5F9" : "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {demande.status === "pending" && "En attente"}
-                    {demande.status === "approved" && "Approuvée"}
-                    {demande.status === "rejected" && "Rejetée"}
-                  </span>
-                </div>
-                {demande.status === "pending" && (
-                  <button
-                    onClick={() => handleCancel(demande._id)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#EF4444",
-                      cursor: "pointer",
-                      fontSize: isMobile ? 14 : 13,
-                      fontWeight: 500,
-                      flexShrink: 0,
-                    }}
-                  >
-                    Annuler
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+    <div
+      style={{
+        maxWidth: 520,
+        margin: "0 auto",
+        padding: isMobile ? "40px 16px" : "60px 24px",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: "50%",
+          background: tokens.primarySoft,
+          color: tokens.primary,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "0 auto 16px",
+        }}
+      >
+        <Calendar size={30} />
+      </div>
+      <h2
+        style={{
+          fontSize: isMobile ? 17 : 20,
+          fontWeight: 700,
+          color: tokens.text,
+          margin: "0 0 6px",
+        }}
+      >
+        Emploi du temps
+      </h2>
+      <p
+        style={{
+          color: tokens.textMuted,
+          marginBottom: 20,
+          fontSize: 13.5,
+          maxWidth: 360,
+          marginLeft: "auto",
+          marginRight: "auto",
+          lineHeight: 1.5,
+        }}
+      >
+        Veuillez d'abord sélectionner un enfant dans la section « Mes enfants ».
+      </p>
+      <button
+        type="button"
+        onClick={onGoToEnfants}
+        style={{
+          padding: "12px 20px",
+          background: tokens.primary,
+          color: "white",
+          border: "none",
+          borderRadius: 10,
+          cursor: "pointer",
+          fontWeight: 700,
+          fontSize: 13.5,
+          minHeight: 44,
+        }}
+      >
+        Choisir un enfant
+      </button>
     </div>
   );
 }
 
-// ===== Liste des enfants =====
-function ListeEnfants({ eleves, punitions, fautes, user, onSelectEnfant, S, isMobile, dark, search, setSearch, onAddChild }) {
-  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
-  const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const accent = dark ? "#818CF8" : "#4F46E5";
-  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
-  const shadowHover = dark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.08)";
-  const danger = dark ? "#F87171" : "#EF4444";
-  const warning = dark ? "#FBBF24" : "#F59E0B";
+// ════════════════════════════════════════════════════════════════════
+// LISTE DES ENFANTS
+// ════════════════════════════════════════════════════════════════════
+function ListeEnfants({
+  eleves,
+  punitions,
+  fautes,
+  user,
+  onSelectEnfant,
+  isMobile,
+  dark,
+  tokens,
+  onAddChild,
+}) {
+  // ✅ Recherche locale (au lieu de Zustand)
+  const [search, setSearch] = useState("");
+
+  // ✅ Map fautes O(1)
+  const fautesById = useMemo(
+    () => new Map((fautes ?? []).map((f) => [f._id, f])),
+    [fautes]
+  );
+
+  // ✅ Punitions par élève
+  const punitionsParEleve = useMemo(() => {
+    const acc = new Map();
+    for (const p of punitions) {
+      if (!acc.has(p.idEleve)) {
+        acc.set(p.idEleve, { count: 0, hasGrave: false });
+      }
+      const entry = acc.get(p.idEleve);
+      entry.count++;
+      const faute = fautesById.get(p.idFaute);
+      if (faute?.gravite === "Grave") entry.hasGrave = true;
+    }
+    return acc;
+  }, [punitions, fautesById]);
 
   const stats = useMemo(() => {
     const totalEnfants = eleves.length;
     const totalPunitions = punitions.length;
-    const totalGraves = punitions.filter(p => {
-      const faute = fautes.find(f => f._id === p.idFaute);
-      return faute?.gravite === "Grave";
-    }).length;
+    let totalGraves = 0;
+    for (const p of punitions) {
+      if (fautesById.get(p.idFaute)?.gravite === "Grave") totalGraves++;
+    }
     return { totalEnfants, totalPunitions, totalGraves };
-  }, [eleves, punitions, fautes]);
+  }, [eleves, punitions, fautesById]);
 
   const elevesTries = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return [...eleves]
       .filter((e) => {
-        const q = search.trim().toLowerCase();
         if (!q) return true;
-        return `${e.nom} ${e.postnom}`.toLowerCase().includes(q);
+        return `${e.nom ?? ""} ${e.postnom ?? ""}`.toLowerCase().includes(q);
       })
       .sort((a, b) => {
-        const classeCompare = (a.classe || "").localeCompare(b.classe || "", undefined, { numeric: true, sensitivity: "base" });
+        const classeCompare = (a.classe || "").localeCompare(
+          b.classe || "",
+          undefined,
+          { numeric: true, sensitivity: "base" }
+        );
         if (classeCompare !== 0) return classeCompare;
-        return `${a.nom} ${a.postnom}`.localeCompare(`${b.nom} ${b.postnom}`, undefined, { sensitivity: "base" });
+        return `${a.nom} ${a.postnom}`.localeCompare(
+          `${b.nom} ${b.postnom}`,
+          undefined,
+          { sensitivity: "base" }
+        );
       });
   }, [eleves, search]);
 
+  // ════════════════════════════════════════════════════════════════════
+  // ÉTAT VIDE : aucun enfant
+  // ════════════════════════════════════════════════════════════════════
   if (eleves.length === 0) {
     return (
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <Users size={48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
-            Aucun enfant associé
-          </h2>
-          <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
-            Vous pouvez demander l'association d'un enfant à votre compte en fournissant son matricule.
-          </p>
-          <button
-            onClick={onAddChild}
-            style={{
-              marginTop: 16,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: isMobile ? "12px 20px" : "10px 20px",
-              background: accent,
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: isMobile ? 16 : 14,
-            }}
-          >
-            <UserPlus size={18} /> Associer un enfant
-          </button>
+      <div
+        style={{
+          maxWidth: 520,
+          margin: "0 auto",
+          padding: isMobile ? "40px 16px" : "60px 24px",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: "50%",
+            background: tokens.primarySoft,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "0 auto 16px",
+            color: tokens.primary,
+          }}
+        >
+          <Users size={30} />
         </div>
-      </div>
-    );
-  }
-
-  if (elevesTries.length === 0) {
-    return (
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
-        <Users size={48} color={dark ? "#334155" : "#94A3B8"} style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: textPrimary, margin: "0 0 8px" }}>
-          Aucun enfant trouvé
+        <h2
+          style={{
+            fontSize: isMobile ? 17 : 20,
+            fontWeight: 700,
+            color: tokens.text,
+            margin: "0 0 6px",
+          }}
+        >
+          Aucun enfant associé
         </h2>
-        <p style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>Essayez un autre nom.</p>
+        <p
+          style={{
+            color: tokens.textMuted,
+            fontSize: 13,
+            maxWidth: 380,
+            marginLeft: "auto",
+            marginRight: "auto",
+            marginBottom: 20,
+            lineHeight: 1.5,
+          }}
+        >
+          Demandez l'association d'un enfant à votre compte en fournissant son
+          matricule.
+        </p>
+        <button
+          type="button"
+          onClick={onAddChild}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 20px",
+            background: tokens.primary,
+            color: "white",
+            border: "none",
+            borderRadius: 10,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontSize: 13.5,
+            minHeight: 44,
+          }}
+        >
+          <UserPlus size={16} /> Associer un enfant
+        </button>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: textPrimary, margin: 0 }}>
+    <div
+      style={{
+        maxWidth: 900,
+        margin: "0 auto",
+        padding: isMobile ? "12px 12px 24px" : "20px 16px 32px",
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* ═══ En-tête ═══ */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+          marginBottom: isMobile ? 12 : 20,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <h2
+            style={{
+              fontSize: isMobile ? 18 : 22,
+              fontWeight: 700,
+              color: tokens.text,
+              margin: 0,
+              lineHeight: 1.2,
+            }}
+          >
             Mes enfants
           </h2>
-          <p style={{ color: textSecondary, marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
-            Sélectionnez un enfant pour consulter son dossier complet.
+          <p
+            style={{
+              color: tokens.textMuted,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 12 : 13,
+            }}
+          >
+            {eleves.length} enfant{eleves.length > 1 ? "s" : ""} associé
+            {eleves.length > 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={onAddChild}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: isMobile ? "12px 16px" : "8px 16px",
-            background: accent,
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: "pointer",
-            fontSize: isMobile ? 14 : 14,
-          }}
-        >
-          <UserPlus size={18} /> Ajouter un enfant
-        </button>
+        {!isMobile && (
+          <button
+            type="button"
+            onClick={onAddChild}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "10px 16px",
+              background: tokens.primary,
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontSize: 13,
+              minHeight: 40,
+            }}
+          >
+            <UserPlus size={15} /> Ajouter
+          </button>
+        )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
-        <StatCardMini icon={<Users size={18} />} value={stats.totalEnfants} label="Enfants" color={accent} dark={dark} isMobile={isMobile} />
-        <StatCardMini icon={<ClipboardList size={18} />} value={stats.totalPunitions} label="Punitions" color={warning} dark={dark} isMobile={isMobile} />
-        <StatCardMini icon={<AlertTriangle size={18} />} value={stats.totalGraves} label="Graves" color={danger} dark={dark} isMobile={isMobile} />
+      {/* ═══ Stats ═══ */}
+      <div
+        style={{
+          display: isMobile ? "flex" : "grid",
+          gridTemplateColumns: isMobile
+            ? undefined
+            : "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: isMobile ? 8 : 12,
+          marginBottom: isMobile ? 12 : 16,
+          overflowX: isMobile ? "auto" : "visible",
+          paddingBottom: isMobile ? 4 : 0,
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+        }}
+      >
+        <StatCard
+          icon={<Users size={16} />}
+          label="Enfants"
+          value={stats.totalEnfants}
+          color={tokens.primary}
+          tokens={tokens}
+          isMobile={isMobile}
+        />
+        <StatCard
+          icon={<ClipboardList size={16} />}
+          label="Punitions"
+          value={stats.totalPunitions}
+          color={tokens.warning}
+          tokens={tokens}
+          isMobile={isMobile}
+        />
+        <StatCard
+          icon={<AlertTriangle size={16} />}
+          label="Fautes graves"
+          value={stats.totalGraves}
+          color={tokens.danger}
+          tokens={tokens}
+          isMobile={isMobile}
+        />
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 10, padding: isMobile ? "12px 12px" : "8px 12px", marginBottom: 20, gap: 8 }}>
-        <Search size={16} color={textSecondary} />
+      {/* ═══ Recherche ═══ */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: tokens.surface,
+          border: `1px solid ${tokens.border}`,
+          borderRadius: 12,
+          padding: "0 12px",
+          marginBottom: isMobile ? 12 : 16,
+        }}
+      >
+        <Search size={16} color={tokens.textMuted} />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher un enfant..."
-          style={{ border: "none", outline: "none", background: "transparent", width: "100%", fontSize: isMobile ? 16 : 14, color: textPrimary }}
+          placeholder="Rechercher un enfant…"
+          aria-label="Rechercher un enfant"
+          style={{
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            width: "100%",
+            padding: isMobile ? "14px 0" : "12px 0",
+            fontSize: isMobile ? 16 : 14,
+            color: tokens.text,
+            fontFamily: "inherit",
+          }}
         />
         {search && (
-          <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary, padding: 4 }}>
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            aria-label="Effacer la recherche"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: tokens.textMuted,
+              display: "flex",
+              padding: 4,
+              marginRight: -4,
+            }}
+          >
             <X size={16} />
           </button>
         )}
       </div>
 
-      <div style={{ display: "grid", gap: 12 }}>
-        {elevesTries.map((enfant) => {
-          const nbPunitions = punitions.filter((p) => p.idEleve === enfant._id).length;
-          const hasGrave = punitions.some(
-            (p) => p.idEleve === enfant._id && fautes.find((f) => f._id === p.idFaute)?.gravite === "Grave"
-          );
-          return (
-            <div
+      {/* ═══ Liste ═══ */}
+      {elevesTries.length === 0 ? (
+        <div
+          style={{
+            textAlign: "center",
+            padding: isMobile ? 32 : 48,
+            color: tokens.textMuted,
+          }}
+        >
+          <Users size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+          <p style={{ margin: 0, fontSize: 13.5 }}>
+            Aucun enfant ne correspond à « {search} »
+          </p>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile
+              ? "1fr"
+              : "repeat(auto-fill, minmax(320px, 1fr))",
+            gap: isMobile ? 8 : 12,
+          }}
+        >
+          {elevesTries.map((enfant) => (
+            <EnfantCard
               key={enfant._id}
-              onClick={() => onSelectEnfant(enfant)}
-              style={{
-                background: cardBg,
-                borderRadius: 16,
-                padding: isMobile ? "14px 16px" : "20px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                boxShadow: shadow,
-                cursor: "pointer",
-                transition: "box-shadow 0.15s, transform 0.1s",
-                border: `1px solid ${hasGrave ? danger : cardBorder}`,
-                flexDirection: isMobile ? "column" : "row",
-                gap: 8,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = shadowHover; e.currentTarget.style.transform = "translateY(-1px)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = shadow; e.currentTarget.style.transform = "translateY(0)"; }}
-            >
-              <div style={{ flex: 1, minWidth: 0, width: "100%" }}>
-                <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 16, color: textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {enfant.nom} {enfant.postnom} {enfant.prenom && <span style={{ fontWeight: 400, color: textSecondary }}>{enfant.prenom}</span>}
-                </div>
-                <div style={{ fontSize: 13, color: textSecondary, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  Classe {enfant.classe}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginLeft: isMobile ? 0 : 8, width: isMobile ? "100%" : "auto", justifyContent: isMobile ? "space-between" : "flex-start" }}>
-                {nbPunitions > 0 && (
-                  <span style={{
-                    background: hasGrave ? (dark ? "#7F1D1D" : "#FEE2E2") : (dark ? "#312E81" : "#EEF2FF"),
-                    color: hasGrave ? (dark ? "#F87171" : "#B91C1C") : accent,
-                    padding: "2px 8px",
-                    borderRadius: 12,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    whiteSpace: "nowrap",
-                  }}>
-                    {nbPunitions} punition{nbPunitions > 1 ? "s" : ""}
-                  </span>
-                )}
-                <span style={{ display: "flex", alignItems: "center", gap: 4, color: accent, fontWeight: 500, fontSize: 14, whiteSpace: "nowrap" }}>
-                  <ClipboardList size={20} /> Dossier
-                </span>
-              </div>
-            </div>
-          );
-        })}
+              enfant={enfant}
+              stats={
+                punitionsParEleve.get(enfant._id) || {
+                  count: 0,
+                  hasGrave: false,
+                }
+              }
+              onSelect={onSelectEnfant}
+              isMobile={isMobile}
+              tokens={tokens}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ═══ FAB ajouter (mobile) ═══ */}
+      {isMobile && (
+        <button
+          type="button"
+          onClick={onAddChild}
+          aria-label="Associer un enfant"
+          title="Associer un enfant"
+          style={{
+            position: "fixed",
+            bottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+            right: "calc(20px + env(safe-area-inset-right, 0px))",
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: tokens.primary,
+            color: "#FFFFFF",
+            border: "none",
+            boxShadow: "0 6px 20px rgba(79,70,229,0.4)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 900,
+            transition: "transform 0.15s ease",
+          }}
+        >
+          <UserPlus size={24} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CARTE ENFANT (hover + focus state)
+// ════════════════════════════════════════════════════════════════════
+function EnfantCard({ enfant, stats, onSelect, isMobile, tokens }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const { count: nbPunitions, hasGrave } = stats;
+  const initials = `${enfant.nom?.[0] || ""}${
+    enfant.postnom?.[0] || ""
+  }`.toUpperCase();
+
+  const handleClick = () => onSelect(enfant);
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleClick();
+    }
+  };
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        background: hovered ? tokens.surfaceHover : tokens.surface,
+        borderRadius: 12,
+        padding: isMobile ? "12px 14px" : "14px 16px",
+        boxShadow: tokens.shadow,
+        border: `1.5px solid ${
+          hasGrave
+            ? tokens.danger
+            : focused
+            ? tokens.primary
+            : tokens.border
+        }`,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        cursor: "pointer",
+        transition:
+          "border-color 0.15s ease, background-color 0.15s ease",
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+        minWidth: 0,
+        minHeight: 68,
+        outline: focused ? `2px solid ${tokens.primary}` : "none",
+        outlineOffset: -2,
+        boxSizing: "border-box",
+      }}
+      aria-label={`Ouvrir le dossier de ${enfant.nom} ${enfant.postnom}`}
+    >
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: "50%",
+          background: hasGrave ? tokens.dangerSoft : tokens.primarySoft,
+          color: hasGrave ? tokens.danger : tokens.primary,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: 700,
+          fontSize: 13,
+          flexShrink: 0,
+        }}
+        aria-hidden="true"
+      >
+        {initials}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontWeight: 600,
+            fontSize: isMobile ? 14.5 : 14.5,
+            color: tokens.text,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {enfant.nom} {enfant.postnom}
+        </div>
+        <div
+          style={{
+            fontSize: 11.5,
+            color: tokens.textMuted,
+            marginTop: 2,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>{enfant.classe || "Classe inconnue"}</span>
+          {nbPunitions > 0 && (
+            <>
+              <span style={{ opacity: 0.5 }}>·</span>
+              <span
+                style={{
+                  color: hasGrave ? tokens.danger : tokens.textMuted,
+                  fontWeight: 600,
+                }}
+              >
+                {nbPunitions} punition{nbPunitions > 1 ? "s" : ""}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      <ChevronRight size={18} color={tokens.textMuted} style={{ flexShrink: 0 }} />
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CARTE STATISTIQUE
+// ════════════════════════════════════════════════════════════════════
+function StatCard({ icon, label, value, color, tokens, isMobile }) {
+  return (
+    <div
+      style={{
+        background: tokens.surface,
+        borderRadius: 12,
+        padding: isMobile ? "10px 12px" : "14px 16px",
+        boxShadow: tokens.shadow,
+        border: `1px solid ${tokens.border}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        minWidth: isMobile ? 130 : "auto",
+        flex: isMobile ? "0 0 auto" : 1,
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: `${color}20`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          color,
+        }}
+        aria-hidden="true"
+      >
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            color: tokens.textMuted,
+            fontSize: 10.5,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            color: tokens.text,
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: 1.1,
+          }}
+        >
+          {value}
+        </div>
       </div>
     </div>
   );
 }
 
-// ===== StatCardMini =====
-function StatCardMini({ icon, value, label, color, dark, isMobile }) {
-  return (
-    <div style={{
-      background: dark ? "#1E293B" : "#FFFFFF",
-      borderRadius: 12,
-      padding: isMobile ? 10 : 12,
-      textAlign: "center",
-      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-    }}>
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 4, color }}>{icon}</div>
-      <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
-      <div style={{ fontSize: isMobile ? 11 : 12, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
-    </div>
-  );
-}
-
-// ===== Dossier d'un enfant =====
-function DossierEnfant({ enfant, punitions, fautes, ecoleId, anneeId, userId, onBack, S, isMobile, dark }) {
+// ════════════════════════════════════════════════════════════════════
+// DOSSIER D'UN ENFANT
+// ════════════════════════════════════════════════════════════════════
+function DossierEnfant({
+  enfant,
+  punitions,
+  fautes,
+  ecoleId,
+  anneeId,
+  user,
+  onBack,
+  isMobile,
+  dark,
+  tokens,
+}) {
   const [subTab, setSubTab] = useState("punitions");
 
-  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
-  const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const accent = dark ? "#818CF8" : "#4F46E5";
-  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
-  const danger = dark ? "#F87171" : "#EF4444";
-  const warning = dark ? "#FBBF24" : "#F59E0B";
-  const success = dark ? "#34D399" : "#10B981";
+  // ✅ Filtre punitions de cet enfant
+  const enfantPunitions = useMemo(
+    () =>
+      punitions
+        .filter((p) => p.idEleve === enfant._id)
+        .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [punitions, enfant._id]
+  );
+
+  // ✅ Map fautes
+  const fautesById = useMemo(
+    () => new Map((fautes ?? []).map((f) => [f._id, f])),
+    [fautes]
+  );
 
   const scoreConduite = useMemo(() => {
     let score = 100;
-    punitions.forEach((p) => {
-      const faute = fautes.find((f) => f._id === p.idFaute);
+    enfantPunitions.forEach((p) => {
+      const faute = fautesById.get(p.idFaute);
       if (faute?.gravite === "Légère") score -= 2;
       else if (faute?.gravite === "Moyenne") score -= 5;
       else if (faute?.gravite === "Grave") score -= 10;
     });
     return Math.max(0, Math.min(100, score));
-  }, [punitions, fautes]);
+  }, [enfantPunitions, fautesById]);
 
-  const sousOnglets = [
-    { id: "punitions", label: "Punitions", icon: <AlertTriangle size={16} /> },
-    { id: "frais", label: "Frais", icon: <DollarSign size={16} /> },
-    { id: "bulletin", label: "Bulletin", icon: <BookOpen size={16} /> },
-    { id: "absences", label: "Absences", icon: <Calendar size={16} /> },
-    { id: "emploi", label: "Emploi du temps", icon: <Clock size={16} /> },
-    { id: "examens", label: "Examens", icon: <Calendar size={16} /> },
-  ];
+  const scoreColor =
+    scoreConduite >= 80
+      ? tokens.success
+      : scoreConduite >= 50
+      ? tokens.warning
+      : tokens.danger;
+  const scoreBg =
+    scoreConduite >= 80
+      ? tokens.successSoft
+      : scoreConduite >= 50
+      ? tokens.warningSoft
+      : tokens.dangerSoft;
+
+  const initials = `${enfant.nom?.[0] || ""}${
+    enfant.postnom?.[0] || ""
+  }`.toUpperCase();
+
+  const sousOnglets = useMemo(
+    () => [
+      {
+        id: "punitions",
+        label: "Punitions",
+        icon: <AlertTriangle size={14} />,
+      },
+      { id: "frais", label: "Frais", icon: <DollarSign size={14} /> },
+      { id: "bulletin", label: "Bulletin", icon: <BookOpen size={14} /> },
+      { id: "absences", label: "Absences", icon: <Calendar size={14} /> },
+      { id: "emploi", label: "Emploi", icon: <Clock size={14} /> },
+      { id: "examens", label: "Examens", icon: <Award size={14} /> },
+    ],
+    []
+  );
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+    <div
+      style={{
+        maxWidth: 960,
+        margin: "0 auto",
+        padding: isMobile ? "12px 12px 24px" : "20px 16px 32px",
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* ═══ HEADER ═══ */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: isMobile ? 14 : 20,
+        }}
+      >
         <button
+          type="button"
           onClick={onBack}
+          aria-label="Retour aux enfants"
+          title="Retour"
           style={{
-            background: cardBg,
-            border: `1px solid ${cardBorder}`,
-            borderRadius: 8,
-            padding: isMobile ? "8px 10px" : "8px 12px",
-            cursor: "pointer",
-            color: accent,
             display: "flex",
             alignItems: "center",
-            gap: 4,
-            fontWeight: 500,
-            fontSize: 14,
+            justifyContent: "center",
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: tokens.surface,
+            border: `1px solid ${tokens.border}`,
+            cursor: "pointer",
+            color: tokens.text,
             flexShrink: 0,
+            padding: 0,
           }}
         >
-          <ArrowLeft size={16} /> {isMobile ? null : "Retour"}
+          <ArrowLeft size={20} />
         </button>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: textPrimary, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div
+          style={{
+            width: isMobile ? 42 : 46,
+            height: isMobile ? 42 : 46,
+            borderRadius: "50%",
+            background: tokens.primarySoft,
+            color: tokens.primary,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 700,
+            fontSize: isMobile ? 14 : 15,
+            flexShrink: 0,
+          }}
+          aria-hidden="true"
+        >
+          {initials}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h2
+            style={{
+              fontSize: isMobile ? 15.5 : 17,
+              fontWeight: 700,
+              color: tokens.text,
+              margin: 0,
+              lineHeight: 1.2,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {enfant.nom} {enfant.postnom}
           </h2>
-          <p style={{ color: textSecondary, fontSize: 14 }}>
+          <p
+            style={{
+              color: tokens.textMuted,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 11.5 : 12.5,
+            }}
+          >
             Classe {enfant.classe}
           </p>
         </div>
-        <div style={{ textAlign: "center", flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: textSecondary, textTransform: "uppercase", fontWeight: 600 }}>Score de conduite</div>
-          <div style={{
-            fontSize: 24,
-            fontWeight: 800,
-            color: scoreConduite >= 80 ? success : scoreConduite >= 50 ? warning : danger,
-          }}>
-            {scoreConduite}
+
+        {/* Score */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "6px 10px",
+            background: scoreBg,
+            color: scoreColor,
+            borderRadius: 10,
+            flexShrink: 0,
+          }}
+        >
+          <TrendingUp size={14} />
+          <div>
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+                lineHeight: 1,
+                opacity: 0.8,
+              }}
+            >
+              Conduite
+            </div>
+            <div
+              style={{
+                fontSize: isMobile ? 15 : 16,
+                fontWeight: 800,
+                lineHeight: 1.1,
+              }}
+            >
+              {scoreConduite}
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{
-        display: "flex",
-        gap: 0,
-        borderBottom: `2px solid ${cardBorder}`,
-        marginBottom: 24,
-        overflowX: "auto",
-        WebkitOverflowScrolling: "touch",
-        whiteSpace: "nowrap",
-      }}>
-        {sousOnglets.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setSubTab(t.id)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: isMobile ? "10px 12px" : "10px 16px",
-              border: "none",
-              background: "transparent",
-              color: subTab === t.id ? accent : textSecondary,
-              fontWeight: subTab === t.id ? 600 : 400,
-              borderBottom: subTab === t.id ? `3px solid ${accent}` : "3px solid transparent",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              fontSize: 13,
-              flexShrink: 0,
-            }}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
+      {/* ═══ SUBTABS ═══ */}
+      <div
+        role="tablist"
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: `2px solid ${tokens.border}`,
+          marginBottom: isMobile ? 14 : 20,
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+          scrollbarWidth: "none",
+        }}
+      >
+        {sousOnglets.map((t) => {
+          const isActive = subTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setSubTab(t.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: isMobile ? "10px 12px" : "11px 16px",
+                minHeight: 44,
+                border: "none",
+                background: "transparent",
+                color: isActive ? tokens.primary : tokens.textMuted,
+                fontWeight: isActive ? 700 : 500,
+                borderBottom: isActive
+                  ? `3px solid ${tokens.primary}`
+                  : "3px solid transparent",
+                cursor: "pointer",
+                fontSize: isMobile ? 13 : 13.5,
+                flexShrink: 0,
+                marginBottom: -2,
+              }}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
+      {/* ═══ CONTENU ═══ */}
       {subTab === "punitions" && (
         <div>
-          {punitions.length === 0 ? (
-            <div style={{
-              background: cardBg,
-              borderRadius: 16,
-              padding: isMobile ? 32 : 48,
-              textAlign: "center",
-              boxShadow: shadow,
-              color: textSecondary,
-              border: `1px solid ${cardBorder}`,
-            }}>
-              <AlertTriangle size={32} style={{ marginBottom: 8 }} />
-              <p>Aucune punition enregistrée.</p>
+          {enfantPunitions.length === 0 ? (
+            <div
+              style={{
+                background: tokens.surface,
+                borderRadius: 14,
+                padding: isMobile ? 32 : 48,
+                textAlign: "center",
+                boxShadow: tokens.shadow,
+                color: tokens.textMuted,
+                border: `1px solid ${tokens.border}`,
+              }}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: "50%",
+                  background: tokens.successSoft,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 12px",
+                }}
+              >
+                <CheckCircle2 size={26} color={tokens.success} />
+              </div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  color: tokens.text,
+                }}
+              >
+                Aucune punition
+              </p>
+              <p style={{ margin: "4px 0 0", fontSize: 12 }}>
+                Cet enfant n'a aucun antécédent disciplinaire
+              </p>
             </div>
           ) : (
-            punitions.map((p) => {
-              const faute = fautes.find((f) => f._id === p.idFaute);
-              return (
-                <div
-                  key={p._id}
-                  style={{
-                    background: cardBg,
-                    borderRadius: 12,
-                    padding: isMobile ? "12px 14px" : "14px 18px",
-                    marginBottom: 8,
-                    boxShadow: shadow,
-                    border: `1px solid ${cardBorder}`,
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: 15, color: textPrimary }}>
-                    {faute?.libelle || "Faute inconnue"}
-                  </div>
-                  <div style={{ color: textSecondary, fontSize: 13, marginTop: 4 }}>
-                    {p.date} — Sanction : {p.sanction}
-                  </div>
-                  {p.commentaire && (
-                    <div style={{ fontSize: 12, color: textSecondary, marginTop: 4 }}>
-                      {p.commentaire}
+            <div style={{ display: "grid", gap: 8 }}>
+              {enfantPunitions.map((p) => {
+                const faute = fautesById.get(p.idFaute);
+                const gravite = faute?.gravite || "—";
+                const isGrave = gravite === "Grave";
+                const isMoyenne = gravite === "Moyenne";
+                const badgeBg = isGrave
+                  ? tokens.dangerSoft
+                  : isMoyenne
+                  ? tokens.warningSoft
+                  : tokens.successSoft;
+                const badgeColor = isGrave
+                  ? tokens.danger
+                  : isMoyenne
+                  ? tokens.warning
+                  : tokens.success;
+
+                return (
+                  <div
+                    key={p._id}
+                    style={{
+                      background: tokens.surface,
+                      borderRadius: 12,
+                      padding: isMobile ? "12px 14px" : "14px 16px",
+                      boxShadow: tokens.shadow,
+                      border: `1px solid ${tokens.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                        marginBottom: 6,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: isMobile ? 13.5 : 14,
+                          color: tokens.text,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          minWidth: 0,
+                        }}
+                      >
+                        {faute?.libelle || "Faute inconnue"}
+                      </div>
+                      <span
+                        style={{
+                          background: badgeBg,
+                          color: badgeColor,
+                          padding: "3px 9px",
+                          borderRadius: 10,
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {gravite}
+                      </span>
                     </div>
-                  )}
-                </div>
-              );
-            })
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: tokens.textMuted,
+                        marginBottom: 4,
+                      }}
+                    >
+                      {p.date} · Sanction : {p.sanction}
+                    </div>
+                    {p.commentaire && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: tokens.textMuted,
+                          marginTop: 4,
+                          fontStyle: "italic",
+                        }}
+                      >
+                        « {p.commentaire} »
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
-      {subTab === "frais" && <FraisEnfant eleveId={enfant._id} />}
+
+      {subTab === "frais" && (
+        <FraisEnfant eleveId={enfant._id} user={user} />
+      )}
       {subTab === "bulletin" && (
         <BulletinEnfant
           eleveId={enfant._id}
@@ -802,11 +1408,28 @@ function DossierEnfant({ enfant, punitions, fautes, ecoleId, anneeId, userId, on
           nom={enfant.nom}
           postnom={enfant.postnom}
           classe={enfant.classe}
+          user={user}
         />
       )}
-      {subTab === "absences" && <AbsencesEnfant eleveId={enfant._id} userId={userId} />}
-      {subTab === "emploi" && <ConsultationEmploiDuTemps ecoleId={ecoleId} classe={enfant.classe} />}
-      {subTab === "examens" && <ConsultationExamens ecoleId={ecoleId} anneeId={anneeId} classe={enfant.classe} />}
+      {subTab === "absences" && (
+        <AbsencesEnfant eleveId={enfant._id} user={user} />
+      )}
+      {subTab === "emploi" && (
+        <ConsultationEmploiDuTemps
+          ecoleId={ecoleId}
+          classe={enfant.classe}
+          anneeId={anneeId}
+          user={user}
+        />
+      )}
+      {subTab === "examens" && (
+        <ConsultationExamens
+          ecoleId={ecoleId}
+          anneeId={anneeId}
+          classe={enfant.classe}
+          user={user}
+        />
+      )}
     </div>
   );
 }

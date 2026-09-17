@@ -1,56 +1,339 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
-import * as XLSX from "xlsx";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
 import { DataTable } from "./DataTable";
 import {
-  Loader, DollarSign, Upload, Trash2, Edit2, School,
-  Download, FileSpreadsheet, CheckCircle, Clock, Search,
-  Settings, Users, ChevronDown, ChevronUp, FileWarning,
+  Loader, DollarSign, Trash2, Edit2,
+  Download, CheckCircle, Clock, Search,
+  Settings, Users, ChevronRight, X,
+  SlidersHorizontal, Plus, FileWarning,
 } from "lucide-react";
 import { trierEleves } from "@/utils/tri";
+import {
+  FraisFiltersSheet,
+  AddFraisModal,
+  DetailFraisModal,
+  ConfigFraisModal,
+} from "./FraisModals";
 
+// ============================================================
+// LAZY-LOAD XLSX (lib lourde ~500KB, chargée uniquement à l'usage)
+// ============================================================
+let _xlsxPromise = null;
+function loadXLSX() {
+  if (!_xlsxPromise) _xlsxPromise = import("xlsx");
+  return _xlsxPromise;
+}
+
+// ============================================================
+// CARTE STATISTIQUE COMPACTE
+// ============================================================
+function StatCard({ icon, label, value, color, dark, isMobile }) {
+  return (
+    <div
+      style={{
+        background: dark ? "#1E293B" : "#FFFFFF",
+        borderRadius: 12,
+        padding: isMobile ? "10px 12px" : "14px 16px",
+        boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.25)" : "0 1px 2px rgba(0,0,0,0.04)",
+        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        minWidth: isMobile ? 130 : "auto",
+        flex: isMobile ? "0 0 auto" : 1,
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: `${color}20`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          color,
+        }}
+      >
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            color: dark ? "#94A3B8" : "#64748B",
+            fontSize: 10.5,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            color: dark ? "#F1F5F9" : "#1E293B",
+            fontSize: 16,
+            fontWeight: 700,
+            lineHeight: 1.15,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// CARTE FRAIS COMPACTE
+// ============================================================
+function FraisCard({ frais, eleve, deviseSymbol, dark, isMobile, onClick }) {
+  const estPaye = frais.reste <= 0;
+  const resteColor = estPaye
+    ? dark
+      ? "#34D399"
+      : "#10B981"
+    : dark
+    ? "#FBBF24"
+    : "#F59E0B";
+
+  const badgeStyle = estPaye
+    ? {
+        background: dark ? "#064E3B" : "#D1FAE5",
+        color: dark ? "#34D399" : "#065F46",
+      }
+    : {
+        background: dark ? "#78350F" : "#FEF3C7",
+        color: dark ? "#FBBF24" : "#92400E",
+      };
+
+  return (
+    <div
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{
+        background: dark ? "#1E293B" : "#FFFFFF",
+        borderRadius: 12,
+        padding: isMobile ? "10px 12px" : "12px 14px",
+        boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.25)" : "0 1px 2px rgba(0,0,0,0.04)",
+        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        display: "flex",
+        alignItems: "center",
+        gap: isMobile ? 10 : 12,
+        cursor: "pointer",
+        transition: "border-color 0.15s, transform 0.1s",
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+        minWidth: 0,
+      }}
+      onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.99)")}
+      onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+    >
+      {/* Avatar */}
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: "50%",
+          background: dark ? "#312E81" : "#EEF2FF",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: dark ? "#A5B4FC" : "#4F46E5",
+          fontWeight: 700,
+          fontSize: 12,
+          flexShrink: 0,
+        }}
+      >
+        {eleve?.prenom?.[0]}
+        {eleve?.nom?.[0]}
+      </div>
+
+      {/* Infos */}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              fontWeight: 600,
+              fontSize: isMobile ? 13.5 : 14,
+              color: dark ? "#F1F5F9" : "#1E293B",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+            }}
+          >
+            {eleve?.nom} {eleve?.postnom}
+          </span>
+          <span
+            style={{
+              background: dark ? "#1E293B" : "#F1F5F9",
+              color: dark ? "#CBD5E1" : "#475569",
+              padding: "1px 7px",
+              borderRadius: 10,
+              fontSize: 10,
+              fontWeight: 600,
+              flexShrink: 0,
+              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+            }}
+          >
+            {eleve?.classe}
+          </span>
+        </div>
+        <div
+          style={{
+            fontSize: isMobile ? 11 : 11.5,
+            color: dark ? "#94A3B8" : "#64748B",
+            marginTop: 3,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ whiteSpace: "nowrap" }}>
+            Total {frais.montantTotal.toLocaleString()} {deviseSymbol}
+          </span>
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span style={{ whiteSpace: "nowrap" }}>
+            Payé {frais.montantPaye.toLocaleString()} {deviseSymbol}
+          </span>
+        </div>
+        <div
+          style={{
+            fontSize: isMobile ? 11 : 11.5,
+            fontWeight: 700,
+            color: resteColor,
+            marginTop: 2,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          {estPaye ? "Soldé" : `Reste ${frais.reste.toLocaleString()} ${deviseSymbol}`}
+          <span
+            style={{
+              ...badgeStyle,
+              padding: "1px 7px",
+              borderRadius: 10,
+              fontSize: 9.5,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+            }}
+          >
+            {estPaye ? <CheckCircle size={9} /> : <Clock size={9} />}
+            {estPaye ? "Payé" : "Attente"}
+          </span>
+        </div>
+      </div>
+
+      {/* Chevron */}
+      <ChevronRight
+        size={18}
+        color={dark ? "#475569" : "#CBD5E1"}
+        style={{ flexShrink: 0 }}
+      />
+    </div>
+  );
+}
+
+// ============================================================
+// COMPOSANT PRINCIPAL
+// ============================================================
 export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
   const { dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
-  const ecole = useQuery(api.ecoles.get, ecoleId ? { ecoleId } : "skip");
+  const userId = user?._id;
+
+  // ==================== QUERIES (avec userId requis) ====================
+  const ecole = useQuery(
+    api.ecoles.get,
+    ecoleId && userId ? { ecoleId, userId } : "skip"
+  );
   const devise = ecole?.devise || "CDF";
   const deviseSymbol = devise === "USD" ? "$" : "FC";
 
-  const fraisClasses = useQuery(api.frais.listFraisClasses, ecoleId ? { ecoleId, anneeId } : "skip") ?? [];
+  const fraisClasses =
+    useQuery(
+      api.frais.listFraisClasses,
+      ecoleId && userId ? { ecoleId, anneeId, userId } : "skip"
+    ) ?? [];
+
+  const frais =
+    useQuery(
+      api.frais.listByEcole,
+      ecoleId && userId
+        ? anneeId
+          ? { ecoleId, anneeId, userId }
+          : { ecoleId, userId }
+        : "skip"
+    ) ?? [];
+
+  // ==================== MUTATIONS ====================
   const upsertFraisClasse = useMutation(api.frais.upsertFraisClasse);
-
-  const [mode, setMode] = useState("individuel");
-  const [editData, setEditData] = useState(null);
-  const [classeActive, setClasseActive] = useState("");
-  const [statutFiltre, setStatutFiltre] = useState("tous");
-  const [deleting, setDeleting] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [exporting, setExporting] = useState(false);
-
-  const [showConfig, setShowConfig] = useState(false);
-  const [configClasse, setConfigClasse] = useState("");
-  const [configMontant, setConfigMontant] = useState("");
-
-  const frais = useQuery(api.frais.listByEcole, anneeId ? { ecoleId, anneeId } : { ecoleId }) ?? [];
   const upsertFrais = useMutation(api.frais.upsert);
   const upsertBulk = useMutation(api.frais.upsertBulk);
   const removeFrais = useMutation(api.frais.remove);
+
+  // ==================== ÉTAT LOCAL ====================
+  const [classeActive, setClasseActive] = useState("");
+  const [statutFiltre, setStatutFiltre] = useState("tous");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addModalMode, setAddModalMode] = useState("individuel");
+  const [editingFrais, setEditingFrais] = useState(null);
+  const [detailFrais, setDetailFrais] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
   const fraisFileInputRef = useRef(null);
 
-  // Classes uniques avec montants fixes
+  // ==================== MAPS MÉMOÏSÉS (perf O(n) au lieu de O(n²)) ====================
+  const elevesById = useMemo(
+    () => new Map(eleves.map((e) => [e._id, e])),
+    [eleves]
+  );
+
+  const fraisClassesMap = useMemo(
+    () => new Map(fraisClasses.map((fc) => [fc.classe, fc])),
+    [fraisClasses]
+  );
+
+  // ==================== CALCULS ====================
   const classesStats = useMemo(() => {
     const map = {};
-    eleves.forEach((e) => {
+    for (const e of eleves) {
+      if (!e.classe) continue;
       if (!map[e.classe]) {
-        const fraisClasse = fraisClasses.find((fc) => fc.classe === e.classe);
+        const fraisClasse = fraisClassesMap.get(e.classe);
         map[e.classe] = {
           nom: e.classe,
           nbEleves: 0,
@@ -58,124 +341,241 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
         };
       }
       map[e.classe].nbEleves++;
-    });
+    }
     return Object.values(map).sort((a, b) =>
-      a.nom.localeCompare(b.nom, undefined, { numeric: true, sensitivity: "base" })
+      a.nom.localeCompare(b.nom, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
     );
-  }, [eleves, fraisClasses]);
+  }, [eleves, fraisClassesMap]);
 
   const elevesFiltres = useMemo(() => {
-    const list = classeActive ? eleves.filter((e) => e.classe === classeActive) : eleves;
+    const list = classeActive
+      ? eleves.filter((e) => e.classe === classeActive)
+      : eleves;
     return [...list].sort(trierEleves);
   }, [eleves, classeActive]);
 
-  const fraisFiltres = useMemo(
-    () =>
-      classeActive
-        ? frais.filter((f) => {
-            const eleve = eleves.find((e) => e._id === f.eleveId);
-            return eleve?.classe === classeActive;
-          })
-        : frais,
-    [frais, eleves, classeActive]
-  );
+  const fraisFiltres = useMemo(() => {
+    if (!classeActive) return frais;
+    return frais.filter((f) => {
+      const eleve = elevesById.get(f.eleveId);
+      return eleve?.classe === classeActive;
+    });
+  }, [frais, elevesById, classeActive]);
 
   const fraisFinaux = useMemo(() => {
-    if (statutFiltre === "tous") return fraisFiltres;
-    return fraisFiltres.filter((f) => {
-      const reste = f.montantTotal - f.montantPaye;
-      if (statutFiltre === "paye") return reste <= 0;
-      if (statutFiltre === "en_attente") return reste > 0;
-      return true;
-    });
-  }, [fraisFiltres, statutFiltre]);
+    let result = fraisFiltres;
+    if (statutFiltre !== "tous") {
+      result = result.filter((f) => {
+        const reste = f.montantTotal - f.montantPaye;
+        if (statutFiltre === "paye") return reste <= 0;
+        if (statutFiltre === "en_attente") return reste > 0;
+        return true;
+      });
+    }
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      result = result.filter((f) => {
+        const eleve = elevesById.get(f.eleveId);
+        if (!eleve) return false;
+        const hay = `${eleve.nom} ${eleve.postnom} ${eleve.prenom || ""} ${eleve.classe || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    return result;
+  }, [fraisFiltres, statutFiltre, searchTerm, elevesById]);
+
+  const enrichedFrais = useMemo(
+    () =>
+      fraisFinaux.map((f) => {
+        const eleve = elevesById.get(f.eleveId);
+        const reste = f.montantTotal - f.montantPaye;
+        return {
+          ...f,
+          _raw: f, // référence brute pour AddFraisModal
+          eleveNom: eleve?.nom ?? "—",
+          elevePostnom: eleve?.postnom ?? "",
+          eleveClasse: eleve?.classe ?? "—",
+          reste,
+          estPaye: reste <= 0,
+          _eleve: eleve,
+        };
+      }),
+    [fraisFinaux, elevesById]
+  );
 
   const totalFrais = fraisFinaux.reduce((sum, f) => sum + f.montantTotal, 0);
   const totalPaye = fraisFinaux.reduce((sum, f) => sum + f.montantPaye, 0);
   const resteAPayer = totalFrais - totalPaye;
   const nbFrais = fraisFinaux.length;
-  const nbPayes = fraisFinaux.filter((f) => f.montantTotal - f.montantPaye <= 0).length;
+  const nbPayes = fraisFinaux.filter(
+    (f) => f.montantTotal - f.montantPaye <= 0
+  ).length;
   const nbAttente = nbFrais - nbPayes;
 
-  // Suppression
-  const handleDelete = async (id) => {
-    const ok = await confirm("Supprimer ces frais", "Voulez-vous vraiment supprimer ces frais ?");
+  const activeFiltersCount = useMemo(() => {
+    let n = 0;
+    if (searchTerm.trim()) n++;
+    if (classeActive) n++;
+    if (statutFiltre !== "tous") n++;
+    return n;
+  }, [searchTerm, classeActive, statutFiltre]);
+
+  // ==================== HANDLERS ====================
+  const resetFilters = () => {
+    setSearchTerm("");
+    setClasseActive("");
+    setStatutFiltre("tous");
+  };
+
+  const handleOpenAdd = (mode = "individuel", initialData = null) => {
+    setAddModalMode(mode);
+    // Toujours passer la version brute au modal (évite les champs parasites)
+    setEditingFrais(initialData?._raw || initialData);
+    setShowAddModal(true);
+  };
+
+  const handleCloseAdd = () => {
+    setShowAddModal(false);
+    setEditingFrais(null);
+  };
+
+  const handleDelete = async (fraisItem) => {
+    const ok = await confirm(
+      "Supprimer ces frais",
+      "Voulez-vous vraiment supprimer ces frais ?"
+    );
     if (!ok) return;
-    setDeleting(true);
     try {
-      await removeFrais({ id, userId: user._id });
+      await removeFrais({ id: fraisItem._id, userId });
       toast.success("Frais supprimés");
+      setDetailFrais(null);
     } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setDeleting(false);
+      toast.error(err.message || "Erreur lors de la suppression");
     }
   };
 
-  // Import Excel
   const handleImportFraisExcel = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const data = new Uint8Array(evt.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-        if (rows.length < 2) return;
-        const headers = rows[0].map((h) => h.toString().toLowerCase().trim());
-        const nomIdx = headers.indexOf("nom"),
-          postnomIdx = headers.indexOf("postnom"),
-          classeIdx = headers.indexOf("classe"),
-          totalIdx = headers.indexOf("montanttotal"),
-          payeIdx = headers.indexOf("montantpaye"),
-          commentaireIdx = headers.indexOf("commentaire");
-        if (nomIdx === -1 || postnomIdx === -1 || classeIdx === -1 || totalIdx === -1 || payeIdx === -1) {
-          toast.error("Colonnes requises : nom, postnom, classe, montantTotal, montantPaye");
-          return;
+    try {
+      const XLSX = await loadXLSX();
+      const data = new Uint8Array(await file.arrayBuffer());
+      const workbook = XLSX.read(data, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+      if (rows.length < 2) {
+        toast.error("Fichier vide");
+        return;
+      }
+
+      const headers = rows[0].map((h) => h.toString().toLowerCase().trim());
+      const nomIdx = headers.indexOf("nom");
+      const postnomIdx = headers.indexOf("postnom");
+      const classeIdx = headers.indexOf("classe");
+      const totalIdx = headers.indexOf("montanttotal");
+      const payeIdx = headers.indexOf("montantpaye");
+      const commentaireIdx = headers.indexOf("commentaire");
+
+      if (
+        nomIdx === -1 ||
+        postnomIdx === -1 ||
+        classeIdx === -1 ||
+        totalIdx === -1 ||
+        payeIdx === -1
+      ) {
+        toast.error(
+          "Colonnes requises : nom, postnom, classe, montantTotal, montantPaye"
+        );
+        return;
+      }
+
+      let count = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (
+          !row[nomIdx] ||
+          !row[postnomIdx] ||
+          !row[classeIdx] ||
+          row[totalIdx] == null ||
+          row[payeIdx] == null
+        ) {
+          skipped++;
+          continue;
         }
-        let count = 0;
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row[nomIdx] || !row[postnomIdx] || !row[classeIdx] || row[totalIdx] == null || row[payeIdx] == null) continue;
-          const nom = row[nomIdx].toString().trim();
-          const postnom = row[postnomIdx].toString().trim();
-          const classe = row[classeIdx].toString().trim();
-          const eleve = eleves.find((e) => e.nom === nom && e.postnom === postnom && e.classe === classe);
-          if (!eleve) continue;
+
+        const nom = row[nomIdx].toString().trim();
+        const postnom = row[postnomIdx].toString().trim();
+        const classe = row[classeIdx].toString().trim();
+
+        const eleve = eleves.find(
+          (e) =>
+            e.nom === nom && e.postnom === postnom && e.classe === classe
+        );
+        if (!eleve) {
+          skipped++;
+          continue;
+        }
+
+        const montantTotal = parseFloat(row[totalIdx]);
+        const montantPaye = parseFloat(row[payeIdx]);
+        if (isNaN(montantTotal) || isNaN(montantPaye)) {
+          errors++;
+          continue;
+        }
+
+        try {
           await upsertFrais({
             eleveId: eleve._id,
             ecoleId,
-            montantTotal: parseFloat(row[totalIdx]),
-            montantPaye: parseFloat(row[payeIdx]),
-            commentaire: commentaireIdx !== -1 ? row[commentaireIdx]?.toString().trim() : undefined,
+            montantTotal,
+            montantPaye,
+            commentaire:
+              commentaireIdx !== -1
+                ? row[commentaireIdx]?.toString().trim() || undefined
+                : undefined,
             anneeId,
-            userId: user._id,
+            userId,
           });
           count++;
+        } catch {
+          errors++;
         }
-        toast.success(`${count} frais importés / mis à jour.`);
-      } catch (err) {
-        toast.error(err.message);
-      } finally {
-        setImporting(false);
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      const parts = [`${count} frais importé${count > 1 ? "s" : ""}`];
+      if (skipped) parts.push(`${skipped} ignoré${skipped > 1 ? "s" : ""}`);
+      if (errors) parts.push(`${errors} échec${errors > 1 ? "s" : ""}`);
+      if (count > 0) {
+        toast.success(parts.join(" · "));
+      } else {
+        toast.error(parts.join(" · "));
+      }
+    } catch (err) {
+      toast.error(err.message || "Erreur lors de l'import");
+    } finally {
+      setImporting(false);
+      if (fraisFileInputRef.current) fraisFileInputRef.current.value = "";
+    }
   };
 
-  // Export Excel
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (fraisFinaux.length === 0) {
       toast.error("Aucune donnée à exporter.");
       return;
     }
     setExporting(true);
     try {
+      const XLSX = await loadXLSX();
       const dataExport = fraisFinaux.map((f) => {
-        const eleve = eleves.find((e) => e._id === f.eleveId);
+        const eleve = elevesById.get(f.eleveId);
         return {
           Nom: eleve?.nom ?? "",
           Postnom: eleve?.postnom ?? "",
@@ -189,692 +589,841 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
       const worksheet = XLSX.utils.json_to_sheet(dataExport);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Frais");
-      XLSX.writeFile(workbook, `frais_${classeActive || "toutes_classes"}.xlsx`);
+      XLSX.writeFile(
+        workbook,
+        `frais_${classeActive || "toutes_classes"}.xlsx`
+      );
       toast.success("Export Excel réussi.");
     } catch (err) {
-      toast.error("Erreur lors de l'export.");
+      toast.error(err?.message || "Erreur lors de l'export.");
     } finally {
       setExporting(false);
     }
   };
 
-  // Télécharger modèle
-  const handleDownloadTemplate = () => {
-    const template = [
-      ["nom", "postnom", "classe", "montantTotal", "montantPaye", "commentaire"],
-      ["Jean", "Dupont", "6ème A", 50000, 20000, "Frais de scolarité"],
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(template);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Modèle");
-    XLSX.writeFile(workbook, "modele_import_frais.xlsx");
-  };
-
-  // Enregistrer frais de classe
-  const handleSaveFraisClasse = async (e) => {
-    e.preventDefault();
-    if (!configClasse || !configMontant) {
-      toast.error("Veuillez sélectionner une classe et saisir un montant.");
-      return;
-    }
+  const handleDownloadTemplate = async () => {
     try {
-      await upsertFraisClasse({
-        classe: configClasse,
-        montantTotal: parseFloat(configMontant),
-        ecoleId,
-        anneeId: anneeId || undefined,
-      });
-      toast.success(`Montant fixé pour la classe ${configClasse}`);
-      setShowConfig(false);
-      setConfigClasse("");
-      setConfigMontant("");
+      const XLSX = await loadXLSX();
+      const template = [
+        [
+          "nom",
+          "postnom",
+          "classe",
+          "montantTotal",
+          "montantPaye",
+          "commentaire",
+        ],
+        ["Jean", "Dupont", "6ème A", 50000, 20000, "Frais de scolarité"],
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(template);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Modèle");
+      XLSX.writeFile(workbook, "modele_import_frais.xlsx");
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err?.message || "Erreur lors du téléchargement du modèle");
     }
   };
 
+  // ==================== RENDU PRÉCOCE ====================
   if (!anneeId) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
-        <DollarSign size={48} color="#F59E0B" style={{ marginBottom: 16 }} />
-        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
+      <div
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "20px 12px" : "32px 24px",
+          textAlign: "center",
+        }}
+      >
+        <DollarSign
+          size={48}
+          color="#F59E0B"
+          style={{ marginBottom: 16 }}
+        />
+        <h2
+          style={{
+            fontSize: isMobile ? 17 : 22,
+            fontWeight: 700,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            margin: "0 0 8px",
+          }}
+        >
           Aucune année scolaire active
         </h2>
-        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 14 : 14 }}>
+        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13.5 }}>
           Veuillez activer une année scolaire.
         </p>
       </div>
     );
   }
 
-  const enrichedFrais = fraisFinaux.map((f) => {
-    const eleve = eleves.find((e) => e._id === f.eleveId);
-    const reste = f.montantTotal - f.montantPaye;
-    return {
-      ...f,
-      eleveNom: eleve?.nom ?? "—",
-      elevePostnom: eleve?.postnom ?? "",
-      eleveClasse: eleve?.classe ?? "—",
-      reste,
-      estPaye: reste <= 0,
-    };
-  });
-
-  // Couleurs adaptatives
+  // ==================== COULEURS ====================
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const inputBg = dark ? "#0F172A" : "#F9FAFB";
-  const inputText = dark ? "#F1F5F9" : "#1E293B";
   const accent = dark ? "#818CF8" : "#4F46E5";
-  const badgePayeBg = dark ? "#064E3B" : "#D1FAE5";
-  const badgePayeText = dark ? "#34D399" : "#065F46";
-  const badgeAttenteBg = dark ? "#78350F" : "#FEF3C7";
-  const badgeAttenteText = dark ? "#FBBF24" : "#92400E";
-  const filterActiveBg = dark ? "#312E81" : "#EEF2FF";
-  const filterActiveText = dark ? "#A5B4FC" : "#4F46E5";
 
-  // Styles adaptatifs
-  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
-  const titleSize = isMobile ? 22 : 28;
-  const subtitleSize = isMobile ? 14 : 14;
-  const headerMarginBottom = isMobile ? 16 : 24;
-  const headerFlexDirection = isMobile ? "column" : "row";
-  const headerAlignItems = isMobile ? "stretch" : "center";
-  const headerGap = isMobile ? 8 : 0;
-  const filtersFlexDirection = isMobile ? "column" : "row";
-  const filtersGap = isMobile ? 8 : 16;
-  const filtersAlignItems = isMobile ? "stretch" : "center";
-  const classTabPadding = isMobile ? "10px 12px" : "8px 16px";
-  const classTabFontSize = isMobile ? 14 : 13;
-  const statGridCols = isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))";
-  const statGap = isMobile ? 8 : 16;
-  const subTabPadding = isMobile ? "10px 12px" : "12px 20px";
-  const subTabFontSize = isMobile ? 14 : 16;
-  const importCardPadding = isMobile ? 16 : 24;
-  const importButtonsFlexDirection = isMobile ? "column" : "row";
-  const importButtonWidth = isMobile ? "100%" : "auto";
-  const exportButtonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const exportButtonFontSize = isMobile ? 16 : 14;
-  const exportButtonWidth = isMobile ? "100%" : "auto";
-  const modalMaxWidth = isMobile ? "92%" : 400;
-  const modalPadding = isMobile ? 16 : 24;
-  const modalInputPadding = isMobile ? "12px 14px" : "10px 14px";
-  const modalInputFontSize = isMobile ? 16 : 14;
-  const modalButtonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const modalButtonFontSize = isMobile ? 16 : 14;
-
+  // ==================== RENDU PRINCIPAL ====================
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+    <div
+      style={{
+        maxWidth: 1280,
+        margin: "0 auto",
+        padding: isMobile ? "10px 8px 90px" : "20px 16px",
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      <style>{`
+        @keyframes gf-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .gf-animate-spin { animation: gf-spin 1s linear infinite; }
+      `}</style>
 
-      {/* En-tête */}
-      <div style={{ marginBottom: headerMarginBottom, display: "flex", flexDirection: headerFlexDirection, justifyContent: "space-between", alignItems: headerAlignItems, gap: headerGap }}>
-        <div>
-          <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
-            Gestion des frais ({deviseSymbol})
-          </h2>
-          <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
-            {frais.length} élève(s) avec des frais {anneeActive ? `· ${anneeActive.nom}` : ""}
-          </p>
-        </div>
-        <button
-          onClick={() => setShowConfig(true)}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            padding: isMobile ? "12px 16px" : "10px 16px",
-            background: dark ? "#334155" : "#F1F5F9",
-            color: dark ? "#F1F5F9" : "#1E293B", border: "none",
-            borderRadius: 12, fontWeight: 500, cursor: "pointer",
-            fontSize: isMobile ? 16 : 14,
-            width: isMobile ? "100%" : "auto",
-          }}
-        >
-          <Settings size={18} /> Frais par classe
-        </button>
-      </div>
-
-      {/* Filtres */}
-      <div style={{ display: "flex", flexDirection: filtersFlexDirection, flexWrap: "wrap", gap: filtersGap, marginBottom: headerMarginBottom, alignItems: filtersAlignItems }}>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", borderBottom: `2px solid ${cardBorder}`, paddingBottom: 8, flex: 1, WebkitOverflowScrolling: "touch" }}>
-          <button
-            onClick={() => setClasseActive("")}
+      {/* En-tête compact */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+          marginBottom: isMobile ? 12 : 20,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <h2
             style={{
-              padding: classTabPadding, border: "none", borderRadius: 20,
-              background: classeActive === "" ? accent : "transparent",
-              color: classeActive === "" ? "#FFFFFF" : textSecondary,
-              fontWeight: classeActive === "" ? 600 : 400, fontSize: classTabFontSize,
-              cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap",
-              display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+              fontSize: isMobile ? 17 : 22,
+              fontWeight: 700,
+              color: textPrimary,
+              margin: 0,
+              lineHeight: 1.2,
             }}
           >
-            <School size={16} />
-            Toutes ({eleves.length})
+            Gestion des frais ({deviseSymbol})
+          </h2>
+          <p
+            style={{
+              color: textSecondary,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 11.5 : 13,
+            }}
+          >
+            {frais.length} élève{frais.length > 1 ? "s" : ""}
+            {anneeActive ? ` · ${anneeActive.nom}` : ""}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setShowConfig(true)}
+            title="Frais par classe"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              padding: isMobile ? "10px" : "8px 12px",
+              background: dark ? "#334155" : "#F1F5F9",
+              color: dark ? "#F1F5F9" : "#1E293B",
+              border: "none",
+              borderRadius: 10,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: 13,
+            }}
+          >
+            <Settings size={16} />
+            {!isMobile && "Frais par classe"}
           </button>
-          {classesStats.map((c) => (
-            <button
-              key={c.nom}
-              onClick={() => setClasseActive(c.nom)}
-              style={{
-                padding: classTabPadding, border: "none", borderRadius: 20,
-                background: classeActive === c.nom ? accent : "transparent",
-                color: classeActive === c.nom ? "#FFFFFF" : textSecondary,
-                fontWeight: classeActive === c.nom ? 600 : 400, fontSize: classTabFontSize,
-                cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap", flexShrink: 0,
-              }}
-            >
-              {c.nom} ({c.nbEleves})
-            </button>
-          ))}
-        </div>
 
-        <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
-          {[
-            { id: "tous", label: "Tous" },
-            { id: "paye", label: "Payé" },
-            { id: "en_attente", label: "En attente" },
-          ].map((filtre) => (
+          {!isMobile && (
             <button
-              key={filtre.id}
-              onClick={() => setStatutFiltre(filtre.id)}
+              onClick={() => handleOpenAdd("individuel")}
               style={{
-                padding: isMobile ? "10px 14px" : "6px 14px",
-                border: `1px solid ${cardBorder}`,
-                borderRadius: 20,
-                background: statutFiltre === filtre.id ? filterActiveBg : "transparent",
-                color: statutFiltre === filtre.id ? filterActiveText : textSecondary,
-                fontWeight: statutFiltre === filtre.id ? 600 : 400,
-                fontSize: isMobile ? 14 : 13,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 10,
+                background: accent,
+                color: "#FFF",
+                border: "none",
+                fontWeight: 600,
                 cursor: "pointer",
-                transition: "all 0.2s",
-                width: isMobile ? "100%" : "auto",
-                textAlign: "center",
+                fontSize: 13,
               }}
             >
-              {filtre.label}
+              <Plus size={15} /> Ajouter
             </button>
-          ))}
+          )}
         </div>
       </div>
 
-      {/* Cartes statistiques */}
-      <div style={{ display: "grid", gridTemplateColumns: statGridCols, gap: statGap, marginBottom: headerMarginBottom }}>
-        <StatCard icon={<DollarSign size={20} />} label="Total dû" value={`${totalFrais.toLocaleString()} ${deviseSymbol}`} color="#4F46E5" dark={dark} isMobile={isMobile} />
-        <StatCard icon={<CheckCircle size={20} />} label="Total payé" value={`${totalPaye.toLocaleString()} ${deviseSymbol}`} color="#10B981" dark={dark} isMobile={isMobile} />
-        <StatCard icon={<FileWarning size={20} />} label="Reste à payer" value={`${resteAPayer.toLocaleString()} ${deviseSymbol}`} color="#F59E0B" dark={dark} isMobile={isMobile} />
-        <StatCard icon={<Users size={20} />} label="Élèves payés" value={nbPayes} color="#10B981" dark={dark} isMobile={isMobile} />
-        <StatCard icon={<Clock size={20} />} label="En attente" value={nbAttente} color="#F59E0B" dark={dark} isMobile={isMobile} />
-      </div>
-
-      {/* Sous-onglets mode ajout */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: headerMarginBottom, overflowX: "auto", whiteSpace: "nowrap" }}>
-        <button
-          onClick={() => { setMode("individuel"); setEditData(null); }}
-          style={{
-            padding: subTabPadding, border: "none", background: "transparent",
-            color: mode === "individuel" ? accent : textSecondary,
-            fontWeight: mode === "individuel" ? 600 : 400,
-            borderBottom: mode === "individuel" ? `3px solid ${accent}` : "3px solid transparent",
-            cursor: "pointer", transition: "all 0.2s",
-            display: "flex", alignItems: "center", gap: 6,
-            fontSize: subTabFontSize, flexShrink: 0,
-          }}
-        >
-          <Users size={18} /> Ajout individuel
-        </button>
-        <button
-          onClick={() => { setMode("groupe"); setEditData(null); }}
-          style={{
-            padding: subTabPadding, border: "none", background: "transparent",
-            color: mode === "groupe" ? accent : textSecondary,
-            fontWeight: mode === "groupe" ? 600 : 400,
-            borderBottom: mode === "groupe" ? `3px solid ${accent}` : "3px solid transparent",
-            cursor: "pointer", transition: "all 0.2s",
-            display: "flex", alignItems: "center", gap: 6,
-            fontSize: subTabFontSize, flexShrink: 0,
-          }}
-        >
-          <School size={18} /> Ajout groupé
-        </button>
-      </div>
-
-      {/* Formulaire selon le mode */}
-      {mode === "individuel" ? (
-        <AddFraisIndividuel
-          eleves={elevesFiltres}
-          fraisClasses={fraisClasses}
-          upsertFrais={upsertFrais}
-          ecoleId={ecoleId}
-          anneeId={anneeId}
-          userId={user._id}
-          initialData={editData}
-          onSuccess={() => setEditData(null)}
-          deviseSymbol={deviseSymbol}
+      {/* Stats en scroll horizontal */}
+      <div
+        style={{
+          display: isMobile ? "flex" : "grid",
+          gridTemplateColumns: isMobile
+            ? undefined
+            : "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: isMobile ? 8 : 12,
+          marginBottom: isMobile ? 12 : 18,
+          overflowX: isMobile ? "auto" : "visible",
+          paddingBottom: isMobile ? 4 : 0,
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+        }}
+      >
+        <StatCard
+          icon={<DollarSign size={16} />}
+          label="Total dû"
+          value={`${totalFrais.toLocaleString()}`}
+          color="#4F46E5"
           dark={dark}
           isMobile={isMobile}
         />
-      ) : (
-        <AddFraisGroupe
-          eleves={elevesFiltres}
-          fraisClasses={fraisClasses}
-          upsertBulk={upsertBulk}
-          ecoleId={ecoleId}
-          anneeId={anneeId}
-          userId={user._id}
+        <StatCard
+          icon={<CheckCircle size={16} />}
+          label="Total payé"
+          value={`${totalPaye.toLocaleString()}`}
+          color="#10B981"
           dark={dark}
-          deviseSymbol={deviseSymbol}
           isMobile={isMobile}
+        />
+        <StatCard
+          icon={<FileWarning size={16} />}
+          label="Reste"
+          value={`${resteAPayer.toLocaleString()}`}
+          color="#F59E0B"
+          dark={dark}
+          isMobile={isMobile}
+        />
+        <StatCard
+          icon={<Users size={16} />}
+          label="Payés"
+          value={nbPayes}
+          color="#10B981"
+          dark={dark}
+          isMobile={isMobile}
+        />
+        <StatCard
+          icon={<Clock size={16} />}
+          label="En attente"
+          value={nbAttente}
+          color="#F59E0B"
+          dark={dark}
+          isMobile={isMobile}
+        />
+      </div>
+
+      {/* Barre outils */}
+      {isMobile ? (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 12,
+            alignItems: "stretch",
+          }}
+        >
+          <div style={{ position: "relative", flex: 1 }}>
+            <Search
+              size={16}
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: textSecondary,
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Rechercher un élève…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px 12px 12px 38px",
+                borderRadius: 12,
+                border: `1px solid ${cardBorder}`,
+                background: cardBg,
+                color: textPrimary,
+                fontSize: 16,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          <button
+            onClick={() => setShowFilters(true)}
+            style={{
+              position: "relative",
+              padding: "0 14px",
+              borderRadius: 12,
+              border: `1px solid ${
+                activeFiltersCount > 0 ? accent : cardBorder
+              }`,
+              background:
+                activeFiltersCount > 0
+                  ? dark
+                    ? "#312E81"
+                    : "#EEF2FF"
+                  : cardBg,
+              color:
+                activeFiltersCount > 0
+                  ? dark
+                    ? "#C7D2FE"
+                    : "#4F46E5"
+                  : textPrimary,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 600,
+              fontSize: 13,
+            }}
+          >
+            <SlidersHorizontal size={16} />
+            {activeFiltersCount > 0 && (
+              <span
+                style={{
+                  background: accent,
+                  color: "#FFF",
+                  borderRadius: 10,
+                  padding: "1px 6px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}
+              >
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            marginBottom: 16,
+            alignItems: "stretch",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
+            <Search
+              size={16}
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: textSecondary,
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Rechercher un élève…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px 10px 38px",
+                borderRadius: 8,
+                border: `1px solid ${cardBorder}`,
+                background: cardBg,
+                color: textPrimary,
+                fontSize: 14,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          <select
+            value={classeActive}
+            onChange={(e) => setClasseActive(e.target.value)}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: `1px solid ${cardBorder}`,
+              background: cardBg,
+              color: textPrimary,
+              fontSize: 14,
+              cursor: "pointer",
+              minWidth: 180,
+            }}
+          >
+            <option value="">Toutes les classes</option>
+            {classesStats.map((c) => (
+              <option key={c.nom} value={c.nom}>
+                {c.nom} ({c.nbEleves})
+              </option>
+            ))}
+          </select>
+          <select
+            value={statutFiltre}
+            onChange={(e) => setStatutFiltre(e.target.value)}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: `1px solid ${cardBorder}`,
+              background: cardBg,
+              color: textPrimary,
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            <option value="tous">Tous les statuts</option>
+            <option value="paye">Payé</option>
+            <option value="en_attente">En attente</option>
+          </select>
+        </div>
+      )}
+
+      {/* Puces filtres actifs */}
+      {activeFiltersCount > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            marginBottom: 12,
+          }}
+        >
+          {searchTerm.trim() && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 10px",
+                background: dark ? "#312E81" : "#EEF2FF",
+                color: dark ? "#C7D2FE" : "#4F46E5",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              « {searchTerm} »
+              <X
+                size={12}
+                style={{ cursor: "pointer" }}
+                onClick={() => setSearchTerm("")}
+              />
+            </span>
+          )}
+          {classeActive && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 10px",
+                background: dark ? "#312E81" : "#EEF2FF",
+                color: dark ? "#C7D2FE" : "#4F46E5",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              {classeActive}
+              <X
+                size={12}
+                style={{ cursor: "pointer" }}
+                onClick={() => setClasseActive("")}
+              />
+            </span>
+          )}
+          {statutFiltre !== "tous" && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 10px",
+                background: dark ? "#312E81" : "#EEF2FF",
+                color: dark ? "#C7D2FE" : "#4F46E5",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              {statutFiltre === "paye" ? "Payé" : "En attente"}
+              <X
+                size={12}
+                style={{ cursor: "pointer" }}
+                onClick={() => setStatutFiltre("tous")}
+              />
+            </span>
+          )}
+          <button
+            onClick={resetFilters}
+            style={{
+              padding: "4px 10px",
+              background: "transparent",
+              border: `1px solid ${cardBorder}`,
+              color: textSecondary,
+              borderRadius: 20,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Tout effacer
+          </button>
+        </div>
+      )}
+
+      {/* Liste */}
+      {enrichedFrais.length === 0 ? (
+        <div
+          style={{
+            background: cardBg,
+            borderRadius: 16,
+            padding: isMobile ? 32 : 48,
+            textAlign: "center",
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            border: `1px solid ${cardBorder}`,
+            color: textSecondary,
+          }}
+        >
+          <DollarSign
+            size={isMobile ? 28 : 32}
+            style={{ marginBottom: 8, opacity: 0.5 }}
+          />
+          <p style={{ margin: 0, fontSize: 13.5 }}>
+            {activeFiltersCount > 0
+              ? "Aucun frais ne correspond aux filtres."
+              : "Aucun frais enregistré."}
+          </p>
+          {activeFiltersCount > 0 && (
+            <button
+              onClick={resetFilters}
+              style={{
+                marginTop: 12,
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: `1px solid ${cardBorder}`,
+                background: "transparent",
+                color: textPrimary,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Réinitialiser les filtres
+            </button>
+          )}
+        </div>
+      ) : isMobile ? (
+        // Liste de cartes sur mobile
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: 8,
+          }}
+        >
+          {enrichedFrais.map((f) => (
+            <FraisCard
+              key={f._id}
+              frais={f}
+              eleve={f._eleve}
+              deviseSymbol={deviseSymbol}
+              dark={dark}
+              isMobile={isMobile}
+              onClick={() => setDetailFrais(f)}
+            />
+          ))}
+        </div>
+      ) : (
+        // DataTable sur desktop
+        <DataTable
+          columns={[
+            {
+              header: "Élève",
+              accessor: "eleveNom",
+              sortable: true,
+              render: (f) => (
+                <strong>
+                  {f.eleveNom} {f.elevePostnom}
+                </strong>
+              ),
+            },
+            { header: "Classe", accessor: "eleveClasse", sortable: true },
+            {
+              header: `Total (${deviseSymbol})`,
+              accessor: "montantTotal",
+              sortable: true,
+              render: (f) => f.montantTotal.toLocaleString(),
+            },
+            {
+              header: `Payé (${deviseSymbol})`,
+              accessor: "montantPaye",
+              sortable: true,
+              render: (f) => f.montantPaye.toLocaleString(),
+            },
+            {
+              header: `Reste (${deviseSymbol})`,
+              accessor: "reste",
+              sortable: true,
+              render: (f) => (
+                <span
+                  style={{
+                    color:
+                      f.reste > 0
+                        ? dark
+                          ? "#FBBF24"
+                          : "#F59E0B"
+                        : dark
+                        ? "#34D399"
+                        : "#10B981",
+                    fontWeight: 600,
+                  }}
+                >
+                  {f.reste.toLocaleString()}
+                </span>
+              ),
+            },
+            {
+              header: "Statut",
+              accessor: "estPaye",
+              sortable: true,
+              render: (f) => <BadgeStatut estPaye={f.estPaye} dark={dark} />,
+            },
+            {
+              header: "Commentaire",
+              accessor: "commentaire",
+              render: (f) => f.commentaire || "—",
+            },
+            {
+              header: "Actions",
+              sortable: false,
+              render: (f) => (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    onClick={() => handleOpenAdd("individuel", f)}
+                    style={{
+                      background: accent,
+                      color: "white",
+                      border: "none",
+                      borderRadius: 6,
+                      padding: "6px 10px",
+                      cursor: "pointer",
+                    }}
+                    title="Modifier"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(f)}
+                    style={{
+                      background: "#EF4444",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 6,
+                      padding: "6px 10px",
+                      cursor: "pointer",
+                    }}
+                    title="Supprimer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ),
+            },
+          ]}
+          data={enrichedFrais}
+          loading={false}
+          searchable={false}
+          searchPlaceholder="Rechercher…"
+          pageSize={8}
+          emptyTitle="Aucun frais"
+          emptyMessage="Ajoutez des frais pour un élève."
         />
       )}
 
-      {/* Import Excel */}
-      <div style={{ background: cardBg, borderRadius: 16, padding: importCardPadding, margin: "24px 0", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}` }}>
-        <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8, color: textPrimary }}>
-          <Upload size={20} /> Importer des frais depuis Excel
-        </h3>
-        <input type="file" accept=".xlsx, .xls" onChange={handleImportFraisExcel} style={{ display: "none" }} ref={fraisFileInputRef} />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexDirection: importButtonsFlexDirection }}>
-          <button onClick={() => fraisFileInputRef.current.click()} disabled={importing} style={{ background: dark ? "#34D399" : "#10B981", color: "white", border: "none", borderRadius: 10, padding: isMobile ? "12px 16px" : "10px 20px", fontWeight: 600, cursor: "pointer", fontSize: isMobile ? 16 : 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: importButtonWidth }}>
-            {importing ? <Loader size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-            {importing ? "Import en cours..." : "Sélectionner un fichier Excel"}
-          </button>
-          <button onClick={handleDownloadTemplate} style={{ background: dark ? "#334155" : "#F1F5F9", color: textPrimary, border: "none", borderRadius: 10, padding: isMobile ? "12px 16px" : "10px 20px", fontWeight: 600, cursor: "pointer", fontSize: isMobile ? 16 : 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: importButtonWidth }}>
-            <Download size={16} />
-            Télécharger le modèle
+      {/* Bouton export desktop */}
+      {!isMobile && enrichedFrais.length > 0 && (
+        <div style={{ marginTop: 16, textAlign: "right" }}>
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting}
+            style={{
+              background: accent,
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              padding: "10px 20px",
+              fontWeight: 600,
+              cursor: exporting ? "wait" : "pointer",
+              fontSize: 14,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              opacity: exporting ? 0.7 : 1,
+            }}
+          >
+            {exporting ? (
+              <Loader size={16} className="gf-animate-spin" />
+            ) : (
+              <Download size={16} />
+            )}
+            {exporting ? "Export…" : "Exporter en Excel"}
           </button>
         </div>
-        <p style={{ color: textSecondary, fontSize: 13, marginTop: 8 }}>
-          Colonnes attendues : <strong>nom, postnom, classe, montantTotal, montantPaye, commentaire</strong>
-          <br />
-          Les montants doivent être en <strong>{deviseSymbol}</strong>.
-        </p>
-      </div>
+      )}
 
-      {/* Tableau des frais */}
-      <DataTable
-        columns={[
-          { header: "Élève", accessor: "eleveNom", sortable: true, render: (f) => <strong>{f.eleveNom} {f.elevePostnom}</strong> },
-          { header: "Classe", accessor: "eleveClasse", sortable: true },
-          { header: `Total (${deviseSymbol})`, accessor: "montantTotal", sortable: true, render: (f) => f.montantTotal.toLocaleString() },
-          { header: `Payé (${deviseSymbol})`, accessor: "montantPaye", sortable: true, render: (f) => f.montantPaye.toLocaleString() },
-          { header: `Reste (${deviseSymbol})`, accessor: "reste", sortable: true, render: (f) => <span style={{ color: f.reste > 0 ? (dark ? "#FBBF24" : "#F59E0B") : (dark ? "#34D399" : "#10B981"), fontWeight: 600 }}>{f.reste.toLocaleString()}</span> },
-          { header: "Statut", accessor: "estPaye", sortable: true, render: (f) => f.estPaye ? <BadgePaye /> : <BadgeAttente /> },
-          { header: "Commentaire", accessor: "commentaire", render: (f) => f.commentaire || "—" },
-          {
-            header: "Actions", sortable: false, render: (f) => (
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => { setEditData(f); setMode("individuel"); }} style={{ background: accent, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}><Edit2 size={16} /></button>
-                <button onClick={() => handleDelete(f._id)} style={{ background: "#EF4444", color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}><Trash2 size={16} /></button>
-              </div>
-            ),
-          },
-        ]}
-        data={enrichedFrais}
-        loading={false}
-        searchPlaceholder="Rechercher un élève..."
-        pageSize={8}
-        emptyTitle="Aucun frais"
-        emptyMessage="Ajoutez des frais pour un élève."
+      {/* FAB ajouter (mobile) */}
+      {isMobile && (
+        <button
+          onClick={() => handleOpenAdd("individuel")}
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 20,
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: accent,
+            color: "#FFFFFF",
+            border: "none",
+            boxShadow: "0 6px 20px rgba(79,70,229,0.4)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 900,
+            transition: "transform 0.15s ease",
+          }}
+          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.94)")}
+          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          title="Ajouter des frais"
+        >
+          <Plus size={26} />
+        </button>
+      )}
+
+      {/* Input file caché */}
+      <input
+        type="file"
+        accept=".xlsx, .xls"
+        onChange={handleImportFraisExcel}
+        style={{ display: "none" }}
+        ref={fraisFileInputRef}
       />
 
-      {/* Bouton Export Excel */}
-      <div style={{ marginTop: 16, textAlign: isMobile ? "center" : "right" }}>
-        <button onClick={handleExportExcel} disabled={exporting} style={{ background: accent, color: "white", border: "none", borderRadius: 10, padding: exportButtonPadding, fontWeight: 600, cursor: "pointer", fontSize: exportButtonFontSize, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, width: exportButtonWidth }}>
-          {exporting ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}
-          {exporting ? "Export en cours..." : "Exporter en Excel"}
-        </button>
-      </div>
+      {/* Bottom sheet filtres */}
+      <FraisFiltersSheet
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        dark={dark}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        classeActive={classeActive}
+        setClasseActive={setClasseActive}
+        statutFiltre={statutFiltre}
+        setStatutFiltre={setStatutFiltre}
+        classesStats={classesStats}
+        onReset={resetFilters}
+        activeFiltersCount={activeFiltersCount}
+        onImportClick={() => fraisFileInputRef.current?.click()}
+        onDownloadTemplate={handleDownloadTemplate}
+        onExportClick={handleExportExcel}
+        importing={importing}
+        exporting={exporting}
+        deviseSymbol={deviseSymbol}
+      />
 
-      {/* Modale configuration frais de classe */}
-      {showConfig && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: isMobile ? 12 : 16 }} onClick={() => setShowConfig(false)}>
-          <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: modalPadding, maxWidth: modalMaxWidth, width: "100%", boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: 20, color: textPrimary }}>Configurer les frais de classe</h3>
-            <form onSubmit={handleSaveFraisClasse}>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Classe</label>
-                <select value={configClasse} onChange={(e) => setConfigClasse(e.target.value)} style={{ width: "100%", padding: modalInputPadding, border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: modalInputFontSize, background: inputBg, color: inputText }}>
-                  <option value="">Sélectionner une classe</option>
-                  {classesStats.map((c) => (
-                    <option key={c.nom} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c.nom} (actuel : {c.montantTotal.toLocaleString()} {deviseSymbol})</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Montant total ({deviseSymbol})</label>
-                <input type="number" step="0.01" value={configMontant} onChange={(e) => setConfigMontant(e.target.value)} placeholder="Ex: 50000" style={{ width: "100%", padding: modalInputPadding, border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: modalInputFontSize, background: inputBg, color: inputText }} />
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 20, flexDirection: isMobile ? "column" : "row" }}>
-                <button type="submit" style={{ background: accent, color: "white", border: "none", borderRadius: 8, padding: modalButtonPadding, fontWeight: 600, cursor: "pointer", fontSize: modalButtonFontSize }}>Enregistrer</button>
-                <button type="button" onClick={() => setShowConfig(false)} style={{ background: dark ? "#334155" : "#F1F5F9", color: textPrimary, border: "none", borderRadius: 8, padding: modalButtonPadding, fontWeight: 500, cursor: "pointer", fontSize: modalButtonFontSize }}>Annuler</button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Modale ajout */}
+      <AddFraisModal
+        open={showAddModal}
+        onClose={handleCloseAdd}
+        initialMode={addModalMode}
+        initialData={editingFrais}
+        eleves={elevesFiltres}
+        fraisClasses={fraisClasses}
+        upsertFrais={upsertFrais}
+        upsertBulk={upsertBulk}
+        ecoleId={ecoleId}
+        anneeId={anneeId}
+        userId={userId}
+        deviseSymbol={deviseSymbol}
+        dark={dark}
+        isMobile={isMobile}
+      />
+
+      {/* Modale détail */}
+      {detailFrais && (
+        <DetailFraisModal
+          frais={detailFrais}
+          eleve={detailFrais._eleve}
+          deviseSymbol={deviseSymbol}
+          onClose={() => setDetailFrais(null)}
+          onEdit={() => {
+            const raw = detailFrais._raw || detailFrais;
+            setDetailFrais(null);
+            handleOpenAdd("individuel", raw);
+          }}
+          onDelete={() => handleDelete(detailFrais)}
+          dark={dark}
+          isMobile={isMobile}
+        />
       )}
+
+      {/* Modale config frais par classe */}
+      <ConfigFraisModal
+        open={showConfig}
+        onClose={() => setShowConfig(false)}
+        classesStats={classesStats}
+        upsertFraisClasse={upsertFraisClasse}
+        ecoleId={ecoleId}
+        anneeId={anneeId}
+        userId={userId}
+        deviseSymbol={deviseSymbol}
+        dark={dark}
+        isMobile={isMobile}
+      />
 
       <ConfirmDialog {...dialogProps} />
     </div>
   );
 }
 
-// --- Sous-composants ---
-
-function StatCard({ icon, label, value, color, dark, isMobile }) {
-  return (
-    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 12, padding: isMobile ? 14 : 16, display: "flex", alignItems: "center", gap: 12, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-      <div style={{ width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, background: `${color}${dark ? "33" : "15"}`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color }}>{icon}</div>
-      <div>
-        <div style={{ fontSize: isMobile ? 13 : 14, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
-        <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
-      </div>
-    </div>
-  );
-}
-
-function AddFraisIndividuel({ eleves, fraisClasses, upsertFrais, ecoleId, anneeId, userId, initialData, onSuccess, deviseSymbol, dark, isMobile }) {
-  const [selectedEleve, setSelectedEleve] = useState(initialData?.eleveId || "");
-  const [montantPaye, setMontantPaye] = useState(initialData?.montantPaye?.toString() || "");
-  const [commentaire, setCommentaire] = useState(initialData?.commentaire || "");
-  const [editId, setEditId] = useState(initialData?._id || null);
-  const [errors, setErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [searchEleve, setSearchEleve] = useState("");
-
-  const elevesFiltresRecherche = useMemo(() => {
-    if (!searchEleve.trim()) return eleves;
-    const q = searchEleve.toLowerCase();
-    return eleves.filter((e) => `${e.nom} ${e.postnom} ${e.prenom}`.toLowerCase().includes(q) || e.classe.toLowerCase().includes(q));
-  }, [eleves, searchEleve]);
-
-  const montantTotal = useMemo(() => {
-    if (!selectedEleve) return "";
-    const eleve = eleves.find((e) => e._id === selectedEleve);
-    if (!eleve) return "";
-    const fraisClasse = fraisClasses.find((fc) => fc.classe === eleve.classe);
-    return fraisClasse?.montantTotal?.toString() || "";
-  }, [selectedEleve, eleves, fraisClasses]);
-
-  const handleSelectEleve = (id) => {
-    setSelectedEleve(id);
-    setSearchEleve("");
-    setMontantPaye("");
-    setErrors({});
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedEleve) {
-      setErrors({ selectedEleve: "Veuillez sélectionner un élève." });
-      return;
-    }
-    if (!montantPaye || isNaN(parseFloat(montantPaye))) {
-      setErrors({ montantPaye: "Montant invalide." });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const payload = {
-        eleveId: selectedEleve,
-        ecoleId,
-        montantTotal: parseFloat(montantTotal || "0"),
-        montantPaye: parseFloat(montantPaye),
-        commentaire: commentaire || undefined,
-        anneeId,
-        userId,
+// ============================================================
+// BADGE STATUT (desktop DataTable)
+// ============================================================
+function BadgeStatut({ estPaye, dark }) {
+  const style = estPaye
+    ? {
+        background: dark ? "#064E3B" : "#D1FAE5",
+        color: dark ? "#34D399" : "#065F46",
+      }
+    : {
+        background: dark ? "#78350F" : "#FEF3C7",
+        color: dark ? "#FBBF24" : "#92400E",
       };
-      if (editId) payload.id = editId;
-      await upsertFrais(payload);
-      toast.success(editId ? "Frais mis à jour" : "Frais enregistrés");
-      setSelectedEleve("");
-      setMontantPaye("");
-      setCommentaire("");
-      setEditId(null);
-      setErrors({});
-      if (onSuccess) onSuccess();
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const inputStyle = {
-    width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-    borderRadius: 8,
-    fontSize: isMobile ? 16 : 14,
-    background: dark ? "#0F172A" : "#F8FAFC",
-    color: dark ? "#F1F5F9" : "#1E293B",
-    boxSizing: "border-box",
-  };
-
-  const cardPadding = isMobile ? 16 : 24;
-  const titleSize = isMobile ? 16 : 18;
-  const labelSize = isMobile ? 15 : 14;
-  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const buttonFontSize = isMobile ? 16 : 14;
-  const buttonFlexDirection = isMobile ? "column" : "row";
-  const buttonWidth = isMobile ? "100%" : "auto";
-
   return (
-    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: cardPadding, marginBottom: 24, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>
-        {editId ? "Modifier les frais" : "Ajouter des frais"}
-      </h3>
-      <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Élève</label>
-        {!selectedEleve ? (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ position: "relative" }}>
-              <Search size={18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
-              <input
-                type="text"
-                placeholder="Rechercher par nom ou classe..."
-                value={searchEleve}
-                onChange={(e) => setSearchEleve(e.target.value)}
-                style={{ ...inputStyle, paddingLeft: 34 }}
-              />
-            </div>
-            {searchEleve.trim() && (
-              <div style={{ maxHeight: 200, overflowY: "auto", marginTop: 8, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, background: dark ? "#1E293B" : "#FFFFFF" }}>
-                {elevesFiltresRecherche.slice(0, 20).map((e) => (
-                  <button
-                    key={e._id}
-                    type="button"
-                    onClick={() => handleSelectEleve(e._id)}
-                    style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "transparent", color: dark ? "#F1F5F9" : "#1E293B", cursor: "pointer", borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}
-                  >
-                    {e.nom} {e.postnom} {e.prenom} <span style={{ color: dark ? "#94A3B8" : "#64748B" }}>({e.classe})</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ flex: 1, padding: "10px 14px", border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 8, background: dark ? "#0F172A" : "#F8FAFC", color: dark ? "#F1F5F9" : "#1E293B" }}>
-              {eleves.find((e) => e._id === selectedEleve)?.nom} {eleves.find((e) => e._id === selectedEleve)?.postnom} {eleves.find((e) => e._id === selectedEleve)?.prenom}
-            </div>
-            <button type="button" onClick={() => { setSelectedEleve(""); setSearchEleve(""); }} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer" }}>Changer</button>
-          </div>
-        )}
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant total ({deviseSymbol})</label>
-        <input type="text" value={montantTotal ? parseFloat(montantTotal).toLocaleString() : "Non défini"} readOnly style={{ ...inputStyle, marginBottom: 16, opacity: 0.7 }} />
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant payé ({deviseSymbol})</label>
-        <input type="number" step="0.01" placeholder="Ex: 20000" value={montantPaye} onChange={(e) => { setMontantPaye(e.target.value); setErrors((prev) => ({ ...prev, montantPaye: undefined })); }} style={{ ...inputStyle, marginBottom: 16, borderColor: errors.montantPaye ? "#EF4444" : undefined }} />
-        {errors.montantPaye && <div style={{ color: "#EF4444", fontSize: 12, marginTop: -12, marginBottom: 12 }}>{errors.montantPaye}</div>}
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Commentaire (optionnel)</label>
-        <input value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Ex: Frais de scolarité" style={{ ...inputStyle, marginBottom: 20 }} />
-
-        <div style={{ display: "flex", gap: 10, flexDirection: buttonFlexDirection }}>
-          <button type="submit" disabled={submitting} style={{ background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 10, padding: buttonPadding, fontWeight: 600, cursor: "pointer", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: buttonFontSize, width: buttonWidth }}>
-            {submitting ? <Loader size={16} className="animate-spin" /> : null}
-            {submitting ? "Enregistrement..." : editId ? "Mettre à jour" : "Ajouter"}
-          </button>
-          {editId && (
-            <button type="button" onClick={() => { setEditId(null); setSelectedEleve(""); setMontantPaye(""); setCommentaire(""); setErrors({}); if (onSuccess) onSuccess(); }} style={{ background: dark ? "#334155" : "#F1F5F9", border: "none", borderRadius: 10, padding: buttonPadding, cursor: "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: buttonFontSize, width: buttonWidth }}>
-              Annuler
-            </button>
-          )}
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function AddFraisGroupe({ eleves, fraisClasses, upsertBulk, ecoleId, anneeId, userId, dark, deviseSymbol, isMobile }) {
-  const [selectedEleveIds, setSelectedEleveIds] = useState([]);
-  const [montantPaye, setMontantPaye] = useState("");
-  const [commentaire, setCommentaire] = useState("");
-  const [errors, setErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [searchEleve, setSearchEleve] = useState("");
-
-  const elevesFiltresRecherche = useMemo(() => {
-    if (!searchEleve.trim()) return eleves;
-    const q = searchEleve.toLowerCase();
-    return eleves.filter((e) => `${e.nom} ${e.postnom} ${e.prenom}`.toLowerCase().includes(q) || e.classe.toLowerCase().includes(q));
-  }, [eleves, searchEleve]);
-
-  const toggleEleve = (id) => setSelectedEleveIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  const selectAll = () => setSelectedEleveIds(elevesFiltresRecherche.map((e) => e._id));
-  const deselectAll = () => setSelectedEleveIds([]);
-
-  const montantTotalMoyen = useMemo(() => {
-    if (selectedEleveIds.length === 0) return 0;
-    const elevesSelectionnes = eleves.filter((e) => selectedEleveIds.includes(e._id));
-    const classesUniques = new Set(elevesSelectionnes.map((e) => e.classe));
-    if (classesUniques.size !== 1) return null;
-    const classe = [...classesUniques][0];
-    const fraisClasse = fraisClasses.find((fc) => fc.classe === classe);
-    return fraisClasse?.montantTotal || 0;
-  }, [selectedEleveIds, eleves, fraisClasses]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (selectedEleveIds.length === 0) {
-      setErrors({ selectedEleveIds: "Sélectionnez au moins un élève." });
-      return;
-    }
-    if (!montantPaye || isNaN(parseFloat(montantPaye))) {
-      setErrors({ montantPaye: "Montant invalide." });
-      return;
-    }
-    if (montantTotalMoyen === null) {
-      toast.error("Les élèves sélectionnés appartiennent à des classes différentes avec des montants différents.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const nb = await upsertBulk({
-        eleveIds: selectedEleveIds,
-        ecoleId,
-        montantTotal: montantTotalMoyen,
-        montantPaye: parseFloat(montantPaye),
-        commentaire: commentaire || undefined,
-        anneeId,
-        userId,
-      });
-      toast.success(`Frais mis à jour pour ${nb} élève(s).`);
-      setSelectedEleveIds([]);
-      setMontantPaye("");
-      setCommentaire("");
-      setErrors({});
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const cardPadding = isMobile ? 16 : 24;
-  const titleSize = isMobile ? 16 : 18;
-  const labelSize = isMobile ? 15 : 14;
-  const inputStyle = {
-    width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-    borderRadius: 8,
-    fontSize: isMobile ? 16 : 14,
-    background: dark ? "#0F172A" : "#F8FAFC",
-    color: dark ? "#F1F5F9" : "#1E293B",
-    boxSizing: "border-box",
-  };
-  const buttonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const buttonFontSize = isMobile ? 16 : 14;
-  const checkboxSize = isMobile ? 18 : 16;
-
-  return (
-    <div style={{ background: dark ? "#1E293B" : "#FFFFFF", borderRadius: 16, padding: cardPadding, marginBottom: 24, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}` }}>
-      <h3 style={{ fontSize: titleSize, fontWeight: 600, marginBottom: 20, color: dark ? "#F1F5F9" : "#1E293B" }}>Ajouter des frais groupés</h3>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexDirection: isMobile ? "column" : "row", gap: 8 }}>
-        <span style={{ fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Élèves concernés</span>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={selectAll} style={{ background: "none", border: "none", color: dark ? "#818CF8" : "#4F46E5", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Tout sélectionner</button>
-          <button type="button" onClick={deselectAll} style={{ background: "none", border: "none", color: dark ? "#94A3B8" : "#64748B", cursor: "pointer", fontSize: isMobile ? 14 : 13, fontWeight: 500 }}>Désélectionner</button>
-        </div>
-      </div>
-
-      <div style={{ position: "relative", marginBottom: 8 }}>
-        <Search size={18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
-        <input
-          type="text"
-          placeholder="Rechercher un élève..."
-          value={searchEleve}
-          onChange={(e) => setSearchEleve(e.target.value)}
-          style={{ ...inputStyle, paddingLeft: 34 }}
-        />
-      </div>
-
-      <div style={{ maxHeight: 220, overflowY: "auto", border: `1px solid ${errors.selectedEleveIds ? "#EF4444" : dark ? "#334155" : "#E2E8F0"}`, borderRadius: 12, padding: 8, marginBottom: 8, background: dark ? "#0F172A" : "#F8FAFC" }}>
-        {elevesFiltresRecherche.map((e) => (
-          <label key={e._id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", fontSize: isMobile ? 15 : 14, cursor: "pointer", borderRadius: 6, background: selectedEleveIds.includes(e._id) ? (dark ? "#312E81" : "#EEF2FF") : "transparent", color: dark ? "#F1F5F9" : "#1E293B" }}>
-            <input type="checkbox" checked={selectedEleveIds.includes(e._id)} onChange={() => toggleEleve(e._id)} style={{ width: checkboxSize, height: checkboxSize, accentColor: dark ? "#818CF8" : "#4F46E5" }} />
-            {e.nom} {e.postnom} {e.prenom} ({e.classe})
-          </label>
-        ))}
-      </div>
-      {errors.selectedEleveIds && <div style={{ color: "#EF4444", fontSize: 13, marginBottom: 12 }}>{errors.selectedEleveIds}</div>}
-      <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B", marginBottom: 16 }}>{selectedEleveIds.length} élève(s) sélectionné(s)</div>
-
-      <form onSubmit={handleSubmit}>
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant total ({deviseSymbol})</label>
-        <input type="text" value={montantTotalMoyen !== null && montantTotalMoyen !== 0 ? montantTotalMoyen.toLocaleString() : (selectedEleveIds.length > 0 ? "Classes multiples" : "Sélectionnez des élèves")} readOnly style={{ ...inputStyle, marginBottom: 16, opacity: 0.7 }} />
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Montant payé ({deviseSymbol})</label>
-        <input type="number" step="0.01" placeholder="Ex: 20000" value={montantPaye} onChange={(e) => { setMontantPaye(e.target.value); setErrors((prev) => ({ ...prev, montantPaye: undefined })); }} style={{ ...inputStyle, marginBottom: 16, borderColor: errors.montantPaye ? "#EF4444" : undefined }} />
-        {errors.montantPaye && <div style={{ color: "#EF4444", fontSize: 13, marginTop: -12, marginBottom: 12 }}>{errors.montantPaye}</div>}
-
-        <label style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelSize, color: dark ? "#CBD5E1" : "#374151" }}>Commentaire (optionnel)</label>
-        <input value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Ex: Frais de scolarité" style={{ ...inputStyle, marginBottom: 20 }} />
-
-        <button type="submit" disabled={submitting} style={{ width: "100%", background: dark ? "#818CF8" : "#4F46E5", color: "white", border: "none", borderRadius: 10, padding: buttonPadding, fontWeight: 600, cursor: "pointer", fontSize: buttonFontSize, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          {submitting ? <Loader size={16} className="animate-spin" /> : null}
-          {submitting ? "Application en cours..." : `Appliquer à ${selectedEleveIds.length} élève(s)`}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function BadgePaye() {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#064E3B", color: "#34D399", padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-      <CheckCircle size={14} /> Payé
-    </span>
-  );
-}
-function BadgeAttente() {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#78350F", color: "#FBBF24", padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-      <Clock size={14} /> En attente
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        ...style,
+        padding: "4px 10px",
+        borderRadius: 20,
+        fontSize: 12,
+        fontWeight: 600,
+      }}
+    >
+      {estPaye ? <CheckCircle size={12} /> : <Clock size={12} />}
+      {estPaye ? "Payé" : "En attente"}
     </span>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
 import AgoraRTC from "agora-rtc-sdk-ng";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   PhoneOff, Mic, MicOff, Video, VideoOff, Users, Loader2,
   Wifi, WifiOff, Clock, SwitchCamera, Volume2, VolumeX, Pause, Play,
@@ -22,7 +22,7 @@ export function AppelGroupe({
   callType = "video",
   groupName,
 }) {
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
 
   const [remoteUsers, setRemoteUsers] = useState([]);
   const [isMuted, setIsMuted] = useState(false);
@@ -52,15 +52,23 @@ export function AppelGroupe({
 
   const cleanupLocal = useCallback(() => {
     if (clientRef.current) {
-      try { clientRef.current.leave(); } catch (e) {}
+      try {
+        clientRef.current.leave();
+      } catch (e) {}
       clientRef.current = null;
     }
     localTracksRef.current.forEach((track) => {
-      try { track.stop(); track.close(); } catch (e) {}
+      try {
+        track.stop();
+        track.close();
+      } catch (e) {}
     });
     localTracksRef.current = [];
     if (screenTrackRef.current) {
-      try { screenTrackRef.current.stop(); screenTrackRef.current.close(); } catch (e) {}
+      try {
+        screenTrackRef.current.stop();
+        screenTrackRef.current.close();
+      } catch (e) {}
       screenTrackRef.current = null;
     }
     clearInterval(timerRef.current);
@@ -79,7 +87,7 @@ export function AppelGroupe({
       await endCallMutation({ callId, userId });
     } catch (err) {
       if (!err.message.includes("Appel introuvable")) {
-        console.error("Erreur endCall:", err);
+        console.error("[AppelGroupe] endCall failed:", err);
       }
     }
     cleanupLocal();
@@ -91,7 +99,9 @@ export function AppelGroupe({
       try {
         return await generateToken({ channelName: channel, userId: uid });
       } catch (err) {
-        throw new Error("Impossible de générer le token : " + err.message);
+        // 🟡 FIX : ne pas propager le message backend au client
+        console.error("[AppelGroupe] generateToken failed:", err);
+        throw new Error("Impossible de générer le token d'appel");
       }
     },
     [generateToken]
@@ -139,7 +149,9 @@ export function AppelGroupe({
       try {
         await agoraClient.join(APP_ID, channelName, token, null);
         if (destroyedRef.current) {
-          try { agoraClient.leave(); } catch (e) {}
+          try {
+            agoraClient.leave();
+          } catch (e) {}
           return;
         }
       } catch (err) {
@@ -246,19 +258,28 @@ export function AppelGroupe({
     }
   };
 
+  /**
+   * 🟢 FIX : `getTrackLabel()` n'existe pas sur les tracks Agora.
+   * Utilise la bonne API : `getMediaStreamTrack().getSettings().deviceId`
+   */
   const switchCamera = async () => {
     if (localTracksRef.current[1]) {
       try {
         const cameras = await AgoraRTC.getCameras();
-        const currentDeviceId = localTracksRef.current[1].getTrackLabel?.() || "";
-        const nextIndex = (cameras.findIndex((cam) => cam.deviceId === currentDeviceId) + 1) % cameras.length;
+        const currentTrack = localTracksRef.current[1];
+        const currentDeviceId =
+          currentTrack?.getMediaStreamTrack?.()?.getSettings?.()?.deviceId || "";
+        const currentIndex = cameras.findIndex(
+          (cam) => cam.deviceId === currentDeviceId
+        );
+        const nextIndex = (currentIndex + 1) % cameras.length;
         const nextDeviceId = cameras[nextIndex]?.deviceId;
         if (nextDeviceId) {
           await localTracksRef.current[1].setDevice(nextDeviceId);
           setIsFrontCamera(nextIndex !== 1);
         }
       } catch (err) {
-        console.error("Erreur changement caméra", err);
+        console.error("[AppelGroupe] switchCamera failed:", err);
         toast.error("Impossible de changer de caméra");
       }
     }
@@ -308,13 +329,16 @@ export function AppelGroupe({
         }
         setIsScreenSharing(true);
       } catch (err) {
+        console.error("[AppelGroupe] screenShare failed:", err);
         toast.error("Impossible de partager l'écran");
       }
     }
   };
 
   const formatDuration = (sec) => {
-    const mins = Math.floor(sec / 60).toString().padStart(2, "0");
+    const mins = Math.floor(sec / 60)
+      .toString()
+      .padStart(2, "0");
     const secs = (sec % 60).toString().padStart(2, "0");
     return `${mins}:${secs}`;
   };
@@ -343,86 +367,187 @@ export function AppelGroupe({
   const bottomPadding = isMobile ? "8px 8px" : "12px 16px";
 
   return (
-    <div style={{
-      position: "relative",
-      width: "100%",
-      height: "100vh",
-      background: "#0F172A",
-      color: "white",
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-    }}>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100vh",
+        background: "#0F172A",
+        color: "white",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* 🟢 FIX : keyframes préfixés `ag-*` + classe utilitaire */}
+      <style>{`
+        @keyframes ag-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .ag-spin { animation: ag-spin 1s linear infinite; }
+      `}</style>
+
       {/* Overlay de connexion */}
       {connectionState === "CONNECTING" && (
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          background: "rgba(15,23,42,0.95)", zIndex: 20,
-        }}>
-          <Loader2 size={48} style={{ animation: "spin 1s linear infinite", color: "#818CF8" }} />
-          <p style={{ marginTop: 16, fontSize: 16, fontWeight: 500 }}>Connexion au groupe…</p>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(15,23,42,0.95)",
+            zIndex: 20,
+          }}
+        >
+          <Loader2 size={48} className="ag-spin" style={{ color: "#818CF8" }} />
+          <p style={{ marginTop: 16, fontSize: 16, fontWeight: 500 }}>
+            Connexion au groupe…
+          </p>
         </div>
       )}
 
       {/* Overlay d'erreur */}
       {connectionState === "ERROR" && (
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          background: "rgba(15,23,42,0.95)", zIndex: 20,
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(15,23,42,0.95)",
+            zIndex: 20,
+          }}
+        >
           <WifiOff size={48} color="#EF4444" />
-          <h2 style={{ marginTop: 16, fontSize: 24, fontWeight: 600 }}>Échec de la connexion</h2>
-          <button onClick={handleEndCall} style={{ marginTop: 20, padding: "12px 24px", background: "#EF4444", border: "none", borderRadius: 12, color: "white", fontWeight: 600, cursor: "pointer" }}>
+          <h2 style={{ marginTop: 16, fontSize: 24, fontWeight: 600 }}>
+            Échec de la connexion
+          </h2>
+          <button
+            onClick={handleEndCall}
+            style={{
+              marginTop: 20,
+              padding: "12px 24px",
+              background: "#EF4444",
+              border: "none",
+              borderRadius: 12,
+              color: "white",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
             Quitter
           </button>
         </div>
       )}
 
       {/* Bandeau supérieur */}
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        padding: topPadding, background: "rgba(15,23,42,0.7)", backdropFilter: "blur(8px)", zIndex: 10,
-      }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: topPadding,
+          background: "rgba(15,23,42,0.7)",
+          backdropFilter: "blur(8px)",
+          zIndex: 10,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div
+            style={{
+              width: isMobile ? 32 : 36,
+              height: isMobile ? 32 : 36,
+              borderRadius: "50%",
+              background: "#1E293B",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             <Users size={isMobile ? 16 : 20} color="#94A3B8" />
           </div>
-          <span style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16 }}>{groupName || "Appel de groupe"}</span>
-          <span style={{ fontSize: isMobile ? 11 : 13, color: "#94A3B8" }}>({participants.length + 1} participants)</span>
+          <span style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16 }}>
+            {groupName || "Appel de groupe"}
+          </span>
+          <span style={{ fontSize: isMobile ? 11 : 13, color: "#94A3B8" }}>
+            ({participants.length + 1} participants)
+          </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, color: networkQualityColor, fontSize: isMobile ? 11 : 13 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            color: networkQualityColor,
+            fontSize: isMobile ? 11 : 13,
+          }}
+        >
           <Wifi size={isMobile ? 14 : 16} />
           {networkQualityLabel && <span>{networkQualityLabel}</span>}
         </div>
       </div>
 
       {/* Grille vidéo */}
-      <div style={{
-        flex: 1,
-        display: "grid",
-        gridTemplateColumns: `repeat(auto-fit, minmax(${gridMin}, 1fr))`,
-        gap: gridGap,
-        padding: gridPadding,
-        overflowY: "auto",
-      }}>
+      <div
+        style={{
+          flex: 1,
+          display: "grid",
+          gridTemplateColumns: `repeat(auto-fit, minmax(${gridMin}, 1fr))`,
+          gap: gridGap,
+          padding: gridPadding,
+          overflowY: "auto",
+        }}
+      >
         {/* Vidéo locale */}
-        <div style={{
-          background: "#1E293B",
-          borderRadius: 16,
-          overflow: "hidden",
-          position: "relative",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-          aspectRatio: isMobile ? "4/3" : "16/9",
-        }}>
-          <div ref={localVideoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <div
+          style={{
+            background: "#1E293B",
+            borderRadius: 16,
+            overflow: "hidden",
+            position: "relative",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            aspectRatio: isMobile ? "4/3" : "16/9",
+          }}
+        >
+          <div
+            ref={localVideoRef}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
           {isVideoOff && (
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: isMobile ? 40 : 64, opacity: 0.8 }}>
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%,-50%)",
+                fontSize: isMobile ? 40 : 64,
+                opacity: 0.8,
+              }}
+            >
               📷
             </div>
           )}
-          <div style={{ position: "absolute", bottom: isMobile ? 6 : 12, left: isMobile ? 6 : 12, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", borderRadius: 8, padding: isMobile ? "2px 8px" : "4px 12px", fontSize: isMobile ? 11 : 13, fontWeight: 500 }}>
+          <div
+            style={{
+              position: "absolute",
+              bottom: isMobile ? 6 : 12,
+              left: isMobile ? 6 : 12,
+              background: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(4px)",
+              borderRadius: 8,
+              padding: isMobile ? "2px 8px" : "4px 12px",
+              fontSize: isMobile ? 11 : 13,
+              fontWeight: 500,
+            }}
+          >
             Vous {isMuted ? "(muet)" : ""} {isOnHold ? "(en attente)" : ""}
           </div>
         </div>
@@ -434,45 +559,118 @@ export function AppelGroupe({
       </div>
 
       {/* Barre de contrôle */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center", gap: controlGap,
-        padding: bottomPadding, background: "rgba(15,23,42,0.95)", backdropFilter: "blur(8px)",
-        borderTop: "1px solid rgba(255,255,255,0.08)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#94A3B8", fontSize: isMobile ? 13 : 15, marginRight: "auto" }}>
-          {connectionState === "CONNECTED" ? <Wifi size={isMobile ? 14 : 16} color="#10B981" /> : <WifiOff size={isMobile ? 14 : 16} color="#EF4444" />}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: controlGap,
+          padding: bottomPadding,
+          background: "rgba(15,23,42,0.95)",
+          backdropFilter: "blur(8px)",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            color: "#94A3B8",
+            fontSize: isMobile ? 13 : 15,
+            marginRight: "auto",
+          }}
+        >
+          {connectionState === "CONNECTED" ? (
+            <Wifi size={isMobile ? 14 : 16} color="#10B981" />
+          ) : (
+            <WifiOff size={isMobile ? 14 : 16} color="#EF4444" />
+          )}
           <Clock size={isMobile ? 16 : 18} />
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>{formatDuration(callDuration)}</span>
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatDuration(callDuration)}
+          </span>
         </div>
 
-        <button onClick={toggleMute} style={controlButtonStyle(isMuted ? "red" : "default", controlButtonSize)}>
-          {isMuted ? <MicOff size={isMobile ? 18 : 22} /> : <Mic size={isMobile ? 18 : 22} />}
+        <button
+          onClick={toggleMute}
+          style={controlButtonStyle(isMuted ? "red" : "default", controlButtonSize)}
+          aria-label={isMuted ? "Activer le micro" : "Couper le micro"}
+        >
+          {isMuted ? (
+            <MicOff size={isMobile ? 18 : 22} />
+          ) : (
+            <Mic size={isMobile ? 18 : 22} />
+          )}
         </button>
-        <button onClick={toggleVideo} style={controlButtonStyle(isVideoOff ? "red" : "default", controlButtonSize)}>
-          {isVideoOff ? <VideoOff size={isMobile ? 18 : 22} /> : <Video size={isMobile ? 18 : 22} />}
+        <button
+          onClick={toggleVideo}
+          style={controlButtonStyle(isVideoOff ? "red" : "default", controlButtonSize)}
+          aria-label={isVideoOff ? "Activer la caméra" : "Couper la caméra"}
+        >
+          {isVideoOff ? (
+            <VideoOff size={isMobile ? 18 : 22} />
+          ) : (
+            <Video size={isMobile ? 18 : 22} />
+          )}
         </button>
         {!isMobile && (
-          <button onClick={switchCamera} style={controlButtonStyle("default", controlButtonSize)} title="Changer de caméra">
+          <button
+            onClick={switchCamera}
+            style={controlButtonStyle("default", controlButtonSize)}
+            title="Changer de caméra"
+            aria-label="Changer de caméra"
+          >
             <SwitchCamera size={22} />
           </button>
         )}
-        <button onClick={toggleSpeaker} style={controlButtonStyle(isSpeakerOn ? "default" : "red", controlButtonSize)} title="Haut-parleur">
-          {isSpeakerOn ? <Volume2 size={isMobile ? 18 : 22} /> : <VolumeX size={isMobile ? 18 : 22} />}
+        <button
+          onClick={toggleSpeaker}
+          style={controlButtonStyle(isSpeakerOn ? "default" : "red", controlButtonSize)}
+          title="Haut-parleur"
+          aria-label={isSpeakerOn ? "Couper le haut-parleur" : "Activer le haut-parleur"}
+        >
+          {isSpeakerOn ? (
+            <Volume2 size={isMobile ? 18 : 22} />
+          ) : (
+            <VolumeX size={isMobile ? 18 : 22} />
+          )}
         </button>
-        <button onClick={toggleHold} style={controlButtonStyle(isOnHold ? "blue" : "default", controlButtonSize)} title="Mettre en attente">
-          {isOnHold ? <Play size={isMobile ? 18 : 22} /> : <Pause size={isMobile ? 18 : 22} />}
+        <button
+          onClick={toggleHold}
+          style={controlButtonStyle(isOnHold ? "blue" : "default", controlButtonSize)}
+          title="Mettre en attente"
+          aria-label={isOnHold ? "Reprendre l'appel" : "Mettre en attente"}
+        >
+          {isOnHold ? (
+            <Play size={isMobile ? 18 : 22} />
+          ) : (
+            <Pause size={isMobile ? 18 : 22} />
+          )}
         </button>
         {!isMobile && (
-          <button onClick={startScreenShare} style={controlButtonStyle(isScreenSharing ? "blue" : "default", controlButtonSize)}>
+          <button
+            onClick={startScreenShare}
+            style={controlButtonStyle(isScreenSharing ? "blue" : "default", controlButtonSize)}
+            aria-label={isScreenSharing ? "Arrêter le partage" : "Partager l'écran"}
+          >
             {isScreenSharing ? <MonitorOff size={22} /> : <Monitor size={22} />}
           </button>
         )}
-        <button onClick={handleEndCall} style={{ ...controlButtonStyle("red", controlButtonSize), background: "#EF4444", borderColor: "#EF4444", width: isMobile ? 48 : 56, height: isMobile ? 48 : 56 }}>
+        <button
+          onClick={handleEndCall}
+          style={{
+            ...controlButtonStyle("red", controlButtonSize),
+            background: "#EF4444",
+            borderColor: "#EF4444",
+            width: isMobile ? 48 : 56,
+            height: isMobile ? 48 : 56,
+          }}
+          aria-label="Terminer l'appel"
+        >
           <PhoneOff size={isMobile ? 22 : 26} />
         </button>
       </div>
-
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -505,16 +703,33 @@ function RemoteVideo({ user, isMobile }) {
   }, [videoTrack]);
 
   return (
-    <div style={{
-      background: "#1E293B",
-      borderRadius: 16,
-      overflow: "hidden",
-      position: "relative",
-      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-      aspectRatio: isMobile ? "4/3" : "16/9",
-    }}>
-      <div ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      <div style={{ position: "absolute", bottom: isMobile ? 6 : 12, left: isMobile ? 6 : 12, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", borderRadius: 8, padding: isMobile ? "2px 8px" : "4px 12px", fontSize: isMobile ? 11 : 13, fontWeight: 500 }}>
+    <div
+      style={{
+        background: "#1E293B",
+        borderRadius: 16,
+        overflow: "hidden",
+        position: "relative",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+        aspectRatio: isMobile ? "4/3" : "16/9",
+      }}
+    >
+      <div
+        ref={videoRef}
+        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: isMobile ? 6 : 12,
+          left: isMobile ? 6 : 12,
+          background: "rgba(0,0,0,0.6)",
+          backdropFilter: "blur(4px)",
+          borderRadius: 8,
+          padding: isMobile ? "2px 8px" : "4px 12px",
+          fontSize: isMobile ? 11 : 13,
+          fontWeight: 500,
+        }}
+      >
         Participant {user.uid}
       </div>
     </div>
@@ -537,9 +752,17 @@ function controlButtonStyle(variant, size = 52) {
     backdropFilter: "blur(4px)",
   };
   if (variant === "red") {
-    return { ...base, background: "rgba(239,68,68,0.2)", borderColor: "#EF4444" };
+    return {
+      ...base,
+      background: "rgba(239,68,68,0.2)",
+      borderColor: "#EF4444",
+    };
   } else if (variant === "blue") {
-    return { ...base, background: "rgba(59,130,246,0.2)", borderColor: "#3B82F6" };
+    return {
+      ...base,
+      background: "rgba(59,130,246,0.2)",
+      borderColor: "#3B82F6",
+    };
   }
   return base;
 }

@@ -1,5 +1,7 @@
+// src/components/AuthenticatedApp.jsx
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "@convex/_generated/api";
 import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
@@ -16,72 +18,159 @@ import { EleveApp } from "./EleveApp";
 import AppelVideo from "./AppelVideo";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { OutgoingCallModal } from "./OutgoingCallModal";
-import { getFaute } from "../utils";
 import { useNotifications } from "@/hooks/useNotifications";
 import { NotificationsManager } from "./NotificationsManager";
 import toast from "react-hot-toast";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
-function useHistoryNavigation(onBack) {
-  useEffect(() => {
-    const handlePopState = () => {
-      onBack();
-    };
-    window.addEventListener("popstate", handlePopState);
-    if (window.history.state === null) {
-      window.history.pushState(null, "", window.location.href);
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const AuthenticatedAppKeyframes = (
+  <style>{`
+    @keyframes aa-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
     }
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [onBack]);
-}
+    .aa-spin { animation: aa-spin 0.8s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .aa-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// CHEMINS PAR DÉFAUT PAR RÔLE — Redirection initiale
+// ════════════════════════════════════════════════════════════════════
+const ROLE_DEFAULT_PATHS = {
+  superAdmin: "/super-admin/overview",
+  admin: "/admin/accueil",
+  directeur: "/directeur/accueil",
+  comptable: "/comptable/dashboard",
+  enseignant: "/enseignant/accueil",
+  parent: "/parent/enfants",
+  eleve: "/eleve/accueil",
+  disciplinaire: "/disciplinaire/accueil",
+};
 
 export function AuthenticatedApp({ user, handleLogout }) {
   const { S, dark, toggle } = useStyles();
   const isMobile = useIsMobile();
   const { notify } = useNotifications();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const isSuperAdmin = user.role === "admin" && !user.ecoleId;
+  const userId = user?._id;
 
-  const [screenStack, setScreenStack] = useState([
-    isSuperAdmin ? "superadmin" : "ecole",
-  ]);
-  const currentScreen = screenStack[screenStack.length - 1];
-
-  const [selectedEcoleId, setSelectedEcoleId] = useState(
-    isSuperAdmin ? null : user.ecoleId
+  // ✅ SuperAdmin : rôle + admin sans école
+  const isSuperAdmin = useMemo(
+    () =>
+      user?.role === "superAdmin" ||
+      (user?.role === "admin" && !user?.ecoleId),
+    [user?.role, user?.ecoleId]
   );
 
-  const pushScreen = useCallback((newScreen) => {
-    setScreenStack((prev) => [...prev, newScreen]);
-    window.history.pushState(null, "", window.location.href);
-  }, []);
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX MAJEUR — Navigation 100% URL
+  // ════════════════════════════════════════════════════════════════════
+  const screenConfig = useMemo(() => {
+    const path = location.pathname;
 
-  const popScreen = useCallback(() => {
-    setScreenStack((prev) => {
-      if (prev.length <= 1) return prev;
-      return prev.slice(0, -1);
-    });
-  }, []);
+    if (isSuperAdmin) {
+      // Super admin : toujours dans SuperAdminDashboard (URL /super-admin/*)
+      // Le sous-écran est géré par SuperAdminDashboard elle-même.
+      return { screen: "superadmin", ecoleId: null };
+    }
 
-  useHistoryNavigation(popScreen);
+    // Non-superadmin → toujours l'écran école de leur propre école
+    return { screen: "ecole", ecoleId: user?.ecoleId || null };
+  }, [location.pathname, user?.ecoleId, isSuperAdmin]);
 
+  const currentScreen = screenConfig.screen;
+  const selectedEcoleId = screenConfig.ecoleId;
+
+  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX #3 — Redirection initiale selon rôle (une seule fois)
+  // Évite le flash visuel au premier render + boucle perdue
+  // ════════════════════════════════════════════════════════════════════
+  const hasInitialRedirectRef = useRef(false);
+  useEffect(() => {
+    if (hasInitialRedirectRef.current) return;
+    if (!userId) return;
+
+    const path = location.pathname;
+
+    // Si l'URL est déjà valide (pas racine), ne rien faire
+    if (path && path !== "/" && path !== "") return;
+
+    hasInitialRedirectRef.current = true;
+
+    // Détermine le chemin par défaut
+    const defaultPath = isSuperAdmin
+      ? "/super-admin/overview"
+      : ROLE_DEFAULT_PATHS[user?.role];
+
+    if (defaultPath) {
+      navigate(defaultPath, { replace: true });
+    }
+  }, [userId, location.pathname, isSuperAdmin, user?.role, navigate]);
+
+  // ✅ Support Android back button (Capacitor)
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = App.addListener("backButton", () => {
-      if (screenStack.length > 1) {
-        popScreen();
-      } else {
+      if (currentScreen === "superadmin" && isSuperAdmin) {
+        // Super admin sur le dashboard → quitter l'app
         if (window.confirm("Voulez-vous quitter l'application ?")) {
           App.exitApp();
         }
+      } else {
+        // Autres rôles → laisser React Router gérer
+        navigate(-1);
       }
     });
     return () => listener.remove();
-  }, [screenStack, popScreen]);
+  }, [currentScreen, isSuperAdmin, navigate]);
 
-  const pendingCall = useQuery(api.appels.getPendingCall, { userId: user._id });
-  const activeCallFromConvex = useQuery(api.appels.getActiveCall, { userId: user._id });
-  const outgoingCall = useQuery(api.appels.getOutgoingCall, { userId: user._id });
+  // ════════════════════════════════════════════════════════════════════
+  // ANNÉE ACTIVE
+  // ════════════════════════════════════════════════════════════════════
+  const ecoleId = selectedEcoleId || user?.ecoleId;
+
+  const anneeActiveArgs = useMemo(
+    () => (ecoleId && userId ? { ecoleId, userId } : "skip"),
+    [ecoleId, userId]
+  );
+
+  const anneeActiveQuery = useQuery(
+    api.anneesScolaires.getActive,
+    anneeActiveArgs
+  );
+
+  const anneeActive = anneeActiveQuery ?? null;
+  const anneeId = anneeActive?._id || undefined;
+
+  const [selectedAnneeId, setSelectedAnneeId] = useState(anneeId);
+  useEffect(() => {
+    if (!selectedAnneeId && anneeId) {
+      setSelectedAnneeId(anneeId);
+    }
+  }, [selectedAnneeId, anneeId]);
+
+  const dataAnneeId = user?.role === "admin" ? selectedAnneeId : anneeId;
+
+  // ════════════════════════════════════════════════════════════════════
+  // APPELS — args stables
+  // ════════════════════════════════════════════════════════════════════
+  const callArgs = useMemo(
+    () => (userId ? { userId } : "skip"),
+    [userId]
+  );
+
+  const pendingCall = useQuery(api.appels.getPendingCall, callArgs);
+  const activeCallFromConvex = useQuery(api.appels.getActiveCall, callArgs);
+  const outgoingCall = useQuery(api.appels.getOutgoingCall, callArgs);
+
   const acceptCall = useMutation(api.appels.acceptCall);
   const rejectCall = useMutation(api.appels.rejectCall);
   const endCall = useMutation(api.appels.endCall);
@@ -98,74 +187,89 @@ export function AuthenticatedApp({ user, handleLogout }) {
     } else {
       setLocalActiveCall(null);
     }
-  }, [activeCallFromConvex?._id, activeCallFromConvex?.channelName, activeCallFromConvex?.type]);
+  }, [
+    activeCallFromConvex?._id,
+    activeCallFromConvex?.channelName,
+    activeCallFromConvex?.type,
+  ]);
 
-  const handleCallEnd = () => setLocalActiveCall(null);
-  const handleCancelCall = async () => {
-    if (outgoingCall) {
-      await endCall({ callId: outgoingCall._id, userId: user._id });
+  const handleCallEnd = useCallback(() => setLocalActiveCall(null), []);
+
+  const handleCancelCall = useCallback(async () => {
+    if (outgoingCall && userId) {
+      await endCall({ callId: outgoingCall._id, userId });
       toast("Appel annulé");
     }
-  };
+  }, [outgoingCall, userId, endCall]);
 
-  const anneeActiveQuery = useQuery(
-    api.anneesScolaires.getActive,
-    selectedEcoleId ? { ecoleId: selectedEcoleId } : "skip"
+  // ════════════════════════════════════════════════════════════════════
+  // QUERIES PRINCIPALES — args stables
+  // ════════════════════════════════════════════════════════════════════
+  const ecoleAnneeArgs = useMemo(
+    () =>
+      ecoleId && dataAnneeId && userId
+        ? { ecoleId, anneeId: dataAnneeId, userId }
+        : "skip",
+    [ecoleId, dataAnneeId, userId]
   );
-  const [anneeActive, setAnneeActive] = useState(null);
 
-  useEffect(() => {
-    if (anneeActiveQuery && anneeActiveQuery._id !== anneeActive?._id) {
-      setAnneeActive(anneeActiveQuery);
-    }
-  }, [anneeActiveQuery?._id, anneeActive?._id]);
+  const ecoleSimpleArgs = useMemo(
+    () => (ecoleId && userId ? { ecoleId, userId } : "skip"),
+    [ecoleId, userId]
+  );
 
-  const anneeId = anneeActive?._id || undefined;
+  const elevesRaw = useQuery(api.eleves.list, ecoleAnneeArgs);
+  const classesRaw = useQuery(api.classes.list, ecoleAnneeArgs);
+  const fautesRaw = useQuery(api.fautes.list, ecoleSimpleArgs);
+  const punitionsRaw = useQuery(api.punitions.list, ecoleAnneeArgs);
+  const sanctionsRaw = useQuery(api.sanctions.list, ecoleSimpleArgs);
+  const usersRaw = useQuery(api.users.listByEcole, ecoleSimpleArgs);
+  const fraisRaw = useQuery(api.frais.listByEcole, ecoleAnneeArgs);
 
-  const [selectedAnneeId, setSelectedAnneeId] = useState(anneeId);
-  useEffect(() => {
-    if (!selectedAnneeId && anneeActive?._id) {
-      setSelectedAnneeId(anneeActive._id);
-    }
-  }, [selectedAnneeId, anneeActive?._id]);
+  const eleves = useMemo(() => elevesRaw ?? [], [elevesRaw]);
+  const classes = useMemo(() => classesRaw ?? [], [classesRaw]);
+  const fautes = useMemo(() => fautesRaw ?? [], [fautesRaw]);
+  const punitions = useMemo(() => punitionsRaw ?? [], [punitionsRaw]);
+  const sanctions = useMemo(() => sanctionsRaw ?? [], [sanctionsRaw]);
+  const users = useMemo(() => usersRaw ?? [], [usersRaw]);
+  const frais = useMemo(() => fraisRaw ?? [], [fraisRaw]);
 
-  const dataAnneeId = user.role === "admin" ? selectedAnneeId : anneeId;
+  // ════════════════════════════════════════════════════════════════════
+  // ENFANTS (parent uniquement)
+  // ════════════════════════════════════════════════════════════════════
+  const enfantsArgs = useMemo(
+    () =>
+      user?.role === "parent" && userId && anneeId
+        ? { parentId: userId, anneeId, userId }
+        : "skip",
+    [user?.role, userId, anneeId]
+  );
 
-  const ecoleId = selectedEcoleId || user.ecoleId;
+  const enfantsRaw = useQuery(api.eleves.listByParent, enfantsArgs);
+  const enfants = useMemo(() => enfantsRaw ?? [], [enfantsRaw]);
 
-  const ecoles = isSuperAdmin ? useQuery(api.ecoles.list) ?? [] : [];
-  const eleves = useQuery(
-    api.eleves.list,
-    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
-  ) ?? [];
-  const classes = useQuery(
-    api.classes.list,
-    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
-  ) ?? [];
-  const fautes = useQuery(api.fautes.list, ecoleId ? { ecoleId } : "skip") ?? [];
-  const punitions = useQuery(
-    api.punitions.list,
-    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
-  ) ?? [];
-  const sanctions = useQuery(api.sanctions.list, ecoleId ? { ecoleId } : "skip") ?? [];
-  const users = useQuery(api.users.listByEcole, ecoleId ? { ecoleId } : "skip") ?? [];
-  const frais = useQuery(
-    api.frais.listByEcole,
-    ecoleId && dataAnneeId ? { ecoleId, anneeId: dataAnneeId } : "skip"
-  ) ?? [];
+  const eleveIds = useMemo(() => enfants.map((e) => e._id), [enfants]);
 
-  const enfants = useQuery(
-    api.eleves.listByParent,
-    user.role === "parent" && anneeId
-      ? { parentId: user._id, anneeId }
-      : "skip"
-  ) ?? [];
-  const eleveIds = enfants.map((e) => e._id);
-  const punitionsEnfants = useQuery(
+  const punitionsEnfantsArgs = useMemo(
+    () =>
+      user?.role === "parent" && userId && anneeId && eleveIds.length > 0
+        ? { eleveIds, anneeId, userId }
+        : "skip",
+    [user?.role, userId, anneeId, eleveIds]
+  );
+
+  const punitionsEnfantsRaw = useQuery(
     api.punitions.listByEleves,
-    user.role === "parent" && anneeId ? { eleveIds, anneeId } : "skip"
-  ) ?? [];
+    punitionsEnfantsArgs
+  );
+  const punitionsEnfants = useMemo(
+    () => punitionsEnfantsRaw ?? [],
+    [punitionsEnfantsRaw]
+  );
 
+  // ════════════════════════════════════════════════════════════════════
+  // MUTATIONS (admin)
+  // ════════════════════════════════════════════════════════════════════
   const addEleve = useMutation(api.eleves.add);
   const removeEleve = useMutation(api.eleves.remove);
   const importEleves = useMutation(api.eleves.importEleves);
@@ -176,8 +280,14 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const removeFaute = useMutation(api.fautes.remove);
   const addPunition = useMutation(api.punitions.add);
 
+  // ════════════════════════════════════════════════════════════════════
+  // NOTIFICATIONS
+  // ════════════════════════════════════════════════════════════════════
   const [notifs, setNotifs] = useState([]);
-  const handleNotif = (msg) => setNotifs((prev) => [...prev, msg]);
+  const handleNotif = useCallback(
+    (msg) => setNotifs((prev) => [...prev, msg]),
+    []
+  );
 
   useEffect(() => {
     if (!notifs.length) return;
@@ -185,29 +295,37 @@ export function AuthenticatedApp({ user, handleLogout }) {
     return () => clearTimeout(t);
   }, [notifs]);
 
+  // Notifications punitions graves (parent)
   const prevPunitionsEnfantsRef = useRef([]);
   useEffect(() => {
-    if (user.role !== "parent" || punitionsEnfants.length === 0) return;
+    if (user?.role !== "parent" || punitionsEnfants.length === 0) return;
     const prev = prevPunitionsEnfantsRef.current;
-    const newPunitions = punitionsEnfants.filter(
-      (p) => !prev.some((old) => old._id === p._id)
-    );
-    for (const p of newPunitions) {
-      const eleve = enfants.find((e) => e._id === p.idEleve);
-      const faute = getFaute(fautes, p.idFaute);
-      if (faute?.gravite === "Grave")
+    const prevIds = new Set(prev.map((p) => p._id));
+
+    const enfantsById = new Map(enfants.map((e) => [e._id, e]));
+    const fautesById = new Map(fautes.map((f) => [f._id, f]));
+
+    for (const p of punitionsEnfants) {
+      if (prevIds.has(p._id)) continue;
+      const eleve = enfantsById.get(p.idEleve);
+      const faute = fautesById.get(p.idFaute);
+      if (faute?.gravite === "Grave") {
         notify(
-          `⚠️ Nouvelle punition grave pour ${eleve?.nom} ${eleve?.postnom} : ${faute.libelle}`
+          `Nouvelle punition grave pour ${eleve?.nom} ${eleve?.postnom} : ${faute.libelle}`
         );
+      }
     }
     prevPunitionsEnfantsRef.current = punitionsEnfants;
-  }, [punitionsEnfants, user.role, enfants, fautes]);
+  }, [punitionsEnfants, user?.role, enfants, fautes, notify]);
 
+  // ════════════════════════════════════════════════════════════════════
+  // APPEL ACTIF
+  // ════════════════════════════════════════════════════════════════════
   if (localActiveCall) {
     return (
       <AppelVideo
         channelName={localActiveCall.channelName}
-        userId={user._id}
+        userId={userId}
         callId={localActiveCall._id}
         onCallEnd={handleCallEnd}
         callType={localActiveCall.type || "video"}
@@ -215,31 +333,50 @@ export function AuthenticatedApp({ user, handleLogout }) {
     );
   }
 
-  if (currentScreen === "superadmin") {
+  // ════════════════════════════════════════════════════════════════════
+  // ÉCRAN SUPERADMIN — toujours rendu pour un super admin
+  // ════════════════════════════════════════════════════════════════════
+  if (isSuperAdmin) {
     return (
       <>
+        {AuthenticatedAppKeyframes}
         <NotifBanner notifs={notifs} />
-        <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-          <div style={{
+        <div
+          style={{
             width: "100%",
-            padding: isMobile ? "12px 16px" : "12px 24px",
-            background: dark ? "#0F172A" : "#FFFFFF",
-            borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+            minHeight: "100vh",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            boxSizing: "border-box",
-          }}>
-            <div style={{ ...S.navbarBrand, fontSize: isMobile ? 16 : 18 }}>School Management</div>
-            <div style={{ fontWeight: 600, color: S.textMuted, fontSize: isMobile ? 13 : 14 }}>Super Admin</div>
+            flexDirection: "column",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              padding: isMobile ? "12px 16px" : "12px 24px",
+              background: dark ? "#0F172A" : "#FFFFFF",
+              borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              boxSizing: "border-box",
+            }}
+          >
+            <div style={{ ...S.navbarBrand, fontSize: isMobile ? 16 : 18 }}>
+              School Management
+            </div>
+            <div
+              style={{
+                fontWeight: 600,
+                color: S.textMuted,
+                fontSize: isMobile ? 13 : 14,
+              }}
+            >
+              Super Admin
+            </div>
           </div>
 
           <div style={{ flex: 1, width: "100%", overflow: "hidden" }}>
             <SuperAdminDashboard
-              onSelectEcole={(id) => {
-                setSelectedEcoleId(id);
-                pushScreen("ecole");
-              }}
               user={user}
               onLogout={handleLogout}
             />
@@ -249,198 +386,153 @@ export function AuthenticatedApp({ user, handleLogout }) {
     );
   }
 
-  if (currentScreen === "ecole") {
-    if (
-      dataAnneeId &&
-      ecoleId &&
-      (eleves === undefined ||
-        classes === undefined ||
-        fautes === undefined ||
-        punitions === undefined ||
-        sanctions === undefined ||
-        users === undefined ||
-        frais === undefined)
-    ) {
-      return (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: dark ? "#0F172A" : "#F5F7FB", fontFamily: "'Inter', sans-serif", color: dark ? "#CBD5E1" : "#64748B", padding: isMobile ? "16px" : "0" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ width: 40, height: 40, border: `3px solid ${dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"}`, borderTopColor: dark ? "#818CF8" : "#4F46E5", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
-            <p style={{ fontSize: isMobile ? 14 : 16 }}>Chargement...</p>
-          </div>
-        </div>
-      );
-    }
+  // ════════════════════════════════════════════════════════════════════
+  // ÉCRAN ÉCOLE (rôles non-super-admin)
+  // ════════════════════════════════════════════════════════════════════
+  return (
+    <>
+      {AuthenticatedAppKeyframes}
+      <NotifBanner notifs={notifs} />
 
-    return (
-      <>
-        <NotifBanner notifs={notifs} />
+      {ecoleId && (
+        <NotificationsManager
+          user={user}
+          ecoleId={ecoleId}
+          enfants={enfants}
+          punitionsEnfants={punitionsEnfants}
+          fautes={fautes}
+        />
+      )}
 
-        {isSuperAdmin && (
-          <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px 0" : "16px 24px 0", display: isMobile ? "block" : "block" }}>
-            <button
-              onClick={() => {
-                setSelectedEcoleId(null);
-                popScreen();
-              }}
-              style={{
-                background: dark ? "#1E293B" : "#FFFFFF",
-                border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "#E2E8F0"}`,
-                color: "#4F46E5",
-                borderRadius: 8,
-                padding: isMobile ? "8px 12px" : "8px 16px",
-                fontSize: isMobile ? 13 : 14,
-                fontWeight: 500,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                width: isMobile ? "100%" : "auto",
-                justifyContent: isMobile ? "center" : "flex-start",
-              }}
-            >
-              ← Retour aux écoles
-            </button>
-          </div>
-        )}
+      {outgoingCall && !localActiveCall && (
+        <OutgoingCallModal
+          callId={outgoingCall._id}
+          calleeId={outgoingCall.calleeId}
+          onCancel={handleCancelCall}
+        />
+      )}
 
-        {ecoleId && (
-          <NotificationsManager
-            user={user}
-            ecoleId={ecoleId}
-            enfants={enfants}
-            punitionsEnfants={punitionsEnfants}
-            fautes={fautes}
-          />
-        )}
+      {user?.role === "disciplinaire" && (
+        <DisciplinaireApp
+          user={user}
+          ecoleId={ecoleId}
+          punitions={punitions}
+          eleves={eleves}
+          fautes={fautes}
+          sanctions={sanctions}
+          onNotif={handleNotif}
+          anneeActive={anneeActive}
+          anneeId={dataAnneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+      )}
 
-        {outgoingCall && !localActiveCall && (
-          <OutgoingCallModal
-            callId={outgoingCall._id}
-            calleeId={outgoingCall.calleeId}
-            onCancel={handleCancelCall}
-          />
-        )}
+      {user?.role === "directeur" && (
+        <DirecteurApp
+          user={user}
+          punitions={punitions}
+          eleves={eleves}
+          classes={classes}
+          fautes={fautes}
+          notifs={notifs}
+          anneeActive={anneeActive}
+          anneeId={dataAnneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+      )}
 
-        {user.role === "disciplinaire" && (
-          <DisciplinaireApp
-            user={user}
-            ecoleId={ecoleId}
-            punitions={punitions}
-            addPunition={addPunition}
-            eleves={eleves}
-            classes={classes}
-            fautes={fautes}
-            sanctions={sanctions}
-            onNotif={handleNotif}
-            anneeActive={anneeActive}
-            anneeId={dataAnneeId}
-            dark={dark}
-            toggle={toggle}
-            handleLogout={handleLogout}
-          />
-        )}
-        {user.role === "directeur" && (
-          <DirecteurApp
-            user={user}
-            punitions={punitions}
-            eleves={eleves}
-            classes={classes}
-            fautes={fautes}
-            notifs={notifs}
-            anneeActive={anneeActive}
-            anneeId={dataAnneeId}
-            dark={dark}
-            toggle={toggle}
-            handleLogout={handleLogout}
-          />
-        )}
-        {user.role === "admin" && (
-          <AdminApp
-            user={user}
-            ecoleId={ecoleId}
-            eleves={eleves}
-            addEleve={addEleve}
-            removeEleve={removeEleve}
-            importEleves={importEleves}
-            classes={classes}
-            addClasse={addClasse}
-            removeClasse={removeClasse}
-            fautes={fautes}
-            addFaute={addFaute}
-            updateFaute={updateFaute}
-            removeFaute={removeFaute}
-            sanctions={sanctions}
-            users={users}
-            frais={frais}
-            anneeActive={anneeActive}
-            anneeId={dataAnneeId}
-            onAnneeChange={setSelectedAnneeId}
-            dark={dark}
-            toggle={toggle}
-            handleLogout={handleLogout}
-          />
-        )}
-        {user.role === "parent" && (
-          <ParentApp
-            user={user}
-            ecoleId={ecoleId}
-            eleves={enfants}
-            punitions={punitionsEnfants}
-            fautes={fautes}
-            anneeActive={anneeActive}
-            anneeId={anneeId}
-            dark={dark}
-            toggle={toggle}
-            handleLogout={handleLogout}
-          />
-        )}
-        {user.role === "enseignant" && (
-          <EnseignantApp
-            user={user}
-            ecoleId={ecoleId}
-            eleves={eleves}
-            classes={classes}
-            anneeActive={anneeActive}
-            anneeId={dataAnneeId}
-            dark={dark}
-            toggle={toggle}
-            handleLogout={handleLogout}
-          />
-        )}
-        {user.role === "comptable" && (
-          <ComptableApp
-            user={user}
-            ecoleId={ecoleId}
-            eleves={eleves}
-            anneeActive={anneeActive}
-            anneeId={dataAnneeId}
-            dark={dark}
-            toggle={toggle}
-            handleLogout={handleLogout}
-          />
-        )}
-        {user.role === "eleve" && (
-          <EleveApp
-            user={user}
-            ecoleId={ecoleId}
-            anneeActive={anneeActive}
-            anneeId={anneeId}
-            dark={dark}
-            toggle={toggle}
-            handleLogout={handleLogout}
-          />
-        )}
+      {user?.role === "admin" && (
+        <AdminApp
+          user={user}
+          ecoleId={ecoleId}
+          eleves={eleves}
+          addEleve={addEleve}
+          removeEleve={removeEleve}
+          importEleves={importEleves}
+          classes={classes}
+          addClasse={addClasse}
+          removeClasse={removeClasse}
+          fautes={fautes}
+          addFaute={addFaute}
+          updateFaute={updateFaute}
+          removeFaute={removeFaute}
+          sanctions={sanctions}
+          users={users}
+          frais={frais}
+          anneeActive={anneeActive}
+          anneeId={dataAnneeId}
+          onAnneeChange={setSelectedAnneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+      )}
 
-        {pendingCall && ecoleId && (
-          <IncomingCallModal
-            callerId={pendingCall.callerId}
-            onAccept={() => acceptCall({ callId: pendingCall._id, userId: user._id })}
-            onReject={() => rejectCall({ callId: pendingCall._id, userId: user._id })}
-          />
-        )}
-      </>
-    );
-  }
+      {user?.role === "parent" && (
+        <ParentApp
+          user={user}
+          ecoleId={ecoleId}
+          eleves={enfants}
+          punitions={punitionsEnfants}
+          fautes={fautes}
+          anneeActive={anneeActive}
+          anneeId={anneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+      )}
 
-  return null;
+      {user?.role === "enseignant" && (
+        <EnseignantApp
+          user={user}
+          ecoleId={ecoleId}
+          eleves={eleves}
+          classes={classes}
+          anneeActive={anneeActive}
+          anneeId={dataAnneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+      )}
+
+      {user?.role === "comptable" && (
+        <ComptableApp
+          user={user}
+          ecoleId={ecoleId}
+          eleves={eleves}
+          anneeActive={anneeActive}
+          anneeId={dataAnneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+      )}
+
+      {user?.role === "eleve" && (
+        <EleveApp
+          user={user}
+          ecoleId={ecoleId}
+          anneeActive={anneeActive}
+          anneeId={anneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+      )}
+
+      {pendingCall && ecoleId && userId && (
+        <IncomingCallModal
+          callerId={pendingCall.callerId}
+          onAccept={() => acceptCall({ callId: pendingCall._id, userId })}
+          onReject={() => rejectCall({ callId: pendingCall._id, userId })}
+        />
+      )}
+    </>
+  );
 }

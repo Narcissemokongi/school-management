@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Search, Calendar, Check, X, Loader, RotateCcw, CalendarDays } from "lucide-react";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -11,8 +11,8 @@ import { trierEleves } from "@/utils/tri";
 import { useAppStore } from "@/store/appStore";
 
 export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
-  const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const { dark } = useStyles();
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
   const addAbsence = useMutation(api.absences.add);
 
@@ -47,7 +47,9 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
     if (debouncedSearch.trim().length < 2) return [];
     const query = debouncedSearch.toLowerCase();
     return eleves
-      .filter(e => `${e.nom} ${e.postnom} ${e.prenom || ''}`.toLowerCase().includes(query))
+      .filter((e) =>
+        `${e.nom} ${e.postnom} ${e.prenom || ""}`.toLowerCase().includes(query)
+      )
       .sort(trierEleves)
       .slice(0, 10);
   }, [eleves, debouncedSearch]);
@@ -55,19 +57,20 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
   const selectEleve = (eleve) => {
     setSelectedEleve(eleve);
     setSearch(`${eleve.nom} ${eleve.postnom}`);
-    setErrors(prev => ({ ...prev, selectedEleve: undefined }));
+    setErrors((prev) => ({ ...prev, selectedEleve: undefined }));
   };
 
   const clearSelectedEleve = () => {
     setSelectedEleve(null);
     setSearch("");
-    setErrors(prev => ({ ...prev, selectedEleve: undefined }));
+    setErrors((prev) => ({ ...prev, selectedEleve: undefined }));
   };
 
   const validate = () => {
     const err = {};
     if (!selectedEleve) err.selectedEleve = "Veuillez sélectionner un élève.";
     if (!date) err.date = "La date est requise.";
+    if (!user?._id) err.global = "Session utilisateur invalide.";
     return err;
   };
 
@@ -83,7 +86,10 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
   const handleSubmit = async () => {
     const validationErrors = validate();
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    if (Object.keys(validationErrors).length > 0) {
+      if (validationErrors.global) toast.error(validationErrors.global);
+      return;
+    }
 
     const ok = await confirm(
       "Enregistrer l'absence / retard",
@@ -105,16 +111,15 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
       toast.success(`${type === "absence" ? "Absence" : "Retard"} enregistré(e)`);
       resetForm();
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "enregistrement impossible"));
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Raccourci pour la date du jour
   const setToday = () => {
     setDate(new Date().toISOString().split("T")[0]);
-    setErrors(prev => ({ ...prev, date: undefined }));
+    setErrors((prev) => ({ ...prev, date: undefined }));
   };
 
   // Couleurs adaptatives
@@ -166,7 +171,10 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: containerPadding }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+      <style>{`
+        @keyframes sa-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .sa-animate-spin { animation: sa-spin 1s linear infinite; }
+      `}</style>
 
       {/* En-tête */}
       <div style={{ marginBottom: headerMarginBottom }}>
@@ -179,20 +187,39 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
       </div>
 
       {/* Carte de recherche */}
-      <div style={{
-        background: cardBg,
-        borderRadius: 16,
-        padding: cardPadding,
-        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-        border: `1px solid ${cardBorder}`,
-        marginBottom: cardMarginBottom,
-      }}>
-        <label htmlFor="recherche-eleve" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
-          <Search size={16} style={{ marginRight: 4, verticalAlign: "middle" }} />
+      <div
+        style={{
+          background: cardBg,
+          borderRadius: 16,
+          padding: cardPadding,
+          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+          border: `1px solid ${cardBorder}`,
+          marginBottom: cardMarginBottom,
+        }}
+      >
+        <label
+          htmlFor="recherche-eleve"
+          style={{
+            display: "block",
+            marginBottom: 6,
+            fontWeight: 500,
+            fontSize: labelFontSize,
+            color: textSecondary,
+          }}
+        >
           Rechercher un élève
         </label>
         <div style={{ position: "relative" }}>
-          <Search size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
+          <Search
+            size={18}
+            style={{
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: textSecondary,
+            }}
+          />
           <input
             id="recherche-eleve"
             type="text"
@@ -201,28 +228,34 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
             onChange={(e) => {
               setSearch(e.target.value);
               setSelectedEleve(null);
-              setErrors(prev => ({ ...prev, selectedEleve: undefined }));
+              setErrors((prev) => ({ ...prev, selectedEleve: undefined }));
             }}
             style={inputStyle("selectedEleve")}
           />
         </div>
-        {errors.selectedEleve && <div style={{ color: errorText, fontSize: 13, marginTop: 4 }}>{errors.selectedEleve}</div>}
+        {errors.selectedEleve && (
+          <div style={{ color: errorText, fontSize: 13, marginTop: 4 }}>
+            {errors.selectedEleve}
+          </div>
+        )}
 
         {/* Résultats de recherche triés */}
         {debouncedSearch.length >= 2 && !selectedEleve && (
-          <div style={{
-            marginTop: 12,
-            border: `1px solid ${cardBorder}`,
-            borderRadius: 10,
-            overflow: "hidden",
-            background: cardBg,
-          }}>
+          <div
+            style={{
+              marginTop: 12,
+              border: `1px solid ${cardBorder}`,
+              borderRadius: 10,
+              overflow: "hidden",
+              background: cardBg,
+            }}
+          >
             {filtered.length === 0 ? (
               <div style={{ padding: 12, textAlign: "center", color: textSecondary, fontSize: 13 }}>
                 Aucun élève trouvé pour "{debouncedSearch}"
               </div>
             ) : (
-              filtered.map(e => (
+              filtered.map((e) => (
                 <div
                   key={e._id}
                   onClick={() => selectEleve(e)}
@@ -235,8 +268,8 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
                     borderBottom: `1px solid ${cardBorder}`,
                     transition: "background 0.1s",
                   }}
-                  onMouseEnter={ev => ev.currentTarget.style.background = badgeBg}
-                  onMouseLeave={ev => ev.currentTarget.style.background = "transparent"}
+                  onMouseEnter={(ev) => (ev.currentTarget.style.background = badgeBg)}
+                  onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
                 >
                   <div>
                     <div style={{ fontWeight: 600, fontSize: isMobile ? 15 : 14, color: textPrimary }}>
@@ -253,15 +286,17 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
 
         {/* Élève sélectionné */}
         {selectedEleve && (
-          <div style={{
-            marginTop: 12,
-            padding: selectedElevePadding,
-            background: badgeBg,
-            borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}>
+          <div
+            style={{
+              marginTop: 12,
+              padding: selectedElevePadding,
+              background: badgeBg,
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <Check size={16} color={badgeText} />
               <span style={{ fontWeight: 600, fontSize: isMobile ? 15 : 14, color: textPrimary }}>
@@ -269,7 +304,16 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
               </span>
               <span style={{ color: textSecondary, fontSize: 13 }}>({selectedEleve.classe})</span>
             </div>
-            <button onClick={clearSelectedEleve} style={{ background: "none", border: "none", color: errorText, cursor: "pointer", padding: 4 }}>
+            <button
+              onClick={clearSelectedEleve}
+              style={{
+                background: "none",
+                border: "none",
+                color: errorText,
+                cursor: "pointer",
+                padding: 4,
+              }}
+            >
               <X size={16} />
             </button>
           </div>
@@ -277,16 +321,27 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
       </div>
 
       {/* Carte détails */}
-      <div style={{
-        background: cardBg,
-        borderRadius: 16,
-        padding: cardPadding,
-        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-        border: `1px solid ${cardBorder}`,
-        marginBottom: cardMarginBottom,
-      }}>
+      <div
+        style={{
+          background: cardBg,
+          borderRadius: 16,
+          padding: cardPadding,
+          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+          border: `1px solid ${cardBorder}`,
+          marginBottom: cardMarginBottom,
+        }}
+      >
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="type" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
+          <label
+            htmlFor="type"
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontWeight: 500,
+              fontSize: labelFontSize,
+              color: textSecondary,
+            }}
+          >
             Type
           </label>
           <select
@@ -310,19 +365,45 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="date" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
+          <label
+            htmlFor="date"
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontWeight: 500,
+              fontSize: labelFontSize,
+              color: textSecondary,
+            }}
+          >
             Date
           </label>
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexDirection: isMobile ? "column" : "row",
+            }}
+          >
             <div style={{ position: "relative", flex: 1, width: "100%" }}>
-              <Calendar size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
+              <Calendar
+                size={18}
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: textSecondary,
+                }}
+              />
               <input
                 id="date"
                 type="date"
                 value={date}
                 onChange={(e) => {
                   setDate(e.target.value);
-                  setErrors(prev => ({ ...prev, date: undefined }));
+                  setErrors((prev) => ({ ...prev, date: undefined }));
                 }}
                 style={inputStyle("date")}
               />
@@ -340,18 +421,29 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 4,
-                fontSize: isMobile ? 14 : 14,
+                fontSize: 14,
                 whiteSpace: "nowrap",
               }}
             >
               <CalendarDays size={16} /> Aujourd'hui
             </button>
           </div>
-          {errors.date && <div style={{ color: errorText, fontSize: 13, marginTop: 4 }}>{errors.date}</div>}
+          {errors.date && (
+            <div style={{ color: errorText, fontSize: 13, marginTop: 4 }}>{errors.date}</div>
+          )}
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="commentaire" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: labelFontSize, color: textSecondary }}>
+          <label
+            htmlFor="commentaire"
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontWeight: 500,
+              fontSize: labelFontSize,
+              color: textSecondary,
+            }}
+          >
             Commentaire (optionnel)
           </label>
           <textarea
@@ -378,7 +470,13 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
       </div>
 
       {/* Boutons d'action */}
-      <div style={{ display: "flex", gap: actionButtonsGap, flexDirection: actionButtonsFlexDirection }}>
+      <div
+        style={{
+          display: "flex",
+          gap: actionButtonsGap,
+          flexDirection: actionButtonsFlexDirection,
+        }}
+      >
         <button
           onClick={handleSubmit}
           disabled={!selectedEleve || !date || submitting}
@@ -389,7 +487,7 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
             color: "#FFFFFF",
             border: "none",
             borderRadius: 10,
-            fontSize: isMobile ? 16 : 16,
+            fontSize: 16,
             fontWeight: 600,
             cursor: !selectedEleve || !date || submitting ? "not-allowed" : "pointer",
             display: "flex",
@@ -397,12 +495,15 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
             justifyContent: "center",
             gap: 8,
             transition: "background 0.2s",
-            boxShadow: !selectedEleve || !date || submitting ? "none" : "0 4px 12px rgba(79,70,229,0.2)",
+            boxShadow:
+              !selectedEleve || !date || submitting
+                ? "none"
+                : "0 4px 12px rgba(79,70,229,0.2)",
           }}
         >
           {submitting ? (
             <>
-              <Loader size={16} className="animate-spin" />
+              <Loader size={16} className="sa-animate-spin" />
               Enregistrement...
             </>
           ) : (
@@ -418,7 +519,7 @@ export function SaisirAbsence({ ecoleId, eleves, user, anneeId, anneeActive }) {
             color: secondaryBtnText,
             border: "none",
             borderRadius: 10,
-            fontSize: isMobile ? 16 : 16,
+            fontSize: 16,
             fontWeight: 500,
             cursor: submitting ? "not-allowed" : "pointer",
             display: "inline-flex",

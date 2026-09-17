@@ -1,9 +1,9 @@
-import { useState, useMemo, useCallback, useDeferredValue } from "react";
+// src/components/PendingTab.jsx
+import { useState, useMemo, useCallback, useDeferredValue, useEffect } from "react";
 import { useMutation } from "convex/react";
 import {
-  UserCheck, UserX, CheckCircle, X, Loader, Search, CheckSquare, Square,
-  Filter, ChevronLeft, ChevronRight, UserPlus, UserMinus,
-  ArrowUpDown, ArrowUp, ArrowDown, Eye, AlertTriangle, Inbox,
+  UserCheck, UserX, Loader, Search, CheckSquare, Square,
+  ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Inbox,
 } from "lucide-react";
 import { PendingUserCard } from "./PendingUserCard";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -11,14 +11,59 @@ import { useConfirm } from "@/hooks/useConfirm";
 import toast from "react-hot-toast";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 
-// Sous-composant : Barre de recherche
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const PAGE_SIZE = 5;
+
+// 🟢 Helper batch (5×5) pour éviter rate-limit
+const runInBatches = async (items, fn, size = 5) => {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.all(items.slice(i, i + size).map(fn));
+  }
+};
+
+// 🟢 Keyframes module-level (injectés UNE SEULE FOIS)
+const PendingTabKeyframes = (
+  <style>{`
+    @keyframes pt-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .pt-spin { animation: pt-spin 1s linear infinite; }
+    @keyframes pt-fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .pt-fade-in { animation: pt-fade-in 0.3s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      .pt-spin, .pt-fade-in { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANT : Barre de recherche
+// ════════════════════════════════════════════════════════════════════
 const SearchInput = ({ value, onChange, dark, isMobile }) => (
-  <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 200 }}>
-    <Search size={isMobile ? 18 : 18} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#64748B" }} />
+  <div
+    style={{
+      position: "relative",
+      flex: 1,
+      minWidth: isMobile ? "100%" : 200,
+    }}
+  >
+    <Search
+      size={18}
+      style={{
+        position: "absolute",
+        left: 10,
+        top: "50%",
+        transform: "translateY(-50%)",
+        color: dark ? "#94A3B8" : "#64748B",
+      }}
+    />
     <input
-      type="search"
+      type="text"
       placeholder="Rechercher par nom ou login..."
       value={value}
       onChange={onChange}
@@ -33,18 +78,35 @@ const SearchInput = ({ value, onChange, dark, isMobile }) => (
         outline: "none",
         boxSizing: "border-box",
       }}
+      aria-label="Rechercher par nom ou login"
     />
   </div>
 );
 
-// Sous-composant : Bouton de tri
-const SortButton = ({ label, field, currentSort, currentOrder, onClick, dark, isMobile }) => {
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANT : Bouton de tri
+// ════════════════════════════════════════════════════════════════════
+const SortButton = ({
+  label,
+  field,
+  currentSort,
+  currentOrder,
+  onClick,
+  dark,
+  isMobile,
+}) => {
   const isActive = currentSort === field;
-  const Icon = isActive ? (currentOrder === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  const Icon = isActive
+    ? currentOrder === "asc"
+      ? ArrowUp
+      : ArrowDown
+    : ArrowUpDown;
   return (
     <button
+      type="button"
       onClick={() => onClick(field)}
       aria-label={`Trier par ${label}`}
+      aria-pressed={isActive}
       style={{
         display: "flex",
         alignItems: "center",
@@ -54,9 +116,15 @@ const SortButton = ({ label, field, currentSort, currentOrder, onClick, dark, is
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         borderRadius: 6,
         background: isActive ? (dark ? "#1E293B" : "#EEF2FF") : "transparent",
-        color: isActive ? (dark ? "#A5B4FC" : "#4F46E5") : dark ? "#94A3B8" : "#64748B",
+        color: isActive
+          ? dark
+            ? "#A5B4FC"
+            : "#4F46E5"
+          : dark
+          ? "#94A3B8"
+          : "#64748B",
         cursor: "pointer",
-        fontSize: isMobile ? 13 : 13,
+        fontSize: 13,
         fontWeight: isActive ? 600 : 400,
         flex: isMobile ? 1 : "none",
       }}
@@ -67,10 +135,21 @@ const SortButton = ({ label, field, currentSort, currentOrder, onClick, dark, is
   );
 };
 
-// Sous-composant : Pagination
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANT : Pagination
+// ════════════════════════════════════════════════════════════════════
 const Pagination = ({ currentPage, totalPages, onPageChange, dark, isMobile }) => (
-  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16 }}>
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 16,
+    }}
+  >
     <button
+      type="button"
       onClick={() => onPageChange(Math.max(1, currentPage - 1))}
       disabled={currentPage === 1}
       aria-label="Page précédente"
@@ -85,10 +164,16 @@ const Pagination = ({ currentPage, totalPages, onPageChange, dark, isMobile }) =
     >
       <ChevronLeft size={16} />
     </button>
-    <span style={{ fontSize: isMobile ? 14 : 13, color: dark ? "#94A3B8" : "#64748B" }}>
+    <span
+      style={{
+        fontSize: isMobile ? 14 : 13,
+        color: dark ? "#94A3B8" : "#64748B",
+      }}
+    >
       Page {currentPage} / {totalPages}
     </span>
     <button
+      type="button"
       onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
       disabled={currentPage === totalPages}
       aria-label="Page suivante"
@@ -97,7 +182,8 @@ const Pagination = ({ currentPage, totalPages, onPageChange, dark, isMobile }) =
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         borderRadius: 6,
         background: "transparent",
-        color: currentPage === totalPages ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B",
+        color:
+          currentPage === totalPages ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B",
         cursor: currentPage === totalPages ? "not-allowed" : "pointer",
       }}
     >
@@ -106,123 +192,183 @@ const Pagination = ({ currentPage, totalPages, onPageChange, dark, isMobile }) =
   </div>
 );
 
-export function PendingTab({ pendingUsers, user }) {
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
+export function PendingTab({
+  pendingUsers,
+  user,
+  // 🔴 FIX : accepte les props de filtres du parent (Zustand store)
+  searchTerm: searchTermProp,
+  setSearchTerm: setSearchTermProp,
+  filterRole: filterRoleProp,
+  setFilterRole: setFilterRoleProp,
+}) {
   const { dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
+
+  const userId = user?._id;
 
   const approveUser = useMutation(api.users.approveUser);
   const rejectUser = useMutation(api.users.rejectUser);
 
-  // États
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterRole, setFilterRole] = useState("all");
+  // ✅ Filtres : props si fournies, sinon fallback état local
+  const [localSearchTerm, setLocalSearchTerm] = useState("");
+  const [localFilterRole, setLocalFilterRole] = useState("all");
+  const searchTerm = searchTermProp ?? localSearchTerm;
+  const setSearchTerm = setSearchTermProp ?? setLocalSearchTerm;
+  const filterRole = filterRoleProp ?? localFilterRole;
+  const setFilterRole = setFilterRoleProp ?? setLocalFilterRole;
+
   const [sortBy, setSortBy] = useState("nom");
   const [sortOrder, setSortOrder] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
-  const [approvingIds, setApprovingIds] = useState(new Set());
-  const [rejectingIds, setRejectingIds] = useState(new Set());
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
-  const pageSize = 5;
 
-  // Filtrage et tri
+  // ════════════════════════════════════════════════════════════════
+  // Filtrage + tri
+  // ════════════════════════════════════════════════════════════════
   const filteredUsers = useMemo(() => {
-    let result = pendingUsers;
+    let result = pendingUsers ?? [];
 
     if (deferredSearchTerm.trim()) {
       const q = deferredSearchTerm.toLowerCase();
       result = result.filter(
-        (u) => u.nom.toLowerCase().includes(q) || u.login.toLowerCase().includes(q)
+        (u) =>
+          (u.nom ?? "").toLowerCase().includes(q) ||
+          (u.login ?? "").toLowerCase().includes(q)
       );
     }
     if (filterRole !== "all") {
       result = result.filter((u) => u.role === filterRole);
     }
 
-    const sorted = [...result].sort((a, b) => {
+    return [...result].sort((a, b) => {
       if (sortBy === "nom") {
-        return sortOrder === "asc" ? a.nom.localeCompare(b.nom) : b.nom.localeCompare(a.nom);
-      } else if (sortBy === "role") {
-        return sortOrder === "asc" ? a.role.localeCompare(b.role) : b.role.localeCompare(a.role);
-      } else if (sortBy === "date") {
+        const an = a.nom ?? "";
+        const bn = b.nom ?? "";
+        return sortOrder === "asc"
+          ? an.localeCompare(bn)
+          : bn.localeCompare(an);
+      }
+      if (sortBy === "role") {
+        const ar = a.role ?? "";
+        const br = b.role ?? "";
+        return sortOrder === "asc"
+          ? ar.localeCompare(br)
+          : br.localeCompare(ar);
+      }
+      if (sortBy === "date") {
         const aTime = a._creationTime || 0;
         const bTime = b._creationTime || 0;
         return sortOrder === "asc" ? aTime - bTime : bTime - aTime;
       }
       return 0;
     });
-
-    return sorted;
   }, [pendingUsers, deferredSearchTerm, filterRole, sortBy, sortOrder]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedUsers = filteredUsers.slice(
-    (safeCurrentPage - 1) * pageSize,
-    safeCurrentPage * pageSize
+  const paginatedUsers = useMemo(
+    () =>
+      filteredUsers.slice(
+        (safeCurrentPage - 1) * PAGE_SIZE,
+        safeCurrentPage * PAGE_SIZE
+      ),
+    [filteredUsers, safeCurrentPage]
   );
 
   const rolesDisponibles = useMemo(() => {
-    const roles = new Set(pendingUsers.map((u) => u.role));
+    const roles = new Set((pendingUsers ?? []).map((u) => u.role).filter(Boolean));
     return Array.from(roles).sort();
   }, [pendingUsers]);
 
-  const handleApprove = useCallback(async (userId) => {
-    setApprovingIds((prev) => new Set(prev).add(userId));
-    try {
-      await approveUser({ userId, adminId: user._id });
-      toast.success("Utilisateur approuvé");
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(userId);
-        return next;
-      });
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setApprovingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(userId);
-        return next;
-      });
-    }
-  }, [approveUser, user._id]);
+  // ✅ FIX — reset page ET sélection quand filtres/recherche changent
+  // Sinon, des items cachés restent sélectionnés → bulk actions invisibles.
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds(new Set());
+  }, [deferredSearchTerm, filterRole]);
 
-  const handleReject = useCallback(async (userId, reason) => {
-    setRejectingIds((prev) => new Set(prev).add(userId));
-    try {
-      await rejectUser({
-        userId,
-        reason: reason?.trim() || undefined,
-        adminId: user._id,
-      });
-      toast.success("Utilisateur rejeté");
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(userId);
-        return next;
-      });
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setRejectingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(userId);
-        return next;
-      });
-    }
-  }, [rejectUser, user._id]);
+  // ════════════════════════════════════════════════════════════════
+  // Handlers unitaires
+  // ════════════════════════════════════════════════════════════════
+  const handleApprove = useCallback(
+    async (targetUserId) => {
+      if (!userId) {
+        toast.error("Session invalide.");
+        return;
+      }
+      try {
+        await approveUser({ userId: targetUserId, adminId: userId });
+        toast.success("Utilisateur approuvé");
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetUserId);
+          return next;
+        });
+      } catch (err) {
+        toast.error(
+          "Impossible d'approuver : " + (err?.message || "erreur inconnue")
+        );
+      }
+    },
+    [userId, approveUser]
+  );
 
+  const handleReject = useCallback(
+    async (targetUserId, reason) => {
+      if (!userId) {
+        toast.error("Session invalide.");
+        return;
+      }
+      try {
+        await rejectUser({
+          userId: targetUserId,
+          reason: reason?.trim() || undefined,
+          adminId: userId,
+        });
+        toast.success("Utilisateur rejeté");
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetUserId);
+          return next;
+        });
+      } catch (err) {
+        toast.error(
+          "Impossible de rejeter : " + (err?.message || "erreur inconnue")
+        );
+      }
+    },
+    [userId, rejectUser]
+  );
+
+  // ════════════════════════════════════════════════════════════════
+  // Sélection
+  // ════════════════════════════════════════════════════════════════
+  const allPageSelected = useMemo(
+    () =>
+      paginatedUsers.length > 0 &&
+      paginatedUsers.every((u) => selectedIds.has(u._id)),
+    [paginatedUsers, selectedIds]
+  );
+
+  // ✅ FIX — toggle page-par-page : n'affecte QUE les items de la page courante
   const toggleSelectAll = useCallback(() => {
-    if (selectedIds.size === paginatedUsers.length && paginatedUsers.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(paginatedUsers.map((u) => u._id)));
-    }
-  }, [selectedIds, paginatedUsers]);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        paginatedUsers.forEach((u) => next.delete(u._id));
+      } else {
+        paginatedUsers.forEach((u) => next.add(u._id));
+      }
+      return next;
+    });
+  }, [allPageSelected, paginatedUsers]);
 
   const toggleSelectOne = useCallback((id) => {
     setSelectedIds((prev) => {
@@ -233,102 +379,155 @@ export function PendingTab({ pendingUsers, user }) {
     });
   }, []);
 
+  // ════════════════════════════════════════════════════════════════
+  // Bulk : approve
+  // ════════════════════════════════════════════════════════════════
   const bulkApprove = useCallback(async () => {
+    if (!userId) {
+      toast.error("Session invalide.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
     setBulkProcessing(true);
+    let success = 0;
+    let failed = 0;
+
     try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) => approveUser({ userId: id, adminId: user._id }))
-      );
-      toast.success(`${selectedIds.size} utilisateur(s) approuvé(s)`);
+      await runInBatches(ids, async (id) => {
+        try {
+          await approveUser({ userId: id, adminId: userId });
+          success++;
+        } catch {
+          failed++;
+        }
+      });
+
+      if (success > 0) toast.success(`${success} utilisateur(s) approuvé(s)`);
+      if (failed > 0) toast.error(`${failed} échec(s)`);
       setSelectedIds(new Set());
-    } catch (err) {
-      toast.error(err.message);
     } finally {
       setBulkProcessing(false);
     }
-  }, [selectedIds, approveUser, user._id]);
+  }, [selectedIds, approveUser, userId]);
 
+  // ════════════════════════════════════════════════════════════════
+  // Bulk : reject
+  // ════════════════════════════════════════════════════════════════
   const bulkReject = useCallback(async () => {
+    if (!userId) {
+      toast.error("Session invalide.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
     const ok = await confirm(
       "Rejeter les demandes sélectionnées",
-      `Voulez-vous vraiment rejeter ${selectedIds.size} demande(s) ? Cette action est irréversible.`
+      `Voulez-vous vraiment rejeter ${ids.length} demande(s) ? Cette action est irréversible.`
     );
     if (!ok) return;
+
     setBulkProcessing(true);
+    let success = 0;
+    let failed = 0;
+
     try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          rejectUser({ userId: id, reason: "Rejet groupé", adminId: user._id })
-        )
-      );
-      toast.success(`${selectedIds.size} utilisateur(s) rejeté(s)`);
+      await runInBatches(ids, async (id) => {
+        try {
+          await rejectUser({
+            userId: id,
+            reason: "Rejet groupé",
+            adminId: userId,
+          });
+          success++;
+        } catch {
+          failed++;
+        }
+      });
+
+      if (success > 0) toast.success(`${success} utilisateur(s) rejeté(s)`);
+      if (failed > 0) toast.error(`${failed} échec(s)`);
       setSelectedIds(new Set());
-    } catch (err) {
-      toast.error(err.message);
     } finally {
       setBulkProcessing(false);
     }
-  }, [selectedIds, rejectUser, user._id, confirm]);
+  }, [selectedIds, rejectUser, userId, confirm]);
 
-  const handleSort = useCallback((field) => {
-    setSortBy((prevField) => {
-      if (prevField === field) {
+  // ════════════════════════════════════════════════════════════════
+  // Tri
+  // ════════════════════════════════════════════════════════════════
+  const handleSort = useCallback(
+    (field) => {
+      if (sortBy === field) {
         setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
       } else {
+        setSortBy(field);
         setSortOrder("asc");
       }
-      return field;
-    });
-  }, []);
+    },
+    [sortBy]
+  );
 
-  const resetPage = useCallback(() => setCurrentPage(1), []);
-
-  if (pendingUsers.length === 0) {
+  // ════════════════════════════════════════════════════════════════
+  // ÉTAT VIDE (avant tout retour conditionnel — les hooks sont passés)
+  // ════════════════════════════════════════════════════════════════
+  if ((pendingUsers ?? []).length === 0) {
     return (
-      <div style={{
-        textAlign: "center",
-        padding: isMobile ? 32 : 48,
-        color: dark ? "#94A3B8" : "#64748B",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 12,
-      }}>
-        <Inbox size={isMobile ? 40 : 48} color="#10B981" />
-        <p style={{ fontSize: isMobile ? 15 : 16, margin: 0 }}>Aucune demande en attente</p>
-        <p style={{ fontSize: isMobile ? 13 : 14, margin: 0 }}>Toutes les demandes ont été traitées.</p>
-      </div>
+      <>
+        {PendingTabKeyframes}
+        <div
+          style={{
+            textAlign: "center",
+            padding: isMobile ? 32 : 48,
+            color: dark ? "#94A3B8" : "#64748B",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <Inbox size={isMobile ? 40 : 48} color="#10B981" />
+          <p style={{ fontSize: isMobile ? 15 : 16, margin: 0 }}>
+            Aucune demande en attente
+          </p>
+          <p style={{ fontSize: isMobile ? 13 : 14, margin: 0 }}>
+            Toutes les demandes ont été traitées.
+          </p>
+        </div>
+      </>
     );
   }
 
+  // ════════════════════════════════════════════════════════════════
+  // RENDU
+  // ════════════════════════════════════════════════════════════════
   return (
     <div>
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 1s linear infinite; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .fade-in { animation: fadeIn 0.3s ease; }
-      `}</style>
+      {PendingTabKeyframes}
 
       {/* Barre d'outils */}
-      <div style={{
-        display: "flex",
-        flexDirection: isMobile ? "column" : "row",
-        flexWrap: "wrap",
-        gap: isMobile ? 8 : 12,
-        marginBottom: 16,
-        alignItems: isMobile ? "stretch" : "center",
-      }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          flexWrap: "wrap",
+          gap: isMobile ? 8 : 12,
+          marginBottom: 16,
+          alignItems: isMobile ? "stretch" : "center",
+        }}
+      >
         <SearchInput
           value={searchTerm}
-          onChange={(e) => { setSearchTerm(e.target.value); resetPage(); }}
+          onChange={(e) => setSearchTerm(e.target.value)}
           dark={dark}
           isMobile={isMobile}
         />
 
         <select
           value={filterRole}
-          onChange={(e) => { setFilterRole(e.target.value); resetPage(); }}
+          onChange={(e) => setFilterRole(e.target.value)}
           style={{
             padding: isMobile ? "12px 14px" : "8px 12px",
             borderRadius: 8,
@@ -343,20 +542,61 @@ export function PendingTab({ pendingUsers, user }) {
         >
           <option value="all">Tous les rôles</option>
           {rolesDisponibles.map((role) => (
-            <option key={role} value={role}>{role}</option>
+            <option key={role} value={role}>
+              {role}
+            </option>
           ))}
         </select>
 
-        {/* Tri */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-          <SortButton label="Nom" field="nom" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} isMobile={isMobile} />
-          <SortButton label="Rôle" field="role" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} isMobile={isMobile} />
-          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={handleSort} dark={dark} isMobile={isMobile} />
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            flexWrap: "wrap",
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
+          <SortButton
+            label="Nom"
+            field="nom"
+            currentSort={sortBy}
+            currentOrder={sortOrder}
+            onClick={handleSort}
+            dark={dark}
+            isMobile={isMobile}
+          />
+          <SortButton
+            label="Rôle"
+            field="role"
+            currentSort={sortBy}
+            currentOrder={sortOrder}
+            onClick={handleSort}
+            dark={dark}
+            isMobile={isMobile}
+          />
+          <SortButton
+            label="Date"
+            field="date"
+            currentSort={sortBy}
+            currentOrder={sortOrder}
+            onClick={handleSort}
+            dark={dark}
+            isMobile={isMobile}
+          />
         </div>
 
-        {/* Sélection multiple */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: isMobile ? "0" : "auto", flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            marginLeft: isMobile ? "0" : "auto",
+            flexDirection: isMobile ? "column" : "row",
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
           <button
+            type="button"
             onClick={toggleSelectAll}
             style={{
               display: "flex",
@@ -372,9 +612,9 @@ export function PendingTab({ pendingUsers, user }) {
               fontSize: isMobile ? 14 : 13,
               width: isMobile ? "100%" : "auto",
             }}
-            aria-label="Tout sélectionner"
+            aria-label={allPageSelected ? "Tout désélectionner" : "Tout sélectionner"}
           >
-            {selectedIds.size === paginatedUsers.length && paginatedUsers.length > 0 ? (
+            {allPageSelected ? (
               <CheckSquare size={16} />
             ) : (
               <Square size={16} />
@@ -385,6 +625,7 @@ export function PendingTab({ pendingUsers, user }) {
           {selectedIds.size > 0 && (
             <>
               <button
+                type="button"
                 onClick={bulkApprove}
                 disabled={bulkProcessing}
                 style={{
@@ -400,12 +641,18 @@ export function PendingTab({ pendingUsers, user }) {
                   cursor: bulkProcessing ? "not-allowed" : "pointer",
                   fontSize: isMobile ? 14 : 13,
                   width: isMobile ? "100%" : "auto",
+                  opacity: bulkProcessing ? 0.7 : 1,
                 }}
               >
-                {bulkProcessing ? <Loader size={14} className="animate-spin" /> : <UserCheck size={14} />}
+                {bulkProcessing ? (
+                  <Loader size={14} className="pt-spin" />
+                ) : (
+                  <UserCheck size={14} />
+                )}
                 Approuver ({selectedIds.size})
               </button>
               <button
+                type="button"
                 onClick={bulkReject}
                 disabled={bulkProcessing}
                 style={{
@@ -421,9 +668,14 @@ export function PendingTab({ pendingUsers, user }) {
                   cursor: bulkProcessing ? "not-allowed" : "pointer",
                   fontSize: isMobile ? 14 : 13,
                   width: isMobile ? "100%" : "auto",
+                  opacity: bulkProcessing ? 0.7 : 1,
                 }}
               >
-                {bulkProcessing ? <Loader size={14} className="animate-spin" /> : <UserX size={14} />}
+                {bulkProcessing ? (
+                  <Loader size={14} className="pt-spin" />
+                ) : (
+                  <UserX size={14} />
+                )}
                 Rejeter ({selectedIds.size})
               </button>
             </>
@@ -432,28 +684,32 @@ export function PendingTab({ pendingUsers, user }) {
       </div>
 
       {/* Résumé */}
-      <div style={{ marginBottom: 12, fontSize: isMobile ? 13 : 13, color: dark ? "#94A3B8" : "#64748B" }}>
+      <div
+        style={{
+          marginBottom: 12,
+          fontSize: 13,
+          color: dark ? "#94A3B8" : "#64748B",
+        }}
+      >
         {filteredUsers.length} demande(s) affichée(s)
+        {selectedIds.size > 0 && ` · ${selectedIds.size} sélectionnée(s)`}
       </div>
 
-      {/* Liste des demandes */}
+      {/* Liste */}
       {filteredUsers.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 24, color: dark ? "#94A3B8" : "#64748B" }}>
+        <div
+          style={{
+            textAlign: "center",
+            padding: 24,
+            color: dark ? "#94A3B8" : "#64748B",
+          }}
+        >
           Aucune demande ne correspond aux critères.
         </div>
       ) : (
         <div style={{ display: "grid", gap: 12 }}>
           {paginatedUsers.map((u) => (
-            <div key={u._id} className="fade-in" style={{ position: "relative" }}>
-              <div style={{ position: "absolute", left: -8, top: 50, zIndex: 1 }}>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(u._id)}
-                  onChange={() => toggleSelectOne(u._id)}
-                  aria-label={`Sélectionner ${u.nom}`}
-                  style={{ width: isMobile ? 18 : 16, height: isMobile ? 18 : 16, cursor: "pointer", accentColor: dark ? "#818CF8" : "#4F46E5" }}
-                />
-              </div>
+            <div key={u._id} className="pt-fade-in">
               <PendingUserCard
                 user={u}
                 onApprove={() => handleApprove(u._id)}

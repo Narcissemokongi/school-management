@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"; // <-- Ajout de useState
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -7,28 +7,39 @@ export function Navigation({ tabs, active, onChange }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
   const scrollContainerRef = useRef(null);
+  const rafRef = useRef(null);
+  const scrollTimeoutRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // Mise à jour des indicateurs de défilement
-  const updateScrollIndicators = () => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 0);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 5);
-  };
+  // ===== Mise à jour throttlée via requestAnimationFrame =====
+  const updateScrollIndicators = useCallback(() => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      setCanScrollLeft(el.scrollLeft > 0);
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 5);
+    });
+  }, []);
 
   useEffect(() => {
     updateScrollIndicators();
     window.addEventListener("resize", updateScrollIndicators);
-    return () => window.removeEventListener("resize", updateScrollIndicators);
-  }, [tabs.length]);
+    return () => {
+      window.removeEventListener("resize", updateScrollIndicators);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
+  }, [updateScrollIndicators, tabs.length]);
 
   const scrollBy = (direction) => {
     const el = scrollContainerRef.current;
     if (!el) return;
     el.scrollBy({ left: direction * 200, behavior: "smooth" });
-    setTimeout(updateScrollIndicators, 300);
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(updateScrollIndicators, 300);
   };
 
   // Couleurs adaptatives
@@ -71,9 +82,10 @@ export function Navigation({ tabs, active, onChange }) {
             <ChevronLeft size={16} />
           </button>
         )}
-        {/* Conteneur défilant */}
+        {/* Conteneur défilant — classe scopée pour le style scrollbar */}
         <div
           ref={scrollContainerRef}
+          className="nav-scroll-container"
           onScroll={updateScrollIndicators}
           style={{
             display: "flex",
@@ -102,7 +114,8 @@ export function Navigation({ tabs, active, onChange }) {
                 background: "transparent",
                 color: active === t.id ? accentColor : textSecondary,
                 fontWeight: active === t.id ? 600 : 400,
-                borderBottom: active === t.id ? `3px solid ${accentColor}` : "3px solid transparent",
+                borderBottom:
+                  active === t.id ? `3px solid ${accentColor}` : "3px solid transparent",
                 cursor: "pointer",
                 transition: "color 0.2s, border-color 0.2s, background 0.2s",
                 whiteSpace: "nowrap",
@@ -110,7 +123,10 @@ export function Navigation({ tabs, active, onChange }) {
                 borderRadius: "0 0 8px 8px",
               }}
               onMouseEnter={(e) => {
-                if (active !== t.id) e.currentTarget.style.background = dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)";
+                if (active !== t.id)
+                  e.currentTarget.style.background = dark
+                    ? "rgba(255,255,255,0.05)"
+                    : "rgba(0,0,0,0.03)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = "transparent";
@@ -168,9 +184,9 @@ export function Navigation({ tabs, active, onChange }) {
             <ChevronRight size={16} />
           </button>
         )}
-        {/* Masquer la scrollbar sur Chrome/Safari/Edge */}
+        {/* Scrollbar cachée UNIQUEMENT sur le conteneur nav (pas global) */}
         <style>{`
-          div::-webkit-scrollbar {
+          .nav-scroll-container::-webkit-scrollbar {
             display: none;
           }
         `}</style>
@@ -227,7 +243,10 @@ export function Navigation({ tabs, active, onChange }) {
             minWidth: 0,
           }}
           onMouseEnter={(e) => {
-            if (active !== t.id) e.currentTarget.style.background = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+            if (active !== t.id)
+              e.currentTarget.style.background = dark
+                ? "rgba(255,255,255,0.08)"
+                : "rgba(0,0,0,0.05)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = "transparent";
@@ -269,6 +288,7 @@ export function Navigation({ tabs, active, onChange }) {
           {/* Indicateur actif */}
           {active === t.id && (
             <div
+              className="nav-active-indicator"
               style={{
                 position: "absolute",
                 bottom: -2,
@@ -277,16 +297,21 @@ export function Navigation({ tabs, active, onChange }) {
                 height: 3,
                 background: accentColor,
                 borderRadius: "2px",
-                animation: "fadeInScale 0.3s ease",
+                animation: "nav-fadeInScale 0.3s ease",
               }}
             />
           )}
         </button>
       ))}
       <style>{`
-        @keyframes fadeInScale {
+        @keyframes nav-fadeInScale {
           from { transform: scaleX(0); opacity: 0; }
           to { transform: scaleX(1); opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .nav-active-indicator {
+            animation: none !important;
+          }
         }
       `}</style>
     </div>

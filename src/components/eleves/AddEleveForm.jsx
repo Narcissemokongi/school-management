@@ -1,18 +1,21 @@
-import { useState, useEffect } from "react";
+// src/components/AddEleveForm.jsx
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Loader } from "lucide-react";
 import toast from "react-hot-toast";
 import { trierClasses } from "@/utils/sort";
 import { provincesRDC } from "@/utils/rdcData";
 
-export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEleve }) {
-  const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+// ✅ FIX #1 — constante alignée sur le reste de l'app
+const MIN_PASSWORD_LENGTH = 8;
 
-  // États uniques pour chaque champ
+export function AddEleveForm({ classes = [], parents = [], ecoleId, userId, anneeId, addEleve }) {
+  const { S, dark } = useStyles();
+  const isMobile = useIsMobile();
+
   const [nom, setNom] = useState("");
   const [postnom, setPostnom] = useState("");
   const [prenom, setPrenom] = useState("");
@@ -40,9 +43,13 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
   const [createdMatricule, setCreatedMatricule] = useState(null);
 
   const addUser = useMutation(api.users.add);
+  const matriculeTimerRef = useRef(null);
 
-  // Trier les classes croissant naturel
-  const classesTriees = [...classes].sort((a, b) => trierClasses(a.nom, b.nom));
+  // ✅ FIX #3 — useMemo : classesTriees stable entre les renders
+  const classesTriees = useMemo(
+    () => [...classes].sort((a, b) => trierClasses(a.nom, b.nom)),
+    [classes]
+  );
 
   useEffect(() => {
     if (classesTriees.length > 0 && !classesTriees.some(c => c.nom === classe)) {
@@ -50,7 +57,14 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
     }
   }, [classesTriees, classe]);
 
-  const validate = () => {
+  // ✅ FIX #4 — cleanup du timer au démontage
+  useEffect(() => {
+    return () => {
+      if (matriculeTimerRef.current) clearTimeout(matriculeTimerRef.current);
+    };
+  }, []);
+
+  const validate = useCallback(() => {
     const errs = {};
     if (!nom.trim()) errs.nom = "Requis";
     if (!postnom.trim()) errs.postnom = "Requis";
@@ -58,13 +72,16 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
     if (createParent) {
       if (!newParentNom.trim()) errs.newParentNom = "Requis";
       if (!newParentLogin.trim()) errs.newParentLogin = "Requis";
-      if (!newParentPassword || newParentPassword.length < 4) errs.newParentPassword = "4 caractères min.";
+      // ✅ FIX #1 — aligné sur 8 caractères
+      if (!newParentPassword || newParentPassword.length < MIN_PASSWORD_LENGTH) {
+        errs.newParentPassword = `${MIN_PASSWORD_LENGTH} caractères min.`;
+      }
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
-  };
+  }, [nom, postnom, classe, createParent, newParentNom, newParentLogin, newParentPassword]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!validate()) return;
     setAdding(true);
     try {
@@ -76,7 +93,8 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
           password: newParentPassword,
           role: "parent",
           ecoleId,
-          userId,
+          // ✅ FIX #2 — requesterId (convention rapport)
+          requesterId: userId,
         });
         finalParentId = newUser;
       }
@@ -103,7 +121,6 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
         parentId: finalParentId,
         anneeId,
         userId,
-        actionUserId: userId,
       });
 
       if (eleve?.code) {
@@ -137,15 +154,27 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
       setNewParentLogin("");
       setNewParentPassword("");
       setErrors({});
-      setTimeout(() => setCreatedMatricule(null), 8000);
+
+      // ✅ FIX #4 — cleanup avant de reprogrammer
+      if (matriculeTimerRef.current) clearTimeout(matriculeTimerRef.current);
+      matriculeTimerRef.current = setTimeout(() => {
+        setCreatedMatricule(null);
+        matriculeTimerRef.current = null;
+      }, 8000);
     } catch (err) {
-      toast.error(err.message);
+      // ✅ FIX #5 — fallback message
+      toast.error(err?.message ?? "Erreur lors de l'ajout");
     } finally {
       setAdding(false);
     }
-  };
+  }, [
+    validate, createParent, newParentNom, newParentLogin, newParentPassword,
+    ecoleId, userId, parentId, addUser, addEleve,
+    nom, postnom, prenom, sexe, dateNaissance, lieuNaissance,
+    province, territoire, secteur, village, adresse, telephone,
+    nomPere, nomMere, tuteurNom, tuteurTelephone, classe, anneeId, classesTriees,
+  ]);
 
-  // Styles adaptatifs
   const inputStyle = (field) => ({
     width: "100%",
     padding: isMobile ? "12px 14px" : "10px 14px",
@@ -185,8 +214,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
   const titleSize = isMobile ? 17 : 18;
   const buttonPadding = isMobile ? "12px 0" : "10px 0";
   const buttonFontSize = isMobile ? 16 : 14;
-  const smallButtonPadding = isMobile ? "10px 16px" : "8px 16px";
-  const smallButtonFontSize = isMobile ? 14 : 14;
+  const smallButtonFontSize = 14;
 
   return (
     <div style={{
@@ -375,7 +403,7 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
             value={newParentPassword}
             onChange={(e) => setNewParentPassword(e.target.value)}
             style={inputStyle("newParentPassword")}
-            placeholder="Mot de passe"
+            placeholder={`Mot de passe (${MIN_PASSWORD_LENGTH} caractères min.)`}
           />
           {errors.newParentPassword && <div style={{ color: "#EF4444", fontSize: 13, marginTop: -8, marginBottom: 8 }}>{errors.newParentPassword}</div>}
           <button
@@ -408,7 +436,8 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
           transition: "background 0.2s",
         }}
       >
-        {adding ? <Loader size={16} className="animate-spin" /> : null}
+        {/* ✅ FIX #6 — keyframe aef-spin scopé */}
+        {adding ? <Loader size={16} style={{ animation: "aef-spin 0.8s linear infinite" }} /> : null}
         {adding ? "Ajout en cours..." : "Ajouter l'élève"}
       </button>
 
@@ -419,13 +448,23 @@ export function AddEleveForm({ classes, parents, ecoleId, userId, anneeId, addEl
           color: dark ? "#34D399" : "#065F46",
           padding: "10px 14px",
           borderRadius: 8,
-          fontSize: isMobile ? 14 : 14,
+          fontSize: 14,
           fontWeight: 600,
           textAlign: "center",
         }}>
           Matricule généré : {createdMatricule}
         </div>
       )}
+
+      <style>{`
+        @keyframes aef-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [data-aef-loader] { animation: none !important; }
+        }
+      `}</style>
     </div>
   );
 }

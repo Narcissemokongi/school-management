@@ -1,19 +1,54 @@
+import { useMemo } from "react";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { ClipboardList, Calendar, Users, TrendingUp } from "lucide-react";
 
-export function AccueilDisciplinaire({ user, punitions, eleves }) {
-  const { S, dark } = useStyles();
+export function AccueilDisciplinaire({
+  user,
+  punitions = [],
+  eleves = [],
+}) {
+  const { dark } = useStyles();
   const isMobile = useIsMobile();
 
-  const myPunitions = punitions.filter((p) => p.disciplinaire === user.nom);
-  const today = new Date().toISOString().split("T")[0];
-  const todayPunitions = myPunitions.filter((p) => p.date === today);
+  const userName = user?.nom ?? "";
 
-  // Calcul du nombre total d'élèves ayant au moins une punition enregistrée par ce disciplinaire
-  const elevesAvecPunition = new Set(myPunitions.map((p) => p.idEleve)).size;
+  // ============================================================
+  // ✅ Calculs mémoïsés (une seule passe)
+  // ============================================================
+  const { myPunitions, todayPunitions, elevesAvecPunition } = useMemo(() => {
+    if (!userName) {
+      return {
+        myPunitions: [],
+        todayPunitions: [],
+        elevesAvecPunition: 0,
+      };
+    }
 
+    // Une seule boucle pour tout calculer
+    const today = new Date().toISOString().split("T")[0];
+    const mine = [];
+    const todayList = [];
+    const eleveIdsSet = new Set();
+
+    for (const p of punitions) {
+      // ⚠️ Comparaison par nom (héritage du stockage `disciplinaire: string`)
+      if (p.disciplinaire !== userName) continue;
+      mine.push(p);
+      if (p.date === today) todayList.push(p);
+      eleveIdsSet.add(p.idEleve);
+    }
+
+    return {
+      myPunitions: mine,
+      todayPunitions: todayList,
+      elevesAvecPunition: eleveIdsSet.size,
+    };
+  }, [punitions, userName]);
+
+  // ============================================================
   // Tailles adaptatives
+  // ============================================================
   const iconSize = isMobile ? 20 : 24;
   const valueSize = isMobile ? 20 : 24;
   const labelSize = isMobile ? 12 : 14;
@@ -24,6 +59,18 @@ export function AccueilDisciplinaire({ user, punitions, eleves }) {
   const containerPadding = isMobile ? "16px 12px" : "24px 16px";
   const headerMargin = isMobile ? 20 : 32;
   const iconContainerSize = isMobile ? 40 : 48;
+
+  // ============================================================
+  // Couleurs adaptatives
+  // ============================================================
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const shadow = dark
+    ? "0 1px 3px rgba(0,0,0,0.3)"
+    : "0 1px 3px rgba(0,0,0,0.05)";
 
   const stats = [
     {
@@ -52,30 +99,72 @@ export function AccueilDisciplinaire({ user, punitions, eleves }) {
     },
   ];
 
-  // Couleurs adaptatives
-  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
-  const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+  // ============================================================
+  // Garde : session invalide
+  // ============================================================
+  if (!user) {
+    return (
+      <div
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: containerPadding,
+          textAlign: "center",
+          color: textSecondary,
+        }}
+      >
+        Chargement...
+      </div>
+    );
+  }
 
+  // ============================================================
+  // RENDU
+  // ============================================================
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
-      {/* En-tête */}
+    <div
+      style={{
+        maxWidth: 1280,
+        margin: "0 auto",
+        padding: containerPadding,
+      }}
+    >
+      {/* ==================== EN-TÊTE ==================== */}
       <div style={{ marginBottom: headerMargin }}>
-        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
-          👋 Bienvenue, {user.nom}
+        <h2
+          style={{
+            fontSize: titleSize,
+            fontWeight: 700,
+            color: textPrimary,
+            margin: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          {/* ✅ Emoji retiré, icône lucide à la place */}
+          <TrendingUp size={isMobile ? 24 : 28} color={accent} />
+          <span>Bienvenue, {user.nom}</span>
         </h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
+        <p
+          style={{
+            color: textSecondary,
+            marginTop: 4,
+            fontSize: subtitleSize,
+          }}
+        >
           Voici un aperçu de votre activité.
         </p>
       </div>
 
-      {/* Cartes statistiques */}
+      {/* ==================== STATS ==================== */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
+          gridTemplateColumns: isMobile
+            ? "1fr"
+            : "repeat(auto-fit, minmax(200px, 1fr))",
           gap: cardGap,
         }}
       >
@@ -110,10 +199,18 @@ export function AccueilDisciplinaire({ user, punitions, eleves }) {
               {s.icon}
             </div>
             <div>
-              <div style={{ fontSize: valueSize, fontWeight: 700, color: textPrimary }}>
+              <div
+                style={{
+                  fontSize: valueSize,
+                  fontWeight: 700,
+                  color: textPrimary,
+                }}
+              >
                 {s.value}
               </div>
-              <div style={{ fontSize: labelSize, color: textSecondary }}>{s.label}</div>
+              <div style={{ fontSize: labelSize, color: textSecondary }}>
+                {s.label}
+              </div>
             </div>
           </div>
         ))}

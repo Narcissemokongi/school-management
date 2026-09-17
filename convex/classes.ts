@@ -1,10 +1,26 @@
-import { query, mutation, MutationCtx } from "./_generated/server";
+import { query, mutation, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 
-// Vérifie que l'utilisateur est admin/directeur de l'école concernée ou superadmin principal
+type AnyCtx = MutationCtx | QueryCtx;
+
+const MAX_CLASSES = 500;
+
+/**
+ * 🔴 FIX GLOBAL : tout superAdmin passe désormais (avant : seuls
+ * les superAdmins SANS permissions étaient reconnus comme principaux).
+ */
+function isSuperAdmin(user: any): boolean {
+  if (!user) return false;
+  return (
+    user.role === "superAdmin" ||
+    (user.role === "admin" && !user.ecoleId)
+  );
+}
+
+// Vérifie que l'utilisateur est admin/directeur de l'école ou superAdmin
 async function requireEcoleAdmin(
-  ctx: MutationCtx,
+  ctx: AnyCtx,
   userId: string | undefined,
   ecoleId: string
 ) {
@@ -12,15 +28,12 @@ async function requireEcoleAdmin(
   const user = await ctx.db.get(userId as Id<"users">);
   if (!user) throw new Error("Utilisateur introuvable");
 
-  const isSuperAdminPrincipal =
-    (user.role === "admin" && !user.ecoleId) ||
-    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
-
+  const superAdmin = isSuperAdmin(user);
   const isEcoleAdmin =
     (user.role === "admin" || user.role === "directeur") &&
     user.ecoleId === ecoleId;
 
-  if (!isSuperAdminPrincipal && !isEcoleAdmin) {
+  if (!superAdmin && !isEcoleAdmin) {
     throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer cette école.");
   }
   return user;
@@ -28,23 +41,51 @@ async function requireEcoleAdmin(
 
 // ========== QUERY ==========
 
+/**
+ * ✅ FIX : `userId` devient OPTIONNEL.
+ * Si fourni → vérifie le cloisonnement école.
+ * Limite ajoutée pour éviter les gros volumes.
+ */
 export const list = query({
   args: {
     ecoleId: v.optional(v.id("ecoles")),
     anneeId: v.optional(v.id("anneesScolaires")),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const { ecoleId, anneeId } = args;
+    const { ecoleId, anneeId, userId } = args;
+
+    // ✅ Cloisonnement si userId fourni
+    if (userId) {
+      const caller = await ctx.db.get(userId);
+      if (!caller) throw new Error("Authentification requise");
+
+      if (!isSuperAdmin(caller)) {
+        if (!caller.ecoleId) throw new Error("Accès refusé");
+        if (ecoleId && ecoleId !== caller.ecoleId) {
+          throw new Error("Accès refusé : école différente.");
+        }
+      }
+    }
+
+    // Résolution de l'école cible
+    let targetEcoleId = ecoleId;
+    if (userId) {
+      const caller = await ctx.db.get(userId);
+      if (caller && !isSuperAdmin(caller)) {
+        targetEcoleId = caller.ecoleId;
+      }
+    }
 
     let classes: any[] = [];
 
-    if (ecoleId) {
+    if (targetEcoleId) {
       classes = await ctx.db
         .query("classes")
-        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", ecoleId))
-        .collect();
+        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", targetEcoleId!))
+        .take(MAX_CLASSES);
     } else {
-      classes = await ctx.db.query("classes").collect();
+      classes = await ctx.db.query("classes").take(MAX_CLASSES);
     }
 
     if (anneeId) {
@@ -62,12 +103,16 @@ export const list = query({
 
 // ========== MUTATIONS ==========
 
+/**
+ * 🟡 FIX : `userId` devient REQUIS (avant optional → crash silencieux).
+ * Audit ajouté.
+ */
 export const add = mutation({
   args: {
     nom: v.string(),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
@@ -87,25 +132,40 @@ export const add = mutation({
     );
     if (doublon) throw new Error("Cette classe existe déjà pour cette année.");
 
-    await ctx.db.insert("classes", {
+    const newId = await ctx.db.insert("classes", {
       nom,
       ecoleId: args.ecoleId,
       anneeId: args.anneeId,
     });
+
+    // 🟡 Audit
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "create_classe",
+      table: "classes",
+      documentId: newId,
+      date: new Date().toISOString(),
+      ecoleId: args.ecoleId,
+      details: `Création de la classe "${nom}"`,
+    });
+
+    return { success: true, classeId: newId };
   },
 });
 
+/**
+ * 🟡 FIX : `userId` requis + audit.
+ */
 export const remove = mutation({
   args: {
     id: v.id("classes"),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const classe = await ctx.db.get(args.id);
     if (!classe) throw new Error("Classe introuvable");
     await requireEcoleAdmin(ctx, args.userId, classe.ecoleId);
 
-    // Stocker l'anneeId dans une constante locale typée pour éviter le problème de type
     const anneeId: Id<"anneesScolaires"> | undefined = classe.anneeId;
 
     let inscriptions: any[] = [];
@@ -131,16 +191,31 @@ export const remove = mutation({
     }
 
     await ctx.db.delete(args.id);
+
+    // 🟡 Audit
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "delete_classe",
+      table: "classes",
+      documentId: args.id,
+      date: new Date().toISOString(),
+      ecoleId: classe.ecoleId,
+      details: `Suppression de la classe "${classe.nom}"`,
+    });
+
+    return { success: true };
   },
 });
 
-// Mutation corrigée : assigne ou retire un élève d'une classe
+/**
+ * 🟡 FIX : `userId` requis.
+ */
 export const updateEleveClasse = mutation({
   args: {
     eleveId: v.id("eleves"),
     newClasseNom: v.string(),
     anneeId: v.id("anneesScolaires"),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const { eleveId, newClasseNom, anneeId } = args;
@@ -160,7 +235,9 @@ export const updateEleveClasse = mutation({
         throw new Error("La classe spécifiée n'existe pas.");
       }
       if (classe.anneeId && classe.anneeId !== anneeId) {
-        throw new Error("La classe n'appartient pas à l'année scolaire sélectionnée.");
+        throw new Error(
+          "La classe n'appartient pas à l'année scolaire sélectionnée."
+        );
       }
     }
 
@@ -172,18 +249,25 @@ export const updateEleveClasse = mutation({
       .first();
 
     if (!inscription) {
-      throw new Error("Cet élève n'a pas d'inscription pour l'année sélectionnée.");
+      throw new Error(
+        "Cet élève n'a pas d'inscription pour l'année sélectionnée."
+      );
     }
 
     await ctx.db.patch(inscription._id, { classe: newClasseNom });
+
+    return { success: true };
   },
 });
 
+/**
+ * 🟡 FIX : `userId` requis + audit.
+ */
 export const rename = mutation({
   args: {
     id: v.id("classes"),
     nom: v.string(),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const classe = await ctx.db.get(args.id);
@@ -193,7 +277,6 @@ export const rename = mutation({
     const trimmed = args.nom.trim();
     if (!trimmed) throw new Error("Le nom est requis.");
 
-    // Vérifier les doublons avant de renommer
     const existing = await ctx.db
       .query("classes")
       .withIndex("by_ecoleId", (q) => q.eq("ecoleId", classe.ecoleId))
@@ -204,18 +287,36 @@ export const rename = mutation({
         c.nom === trimmed &&
         (classe.anneeId ? c.anneeId === classe.anneeId : !c.anneeId)
     );
-    if (conflit) throw new Error("Une classe avec ce nom existe déjà pour cette année.");
+    if (conflit)
+      throw new Error("Une classe avec ce nom existe déjà pour cette année.");
 
+    const ancienNom = classe.nom;
     await ctx.db.patch(args.id, { nom: trimmed });
+
+    // 🟡 Audit
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "rename_classe",
+      table: "classes",
+      documentId: args.id,
+      date: new Date().toISOString(),
+      ecoleId: classe.ecoleId,
+      details: `Renommage : "${ancienNom}" → "${trimmed}"`,
+    });
+
+    return { success: true };
   },
 });
 
+/**
+ * 🟡 FIX : `userId` requis + audit.
+ */
 export const importClasses = mutation({
   args: {
     noms: v.array(v.string()),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
@@ -242,6 +343,19 @@ export const importClasses = mutation({
       });
       existingNames.add(trimmed);
       inserted++;
+    }
+
+    // 🟡 Audit
+    if (inserted > 0) {
+      await ctx.db.insert("audit", {
+        userId: args.userId,
+        action: "import_classes",
+        table: "classes",
+        documentId: args.ecoleId,
+        date: new Date().toISOString(),
+        ecoleId: args.ecoleId,
+        details: `${inserted} classe(s) importée(s), ${duplicates.length} doublon(s)`,
+      });
     }
 
     return { inserted, duplicates };

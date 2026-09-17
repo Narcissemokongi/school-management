@@ -1,10 +1,26 @@
-import { query, mutation, MutationCtx } from "./_generated/server";
+import { query, mutation, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel"; // Correction du chemin d'import
+import { Id } from "./_generated/dataModel";
 
-// Utilitaire de rôle amélioré : vérifie le rôle et l'appartenance à l'école
+type AnyCtx = MutationCtx | QueryCtx;
+
+const MAX_INSCRIPTIONS = 1000;
+
+/**
+ * 🔴 FIX GLOBAL : tout superAdmin passe désormais (avant : seuls ceux
+ * sans permissions étaient reconnus comme principaux).
+ */
+function isSuperAdmin(user: any): boolean {
+  if (!user) return false;
+  return (
+    user.role === "superAdmin" ||
+    (user.role === "admin" && !user.ecoleId)
+  );
+}
+
+// Vérifie que l'utilisateur est autorisé à gérer l'école donnée
 async function requireEcoleAdmin(
-  ctx: MutationCtx,
+  ctx: AnyCtx,
   userId: string | undefined,
   ecoleId: string
 ) {
@@ -12,28 +28,50 @@ async function requireEcoleAdmin(
   const user = await ctx.db.get(userId as Id<"users">);
   if (!user) throw new Error("Utilisateur introuvable");
 
-  const isSuperAdminPrincipal =
-    (user.role === "admin" && !user.ecoleId) ||
-    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
-
+  const superAdmin = isSuperAdmin(user);
   const isEcoleAdmin =
-    (user.role === "admin" || user.role === "directeur") && user.ecoleId === ecoleId;
+    (user.role === "admin" || user.role === "directeur") &&
+    user.ecoleId === ecoleId;
 
-  if (!isSuperAdminPrincipal && !isEcoleAdmin) {
+  if (!superAdmin && !isEcoleAdmin) {
     throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer cette école.");
   }
-
   return user;
 }
 
-// ----- QUERY : liste des inscriptions pour une année donnée (avec infos élève) -----
+// 🟢 FIX : helper pour charger un Map d'élèves en une passe
+async function loadEleveMap(ctx: AnyCtx, eleveIds: Id<"eleves">[]) {
+  const unique = [...new Set(eleveIds)];
+  const eleves = await Promise.all(unique.map((id) => ctx.db.get(id)));
+  return new Map(
+    eleves.filter(Boolean).map((e) => [e!._id, e!])
+  );
+}
+
+// ----- QUERY : liste des inscriptions pour une année donnée -----
+/**
+ * 🔴 FIX : `userId` optionnel + cloisonnement école si fourni.
+ * 🟢 FIX : Map au lieu de find() imbriqué + `.take()`.
+ */
 export const listByAnnee = query({
   args: {
     ecoleId: v.id("ecoles"),
     anneeId: v.id("anneesScolaires"),
     classe: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    // 🟡 Cloisonnement si userId fourni
+    if (args.userId) {
+      const caller = await ctx.db.get(args.userId);
+      if (!caller) throw new Error("Authentification requise");
+      if (!isSuperAdmin(caller)) {
+        if (caller.ecoleId !== args.ecoleId) {
+          throw new Error("Accès refusé : école différente.");
+        }
+      }
+    }
+
     let q = ctx.db
       .query("inscriptions")
       .withIndex("by_ecole_annee", (q) =>
@@ -42,13 +80,16 @@ export const listByAnnee = query({
     if (args.classe) {
       q = q.filter((q) => q.eq(q.field("classe"), args.classe));
     }
-    const inscriptions = await q.collect();
+    const inscriptions = await q.take(MAX_INSCRIPTIONS);
 
-    const eleveIds = inscriptions.map((i) => i.eleveId);
-    const eleves = await Promise.all(eleveIds.map((id) => ctx.db.get(id)));
+    // 🟢 FIX : Map O(n) au lieu de find() O(n²)
+    const eleveMap = await loadEleveMap(
+      ctx,
+      inscriptions.map((i) => i.eleveId)
+    );
 
     return inscriptions.map((insc) => {
-      const eleve = eleves.find((e) => e?._id === insc.eleveId);
+      const eleve = eleveMap.get(insc.eleveId);
       return {
         ...insc,
         nom: eleve?.nom ?? "—",
@@ -61,6 +102,10 @@ export const listByAnnee = query({
 });
 
 // ----- MUTATION : inscription manuelle d'un élève -----
+/**
+ * 🟡 FIX : `actionUserId` REQUIS + audit.
+ * 🟢 FIX : vérifie que l'élève appartient bien à l'école.
+ */
 export const addInscription = mutation({
   args: {
     eleveId: v.id("eleves"),
@@ -78,10 +123,17 @@ export const addInscription = mutation({
       )
     ),
     userId: v.optional(v.id("users")),
-    actionUserId: v.optional(v.id("users")),
+    actionUserId: v.id("users"),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.actionUserId, args.ecoleId);
+
+    // 🟢 FIX : vérifier que l'élève appartient bien à l'école
+    const eleve = await ctx.db.get(args.eleveId);
+    if (!eleve) throw new Error("Élève introuvable.");
+    if (eleve.ecoleId !== args.ecoleId) {
+      throw new Error("L'élève n'appartient pas à cette école.");
+    }
 
     const existing = await ctx.db
       .query("inscriptions")
@@ -89,9 +141,11 @@ export const addInscription = mutation({
         q.eq("eleveId", args.eleveId).eq("anneeId", args.anneeId)
       )
       .first();
-    if (existing) throw new Error("Cet élève a déjà une inscription pour cette année.");
+    if (existing) {
+      throw new Error("Cet élève a déjà une inscription pour cette année.");
+    }
 
-    return await ctx.db.insert("inscriptions", {
+    const newId = await ctx.db.insert("inscriptions", {
       eleveId: args.eleveId,
       ecoleId: args.ecoleId,
       anneeId: args.anneeId,
@@ -100,10 +154,28 @@ export const addInscription = mutation({
       dateInscription: new Date().toISOString(),
       userId: args.userId,
     });
+
+    // 🟡 Audit
+    await ctx.db.insert("audit", {
+      userId: args.actionUserId,
+      action: "add_inscription",
+      table: "inscriptions",
+      documentId: newId,
+      date: new Date().toISOString(),
+      ecoleId: args.ecoleId,
+      details: `Inscription de ${eleve.nom} ${eleve.postnom} en ${args.classe}`,
+    });
+
+    return { success: true, inscriptionId: newId };
   },
 });
 
 // ----- MUTATION : promotion des élèves -----
+/**
+ * 🟡 FIX : `userId` REQUIS + audit global + comptage.
+ * 🟢 FIX : `.take()` sur les propositions.
+ * 🟢 FIX : refuse `decisions` vide.
+ */
 export const promouvoirEleves = mutation({
   args: {
     ecoleId: v.id("ecoles"),
@@ -122,17 +194,32 @@ export const promouvoirEleves = mutation({
         classeDestination: v.optional(v.string()),
       })
     ),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
+    if (args.decisions.length === 0) {
+      throw new Error("Aucune décision à appliquer.");
+    }
+    if (args.anneeActuelleId === args.nouvelleAnneeId) {
+      throw new Error("L'année de destination doit être différente.");
+    }
+
     const anneeActuelle = await ctx.db.get(args.anneeActuelleId);
-    if (!anneeActuelle || !anneeActuelle.estActive) {
-      throw new Error("L'année actuelle spécifiée n'est pas active.");
+    if (!anneeActuelle) throw new Error("Année actuelle introuvable.");
+    if (anneeActuelle.ecoleId !== args.ecoleId) {
+      throw new Error("Année actuelle n'appartient pas à cette école.");
     }
     const nouvelleAnnee = await ctx.db.get(args.nouvelleAnneeId);
     if (!nouvelleAnnee) throw new Error("La nouvelle année n'existe pas.");
+    if (nouvelleAnnee.ecoleId !== args.ecoleId) {
+      throw new Error("Nouvelle année n'appartient pas à cette école.");
+    }
+
+    let promoted = 0;
+    let exited = 0;
+    let skipped = 0;
 
     for (const decision of args.decisions) {
       const inscriptionActuelle = await ctx.db
@@ -141,24 +228,29 @@ export const promouvoirEleves = mutation({
           q.eq("eleveId", decision.eleveId).eq("anneeId", args.anneeActuelleId)
         )
         .first();
+
       if (!inscriptionActuelle) {
-        throw new Error(`L'élève ${decision.eleveId} n'a pas d'inscription pour l'année actuelle.`);
+        skipped++;
+        continue;
       }
 
       let classeDestination = "";
       if (decision.statut === "passant") {
         if (!decision.classeDestination) {
-          throw new Error("La classe destination est requise pour un élève passant.");
+          throw new Error(
+            "La classe destination est requise pour un élève passant."
+          );
         }
         classeDestination = decision.classeDestination;
       } else if (decision.statut === "redoublant") {
         classeDestination = inscriptionActuelle.classe;
       } else {
-        // Transféré, exclu, diplômé : mise à jour du statut et date de sortie
+        // Transféré, exclu, diplômé → marquer la sortie
         await ctx.db.patch(inscriptionActuelle._id, {
           statut: decision.statut,
           dateSortie: new Date().toISOString(),
         });
+        exited++;
         continue;
       }
 
@@ -168,7 +260,10 @@ export const promouvoirEleves = mutation({
           q.eq("eleveId", decision.eleveId).eq("anneeId", args.nouvelleAnneeId)
         )
         .first();
-      if (existNouvelle) continue;
+      if (existNouvelle) {
+        skipped++;
+        continue;
+      }
 
       await ctx.db.insert("inscriptions", {
         eleveId: decision.eleveId,
@@ -179,33 +274,56 @@ export const promouvoirEleves = mutation({
         dateInscription: new Date().toISOString(),
         userId: inscriptionActuelle.userId,
       });
+      promoted++;
     }
 
-    // Supprimer les propositions liées
+    // 🟢 FIX : suppression propositions par batch + `.take()`
     const eleveIds = args.decisions.map((d) => d.eleveId);
+    let deletedProps = 0;
     for (const eleveId of eleveIds) {
       const propositions = await ctx.db
         .query("propositionsPassage")
         .withIndex("by_eleve_annee", (q) =>
           q.eq("eleveId", eleveId).eq("anneeId", args.anneeActuelleId)
         )
-        .collect();
+        .take(100);
       for (const prop of propositions) {
         await ctx.db.delete(prop._id);
+        deletedProps++;
       }
     }
 
-    return { success: true };
+    // 🟡 Audit
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "promouvoir_eleves",
+      table: "inscriptions",
+      documentId: args.ecoleId,
+      date: new Date().toISOString(),
+      ecoleId: args.ecoleId,
+      details: `${promoted} promu(s), ${exited} sortie(s), ${skipped} ignoré(s), ${deletedProps} proposition(s) supprimée(s)`,
+    });
+
+    return {
+      success: true,
+      promoted,
+      exited,
+      skipped,
+      deletedProps,
+    };
   },
 });
 
 // ----- MUTATION : clôturer l'année scolaire -----
+/**
+ * 🟡 FIX : `userId` REQUIS + audit.
+ */
 export const cloturerAnnee = mutation({
   args: {
     ecoleId: v.id("ecoles"),
     anneeId: v.id("anneesScolaires"),
     nouvelleAnneeId: v.optional(v.id("anneesScolaires")),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
@@ -214,7 +332,9 @@ export const cloturerAnnee = mutation({
     if (!annee || annee.ecoleId !== args.ecoleId) {
       throw new Error("Année introuvable ou ne correspond pas à l'école.");
     }
-    if (!annee.estActive) throw new Error("Cette année est déjà clôturée.");
+    if (!annee.estActive) {
+      throw new Error("Cette année est déjà clôturée.");
+    }
 
     await ctx.db.patch(args.anneeId, { estActive: false });
 
@@ -226,20 +346,46 @@ export const cloturerAnnee = mutation({
       await ctx.db.patch(args.nouvelleAnneeId, { estActive: true });
     }
 
+    // 🟡 Audit
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "cloturer_annee",
+      table: "anneesScolaires",
+      documentId: args.anneeId,
+      date: new Date().toISOString(),
+      ecoleId: args.ecoleId,
+      details: `Clôture de l'année ${annee.nom}${
+        args.nouvelleAnneeId ? ` · nouvelle année activée` : ""
+      }`,
+    });
+
     return { success: true };
   },
 });
 
 // ----- MUTATION : migration des anciennes données -----
+/**
+ * 🔴 FIX : la migration était un no-op sans auth → n'importe qui pouvait
+ * la déclencher. Désormais :
+ *  - réservée superAdmin
+ *  - retourne un vrai résultat
+ *  - si tu veux l'activer un jour, écris la vraie logique ici.
+ */
 export const migrateElevesToInscriptions = mutation({
-  handler: async (ctx) => {
-    const eleves = await ctx.db.query("eleves").collect();
-    for (const eleve of eleves) {
-      // ⚠️ Supposons que les champs anneeId et decisionConseil n'existent plus dans le schéma.
-      // Cette migration est obsolète et ne doit pas être utilisée sans adaptation.
-      // Si vous devez migrer, utilisez une logique appropriée à votre modèle actuel.
-      continue;
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller || !isSuperAdmin(caller)) {
+      throw new Error("Réservé au super-admin.");
     }
-    return { success: true };
+
+    // ⚠️ Migration désactivée volontairement. Implémente la vraie logique
+    // (ex: créer des inscriptions pour les élèves qui n'en ont pas)
+    // avant de retirer ce garde-fou.
+    return {
+      success: true,
+      skipped: true,
+      message: "Migration non implémentée — voir commentaire dans le code.",
+    };
   },
 });

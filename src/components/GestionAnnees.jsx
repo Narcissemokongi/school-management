@@ -1,20 +1,33 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
 import {
   Loader, Calendar, CheckCircle2, Plus, Clock,
   Trash2, Edit2, Search, ChevronUp, ChevronDown,
-  CalendarDays, Users,
+  CalendarDays, Check, X, AlertCircle,
 } from "lucide-react";
 
-export function GestionAnnees({ ecoleId }) {
-  const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+// ============================================================
+// HELPER ERREUR
+// ============================================================
+function extractErrMsg(err, fallback = "Erreur inconnue") {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && err.message) return err.message;
+  return fallback;
+}
+
+// ============================================================
+// COMPOSANT PRINCIPAL
+// ============================================================
+export function GestionAnnees({ ecoleId, userId }) {
+  const { dark } = useStyles();
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
   // États
@@ -29,37 +42,58 @@ export function GestionAnnees({ ecoleId }) {
   const [savingRename, setSavingRename] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  const annees = useQuery(api.anneesScolaires.listByEcole, ecoleId ? { ecoleId } : "skip");
+  // ✅ userId ajouté à la query
+  const anneesRaw = useQuery(
+    api.anneesScolaires.listByEcole,
+    ecoleId && userId ? { ecoleId, userId } : "skip"
+  );
+
   const addAnnee = useMutation(api.anneesScolaires.add);
   const setActive = useMutation(api.anneesScolaires.setActive);
   const removeAnnee = useMutation(api.anneesScolaires.remove);
   const renameAnnee = useMutation(api.anneesScolaires.rename);
 
-  // Couleurs adaptatives
+  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const inputBg = dark ? "#0F172A" : "#F9FAFB";
+  const inputBg = dark ? "#0F172A" : "#F8FAFC";
   const inputText = dark ? "#F1F5F9" : "#1E293B";
-  const buttonAddBg = dark ? "#818CF8" : "#4F46E5";
-  const buttonActivateBg = dark ? "#34D399" : "#10B981";
-  const activeBadgeBg = dark ? "#064E3B" : "#D1FAE5";
-  const activeBadgeText = dark ? "#34D399" : "#065F46";
-  const shadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const accentBg = dark ? "#312E81" : "#EEF2FF";
+  const success = dark ? "#34D399" : "#10B981";
+  const successBg = dark ? "#064E3B" : "#D1FAE5";
+  const successText = dark ? "#34D399" : "#065F46";
+  const danger = dark ? "#F87171" : "#EF4444";
+  const shadow = dark
+    ? "0 1px 3px rgba(0,0,0,0.3)"
+    : "0 1px 3px rgba(0,0,0,0.05)";
 
-  // Statistiques
+  // ✅ Keyframes injectés dans les 2 branches (loading + principal)
+  const Keyframes = (
+    <style>{`
+      @keyframes ga-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      .ga-spin { animation: ga-spin 1s linear infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .ga-spin { animation: none !important; }
+      }
+    `}</style>
+  );
+
+  // Stats
   const stats = useMemo(() => {
-    const total = annees?.length ?? 0;
-    const active = annees?.filter((a) => a.estActive).length ?? 0;
+    const list = anneesRaw ?? [];
+    const total = list.length;
+    const active = list.filter((a) => a.estActive).length;
     const inactive = total - active;
     return { total, active, inactive };
-  }, [annees]);
+  }, [anneesRaw]);
 
-  // Filtrage + tri
+  // Tri + filtrage
   const filteredAndSorted = useMemo(() => {
-    if (!annees) return [];
-    let result = [...annees];
+    if (!anneesRaw) return [];
+    let result = [...anneesRaw];
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       result = result.filter((a) => a.nom.toLowerCase().includes(q));
@@ -73,90 +107,129 @@ export function GestionAnnees({ ecoleId }) {
         valA = a.estActive ? 1 : 0;
         valB = b.estActive ? 1 : 0;
       }
+      // ✅ Retourne 0 en cas d'égalité
+      if (valA === valB) return 0;
       if (sortDir === "asc") return valA < valB ? -1 : 1;
-      else return valA > valB ? -1 : 1;
+      return valA > valB ? -1 : 1;
     });
     return result;
-  }, [annees, searchTerm, sortBy, sortDir]);
+  }, [anneesRaw, searchTerm, sortBy, sortDir]);
 
-  // Gestion de l'ajout
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    if (!nouveauNom.trim() || !ecoleId) return;
-    setAdding(true);
-    try {
-      await addAnnee({ nom: nouveauNom.trim(), ecoleId, estActive: false });
-      setNouveauNom("");
-      toast.success("Année scolaire ajoutée");
-    } catch (err) {
-      toast.error(err.message || "Erreur lors de l'ajout");
-    } finally {
-      setAdding(false);
-    }
-  };
+  // ============================================================
+  // HANDLERS
+  // ============================================================
+  const handleAdd = useCallback(
+    async (e) => {
+      e.preventDefault();
+      if (adding) return;
+      if (!nouveauNom.trim() || !ecoleId) return;
+      if (!userId) {
+        toast.error("Session expirée, veuillez vous reconnecter.");
+        return;
+      }
+      setAdding(true);
+      try {
+        await addAnnee({
+          nom: nouveauNom.trim(),
+          ecoleId,
+          estActive: false,
+          userId,
+        });
+        setNouveauNom("");
+        toast.success("Année scolaire ajoutée");
+      } catch (err) {
+        toast.error(extractErrMsg(err, "Erreur lors de l'ajout"));
+      } finally {
+        setAdding(false);
+      }
+    },
+    [adding, nouveauNom, ecoleId, userId, addAnnee]
+  );
 
-  // Activation
-  const handleActivate = async (anneeId, nom) => {
-    const ok = await confirm(
-      "Activer l'année scolaire",
-      `Voulez-vous activer l'année scolaire "${nom}" ?`
-    );
-    if (!ok) return;
-    setActivating(anneeId);
-    try {
-      await setActive({ anneeId });
-      toast.success(`Année ${nom} activée`);
-    } catch (err) {
-      toast.error(err.message || "Erreur lors de l'activation");
-    } finally {
-      setActivating(null);
-    }
-  };
+  const handleActivate = useCallback(
+    async (anneeId, nom) => {
+      if (!userId) {
+        toast.error("Session expirée, veuillez vous reconnecter.");
+        return;
+      }
+      const ok = await confirm(
+        "Activer l'année scolaire",
+        `Voulez-vous activer l'année scolaire "${nom}" ? Les autres années seront désactivées.`
+      );
+      if (!ok) return;
+      setActivating(anneeId);
+      try {
+        // ✅ requesterId ajouté (cohérent avec AnneeSelector)
+        await setActive({ anneeId, userId, requesterId: userId });
+        toast.success(`Année ${nom} activée`);
+      } catch (err) {
+        toast.error(extractErrMsg(err, "Erreur lors de l'activation"));
+      } finally {
+        setActivating(null);
+      }
+    },
+    [userId, confirm, setActive]
+  );
 
-  // Suppression
-  const handleDelete = async (anneeId, nom) => {
-    const ok = await confirm(
-      "Supprimer l'année scolaire",
-      `Voulez-vous vraiment supprimer l'année "${nom}" ?`
-    );
-    if (!ok) return;
-    setDeletingId(anneeId);
-    try {
-      await removeAnnee({ id: anneeId });
-      toast.success("Année supprimée");
-    } catch (err) {
-      toast.error(err.message || "Erreur lors de la suppression");
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  const handleDelete = useCallback(
+    async (anneeId, nom) => {
+      if (!userId) {
+        toast.error("Session expirée, veuillez vous reconnecter.");
+        return;
+      }
+      const ok = await confirm(
+        "Supprimer l'année scolaire",
+        `Voulez-vous vraiment supprimer l'année "${nom}" ? Cette action est irréversible.`
+      );
+      if (!ok) return;
+      setDeletingId(anneeId);
+      try {
+        await removeAnnee({ id: anneeId, userId });
+        toast.success("Année supprimée");
+      } catch (err) {
+        toast.error(extractErrMsg(err, "Erreur lors de la suppression"));
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [userId, confirm, removeAnnee]
+  );
 
-  // Renommage
   const startRename = (annee) => {
     setEditingId(annee._id);
     setEditingNom(annee.nom);
   };
-  const cancelRename = () => {
+
+  const cancelRename = useCallback(() => {
     setEditingId(null);
     setEditingNom("");
-  };
-  const saveRename = async (id) => {
-    const trimmed = editingNom.trim();
-    if (!trimmed || trimmed === annees.find((a) => a._id === id)?.nom) {
-      cancelRename();
-      return;
-    }
-    setSavingRename(true);
-    try {
-      await renameAnnee({ id, nom: trimmed });
-      toast.success("Année renommée");
-      cancelRename();
-    } catch (err) {
-      toast.error(err.message || "Erreur lors du renommage");
-    } finally {
-      setSavingRename(false);
-    }
-  };
+  }, []);
+
+  const saveRename = useCallback(
+    async (id) => {
+      if (!userId) {
+        toast.error("Session expirée, veuillez vous reconnecter.");
+        return;
+      }
+      const trimmed = editingNom.trim();
+      const annee = anneesRaw?.find((a) => a._id === id);
+      if (!trimmed || trimmed === annee?.nom) {
+        cancelRename();
+        return;
+      }
+      setSavingRename(true);
+      try {
+        await renameAnnee({ id, nom: trimmed, userId });
+        toast.success("Année renommée");
+        cancelRename();
+      } catch (err) {
+        toast.error(extractErrMsg(err, "Erreur lors du renommage"));
+      } finally {
+        setSavingRename(false);
+      }
+    },
+    [userId, editingNom, anneesRaw, cancelRename, renameAnnee]
+  );
 
   const toggleSort = (field) => {
     if (sortBy === field) {
@@ -167,97 +240,145 @@ export function GestionAnnees({ ecoleId }) {
     }
   };
 
-  // Gestion du chargement initial
-  if (annees === undefined) {
+  // ============================================================
+  // LOADING — Keyframes injectés ici aussi
+  // ============================================================
+  if (anneesRaw === undefined) {
     return (
-      <div style={{
-        ...S.card,
-        background: cardBg,
-        border: `1px solid ${cardBorder}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 40,
-      }}>
-        <Loader size={24} className="animate-spin" />
-      </div>
+      <>
+        {Keyframes}
+        <div
+          style={{
+            background: cardBg,
+            border: `1px solid ${cardBorder}`,
+            borderRadius: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 40,
+          }}
+        >
+          <Loader size={24} className="ga-spin" style={{ color: accent }} />
+        </div>
+      </>
     );
   }
 
-  // Styles adaptatifs
-  const containerPadding = isMobile ? 16 : 24;
-  const titleSize = isMobile ? 18 : 20;
-  const titleIconSize = isMobile ? 18 : 20;
-  const formFlexDirection = isMobile ? "column" : "row";
-  const inputPadding = isMobile ? "12px 14px" : "10px 14px";
-  const inputFontSize = isMobile ? 16 : 14;
-  const addButtonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const addButtonFontSize = isMobile ? 16 : 14;
-  const searchBarFlexDirection = isMobile ? "column" : "row";
-  const searchBarGap = isMobile ? 8 : 8;
-  const searchButtonPadding = isMobile ? "10px 12px" : "8px 12px";
-  const searchButtonFontSize = isMobile ? 14 : 13;
-  const listItemPadding = isMobile ? "12px 14px" : "12px 16px";
-  const listItemFlexDirection = isMobile ? "column" : "row";
-  const listItemAlignItems = isMobile ? "stretch" : "center";
-  const listItemGap = isMobile ? 8 : 0;
-  const actionButtonPadding = isMobile ? "8px 10px" : "4px";
-  const actionButtonFontSize = isMobile ? 14 : 14;
+  // Styles
+  const inputStyle = {
+    width: "100%",
+    padding: isMobile ? "12px 14px" : "10px 14px",
+    border: `1px solid ${cardBorder}`,
+    borderRadius: 10,
+    fontSize: isMobile ? 15 : 14,
+    outline: "none",
+    background: inputBg,
+    color: inputText,
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+    appearance: "none",
+    WebkitAppearance: "none",
+  };
 
   return (
-    <div style={{
-      ...S.card,
-      background: cardBg,
-      border: `1px solid ${cardBorder}`,
-      boxShadow: shadow,
-      transition: "background-color 0.3s",
-      padding: containerPadding,
-    }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+    <div
+      style={{
+        background: cardBg,
+        border: `1px solid ${cardBorder}`,
+        boxShadow: shadow,
+        borderRadius: 14,
+        padding: isMobile ? 14 : 18,
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      {Keyframes}
 
-      {/* En-tête avec statistiques */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 20, flexDirection: isMobile ? "column" : "row" }}>
-        <h3 style={{
-          color: textPrimary,
+      {/* ==================== EN-TÊTE ==================== */}
+      <div
+        style={{
           display: "flex",
           alignItems: "center",
           gap: 8,
-          fontSize: titleSize,
-          fontWeight: 700,
-          margin: 0,
-        }}>
-          <Calendar size={titleIconSize} color={dark ? "#818CF8" : "#4F46E5"} />
-          Années scolaires
-        </h3>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: isMobile ? "center" : "flex-start" }}>
-          <span style={{ background: activeBadgeBg, color: activeBadgeText, padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 600 }}>
-            {stats.active} active(s)
-          </span>
-          <span style={{ background: dark ? "#334155" : "#F1F5F9", color: textPrimary, padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 600 }}>
-            {stats.total} totale(s)
-          </span>
+          marginBottom: 14,
+          paddingBottom: 12,
+          borderBottom: `1px solid ${cardBorder}`,
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: accentBg,
+            color: accent,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <CalendarDays size={16} />
         </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              fontSize: isMobile ? 14 : 15,
+              fontWeight: 700,
+              color: textPrimary,
+              lineHeight: 1.2,
+            }}
+          >
+            Années scolaires
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: textSecondary,
+              marginTop: 1,
+            }}
+          >
+            {stats.total} année{stats.total > 1 ? "s" : ""} · {stats.active}{" "}
+            active
+            {stats.active > 1 ? "s" : ""}
+          </div>
+        </div>
+        {stats.active > 0 && (
+          <span
+            style={{
+              background: successBg,
+              color: successText,
+              padding: "3px 10px",
+              borderRadius: 12,
+              fontSize: 11,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <CheckCircle2 size={11} />
+            {stats.active} active{stats.active > 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
-      {/* Formulaire d'ajout */}
-      <form onSubmit={handleAdd} style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", flexDirection: formFlexDirection }}>
+      {/* ==================== FORMULAIRE AJOUT ==================== */}
+      <form
+        onSubmit={handleAdd}
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 12,
+          flexDirection: isMobile ? "column" : "row",
+        }}
+      >
         <input
-          placeholder="ex: 2025-2026"
+          placeholder="Ex : 2025-2026"
           value={nouveauNom}
           onChange={(e) => setNouveauNom(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: isMobile ? "100%" : 150,
-            padding: inputPadding,
-            border: `1px solid ${cardBorder}`,
-            borderRadius: 8,
-            fontSize: inputFontSize,
-            outline: "none",
-            background: inputBg,
-            color: inputText,
-            transition: "border-color 0.2s, background-color 0.3s",
-            boxSizing: "border-box",
-          }}
+          style={{ ...inputStyle, flex: 1 }}
         />
         <button
           type="submit"
@@ -267,211 +388,402 @@ export function GestionAnnees({ ecoleId }) {
             alignItems: "center",
             justifyContent: "center",
             gap: 6,
-            padding: addButtonPadding,
-            background: buttonAddBg,
-            color: "white",
+            padding: isMobile ? "12px 16px" : "10px 18px",
+            background:
+              adding || !nouveauNom.trim()
+                ? dark
+                  ? "#334155"
+                  : "#CBD5E1"
+                : accent,
+            color:
+              adding || !nouveauNom.trim() ? textSecondary : "#FFFFFF",
             border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: adding ? "not-allowed" : "pointer",
-            opacity: adding ? 0.7 : 1,
-            transition: "background 0.2s",
-            fontSize: addButtonFontSize,
+            borderRadius: 10,
+            fontWeight: 700,
+            cursor:
+              adding || !nouveauNom.trim() ? "not-allowed" : "pointer",
+            fontSize: 13.5,
             width: isMobile ? "100%" : "auto",
+            whiteSpace: "nowrap",
           }}
         >
-          {adding ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
-          {adding ? "Ajout..." : "Ajouter"}
+          {adding ? (
+            <Loader size={14} className="ga-spin" />
+          ) : (
+            <Plus size={14} />
+          )}
+          {adding ? "Ajout…" : "Ajouter"}
         </button>
       </form>
 
-      {/* Barre de recherche et tri */}
-      <div style={{ display: "flex", gap: searchBarGap, marginBottom: 16, alignItems: "stretch", flexWrap: "wrap", flexDirection: searchBarFlexDirection }}>
-        <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 150 }}>
-          <Search size={16} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: textSecondary }} />
-          <input
-            type="text"
-            placeholder="Rechercher..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+      {/* ==================== RECHERCHE + TRI ==================== */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 12,
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: isMobile ? "stretch" : "center",
+        }}
+      >
+        <div style={{ position: "relative", flex: 1 }}>
+          <Search
+            size={16}
             style={{
-              width: "100%",
-              padding: inputPadding,
-              border: `1px solid ${cardBorder}`,
-              borderRadius: 8,
-              fontSize: inputFontSize,
-              background: inputBg,
-              color: inputText,
-              outline: "none",
-              paddingLeft: 32,
-              boxSizing: "border-box",
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: textSecondary,
             }}
           />
+          <input
+            type="text"
+            placeholder="Rechercher une année…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ ...inputStyle, paddingLeft: 36 }}
+          />
         </div>
-        <div style={{ display: "flex", gap: 8, width: isMobile ? "100%" : "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
           <button
+            type="button"
             onClick={() => toggleSort("nom")}
             style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
-              padding: searchButtonPadding,
-              background: "transparent",
-              border: `1px solid ${cardBorder}`,
-              borderRadius: 8,
-              color: textPrimary,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
+              padding: "10px 12px",
+              background: sortBy === "nom" ? accentBg : "transparent",
+              border: `1px solid ${
+                sortBy === "nom" ? accent : cardBorder
+              }`,
+              borderRadius: 10,
+              color: sortBy === "nom" ? accent : textSecondary,
               cursor: "pointer",
-              fontSize: searchButtonFontSize,
+              fontSize: 12.5,
+              fontWeight: 600,
               flex: isMobile ? 1 : "none",
             }}
           >
-            Nom {sortBy === "nom" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+            Nom
+            {sortBy === "nom" &&
+              (sortDir === "asc" ? (
+                <ChevronUp size={13} />
+              ) : (
+                <ChevronDown size={13} />
+              ))}
           </button>
           <button
+            type="button"
             onClick={() => toggleSort("statut")}
             style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
-              padding: searchButtonPadding,
-              background: "transparent",
-              border: `1px solid ${cardBorder}`,
-              borderRadius: 8,
-              color: textPrimary,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
+              padding: "10px 12px",
+              background: sortBy === "statut" ? accentBg : "transparent",
+              border: `1px solid ${
+                sortBy === "statut" ? accent : cardBorder
+              }`,
+              borderRadius: 10,
+              color: sortBy === "statut" ? accent : textSecondary,
               cursor: "pointer",
-              fontSize: searchButtonFontSize,
+              fontSize: 12.5,
+              fontWeight: 600,
               flex: isMobile ? 1 : "none",
             }}
           >
-            Statut {sortBy === "statut" && (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+            Statut
+            {sortBy === "statut" &&
+              (sortDir === "asc" ? (
+                <ChevronUp size={13} />
+              ) : (
+                <ChevronDown size={13} />
+              ))}
           </button>
         </div>
       </div>
 
-      {/* Liste des années */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* ==================== LISTE ==================== */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {filteredAndSorted.length === 0 && (
-          <p style={{ color: textSecondary, fontSize: 14, textAlign: "center", padding: "16px 0" }}>
-            {searchTerm ? "Aucune année ne correspond à la recherche." : "Aucune année scolaire enregistrée."}
-          </p>
-        )}
-        {filteredAndSorted.map((annee) => (
           <div
-            key={annee._id}
             style={{
-              display: "flex",
-              flexDirection: listItemFlexDirection,
-              alignItems: listItemAlignItems,
-              justifyContent: "space-between",
-              padding: listItemPadding,
-              borderRadius: 8,
-              border: `1px solid ${annee.estActive ? activeBadgeText : cardBorder}`,
-              background: annee.estActive ? activeBadgeBg : "transparent",
-              transition: "background-color 0.3s, transform 0.1s",
-              cursor: "default",
-              gap: listItemGap,
+              textAlign: "center",
+              padding: "24px 16px",
+              color: textSecondary,
             }}
-            onMouseEnter={(e) => { if (!annee.estActive) e.currentTarget.style.background = dark ? "#2D3748" : "#F1F5F9"; }}
-            onMouseLeave={(e) => { if (!annee.estActive) e.currentTarget.style.background = "transparent"; }}
           >
-            {/* Partie gauche : nom et badges */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" }}>
-              {editingId === annee._id ? (
-                <>
+            <Calendar size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
+            <p style={{ margin: 0, fontSize: 13 }}>
+              {searchTerm
+                ? "Aucune année ne correspond à la recherche."
+                : "Aucune année scolaire enregistrée."}
+            </p>
+          </div>
+        )}
+
+        {filteredAndSorted.map((annee) => {
+          const isEditing = editingId === annee._id;
+          const isActive = annee.estActive;
+          const isActivating = activating === annee._id;
+          const isDeleting = deletingId === annee._id;
+
+          return (
+            <div
+              key={annee._id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: isMobile ? "10px 12px" : "10px 14px",
+                borderRadius: 10,
+                border: `1px solid ${isActive ? success : cardBorder}`,
+                background: isActive
+                  ? successBg
+                  : dark
+                  ? "transparent"
+                  : "#FFFFFF",
+                flexWrap: isMobile ? "wrap" : "nowrap",
+              }}
+            >
+              {/* Nom ou édition */}
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                {isEditing ? (
                   <input
                     value={editingNom}
                     onChange={(e) => setEditingNom(e.target.value)}
                     autoFocus
                     style={{
+                      ...inputStyle,
                       padding: "6px 10px",
-                      border: `1px solid ${cardBorder}`,
-                      borderRadius: 6,
                       fontSize: 14,
-                      background: inputBg,
-                      color: inputText,
+                      flex: 1,
+                      minWidth: 100,
                     }}
                   />
-                  <button onClick={() => saveRename(annee._id)} disabled={savingRename} style={{ background: "none", border: "none", color: "#10B981", cursor: "pointer" }}>
-                    {savingRename ? <Loader size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                  </button>
-                  <button onClick={cancelRename} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer" }}>
-                    <Trash2 size={16} />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span style={{
-                    fontWeight: annee.estActive ? 700 : 400,
-                    color: annee.estActive ? activeBadgeText : textPrimary,
-                    fontSize: isMobile ? 15 : 14,
-                  }}>
-                    {annee.nom}
-                  </span>
-                  {annee.estActive && (
-                    <span style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "2px 10px",
-                      borderRadius: 20,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      background: activeBadgeBg,
-                      color: activeBadgeText,
-                    }}>
-                      <CheckCircle2 size={14} />
-                      Active
+                ) : (
+                  <>
+                    <span
+                      style={{
+                        fontWeight: isActive ? 700 : 500,
+                        color: isActive ? successText : textPrimary,
+                        fontSize: isMobile ? 14 : 14.5,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {annee.nom}
                     </span>
-                  )}
-                </>
-              )}
-            </div>
+                    {isActive && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 3,
+                          padding: "2px 8px",
+                          borderRadius: 10,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          background: successBg,
+                          color: successText,
+                          border: `1px solid ${success}`,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Check size={10} />
+                        Active
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
 
-            {/* Partie droite : actions */}
-            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: isMobile ? "flex-end" : "flex-start", width: isMobile ? "100%" : "auto" }}>
-              {!annee.estActive && (
-                <>
-                  <button
-                    onClick={() => startRename(annee)}
-                    title="Renommer"
-                    style={{ background: "none", border: "none", color: "#3B82F6", cursor: "pointer", padding: actionButtonPadding }}
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleActivate(annee._id, annee.nom)}
-                    disabled={activating === annee._id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 4,
-                      padding: isMobile ? "8px 12px" : "6px 12px",
-                      background: buttonActivateBg,
-                      color: "white",
-                      border: "none",
-                      borderRadius: 8,
-                      fontWeight: 500,
-                      cursor: activating === annee._id ? "not-allowed" : "pointer",
-                      opacity: activating === annee._id ? 0.7 : 1,
-                      fontSize: actionButtonFontSize,
-                    }}
-                  >
-                    {activating === annee._id ? <Loader size={14} className="animate-spin" /> : <Clock size={14} />}
-                    Activer
-                  </button>
-                </>
-              )}
-              {!annee.estActive && (
-                <button
-                  onClick={() => handleDelete(annee._id, annee.nom)}
-                  disabled={deletingId === annee._id}
-                  title="Supprimer"
-                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: actionButtonPadding }}
-                >
-                  {deletingId === annee._id ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                </button>
-              )}
+              {/* Actions */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 4,
+                  alignItems: "center",
+                  justifyContent: isMobile ? "flex-end" : "flex-start",
+                  width: isMobile ? "100%" : "auto",
+                  flexShrink: 0,
+                }}
+              >
+                {isEditing ? (
+                  <>
+                    <button
+                      onClick={() => saveRename(annee._id)}
+                      disabled={savingRename}
+                      title="Enregistrer"
+                      aria-label="Enregistrer"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "6px 10px",
+                        background: success,
+                        color: "#FFFFFF",
+                        border: "none",
+                        borderRadius: 8,
+                        cursor: savingRename ? "not-allowed" : "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        gap: 4,
+                      }}
+                    >
+                      {savingRename ? (
+                        <Loader size={12} className="ga-spin" />
+                      ) : (
+                        <Check size={12} />
+                      )}
+                      Enregistrer
+                    </button>
+                    <button
+                      onClick={cancelRename}
+                      title="Annuler"
+                      aria-label="Annuler"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "6px 8px",
+                        background: "transparent",
+                        color: textSecondary,
+                        border: `1px solid ${cardBorder}`,
+                        borderRadius: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {!isActive && (
+                      <>
+                        <button
+                          onClick={() => startRename(annee)}
+                          title="Renommer"
+                          aria-label="Renommer"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "8px 10px",
+                            background: "transparent",
+                            color: accent,
+                            border: `1px solid ${cardBorder}`,
+                            borderRadius: 8,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleActivate(annee._id, annee.nom)}
+                          disabled={isActivating}
+                          title="Activer cette année"
+                          aria-label="Activer cette année"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 4,
+                            padding: isMobile ? "8px 12px" : "8px 14px",
+                            background: success,
+                            color: "#FFFFFF",
+                            border: "none",
+                            borderRadius: 8,
+                            fontWeight: 700,
+                            cursor: isActivating ? "not-allowed" : "pointer",
+                            fontSize: 12.5,
+                            opacity: isActivating ? 0.7 : 1,
+                          }}
+                        >
+                          {isActivating ? (
+                            <Loader size={12} className="ga-spin" />
+                          ) : (
+                            <Clock size={12} />
+                          )}
+                          Activer
+                        </button>
+                        <button
+                          onClick={() => handleDelete(annee._id, annee.nom)}
+                          disabled={isDeleting}
+                          title="Supprimer"
+                          aria-label="Supprimer"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "8px 10px",
+                            background: "transparent",
+                            color: danger,
+                            border: `1px solid ${cardBorder}`,
+                            borderRadius: 8,
+                            cursor: isDeleting ? "not-allowed" : "pointer",
+                            opacity: isDeleting ? 0.6 : 1,
+                          }}
+                        >
+                          {isDeleting ? (
+                            <Loader size={14} className="ga-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* ==================== NOTE ==================== */}
+      {stats.active === 0 && stats.total > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 12px",
+            background: dark ? "#78350F40" : "#FEF3C7",
+            border: `1px solid ${dark ? "#78350F" : "#FDE68A"}`,
+            borderRadius: 10,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 12,
+            color: dark ? "#FBBF24" : "#92400E",
+            lineHeight: 1.4,
+          }}
+        >
+          <AlertCircle size={14} style={{ flexShrink: 0 }} />
+          <span>
+            Aucune année n'est active. Activez-en une pour permettre la saisie
+            des données.
+          </span>
+        </div>
+      )}
 
       <ConfirmDialog {...dialogProps} />
     </div>

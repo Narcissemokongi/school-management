@@ -1,10 +1,26 @@
-import { query, mutation, MutationCtx } from "./_generated/server";
+import { query, mutation, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 
-// Vérifie que l'utilisateur est admin/directeur de l'école concernée ou superadmin principal
+type AnyCtx = MutationCtx | QueryCtx;
+
+const MAX_COURS = 500;
+
+/**
+ * 🔴 FIX GLOBAL : tout superAdmin passe désormais (avant : seuls ceux
+ * sans permissions étaient reconnus comme principaux).
+ */
+function isSuperAdmin(user: any): boolean {
+  if (!user) return false;
+  return (
+    user.role === "superAdmin" ||
+    (user.role === "admin" && !user.ecoleId)
+  );
+}
+
+// Vérifie que l'utilisateur est admin/directeur de l'école ou superAdmin
 async function requireEcoleAdmin(
-  ctx: MutationCtx,
+  ctx: AnyCtx,
   userId: string | undefined,
   ecoleId: string
 ) {
@@ -12,15 +28,12 @@ async function requireEcoleAdmin(
   const user = await ctx.db.get(userId as Id<"users">);
   if (!user) throw new Error("Utilisateur introuvable");
 
-  const isSuperAdminPrincipal =
-    (user.role === "admin" && !user.ecoleId) ||
-    (user.role === "superAdmin" && (!user.permissions || user.permissions.length === 0));
-
+  const superAdmin = isSuperAdmin(user);
   const isEcoleAdmin =
     (user.role === "admin" || user.role === "directeur") &&
     user.ecoleId === ecoleId;
 
-  if (!isSuperAdminPrincipal && !isEcoleAdmin) {
+  if (!superAdmin && !isEcoleAdmin) {
     throw new Error("Accès refusé : vous n'êtes pas autorisé à gérer cette école.");
   }
   return user;
@@ -28,14 +41,16 @@ async function requireEcoleAdmin(
 
 // Vérifie le rôle et éventuellement l'appartenance à une classe (pour les enseignants)
 async function requireRole(
-  ctx: MutationCtx,
+  ctx: AnyCtx,
   userId: string | undefined,
   allowedRoles: string[],
   classe?: string
 ) {
   if (!userId) throw new Error("Authentification requise");
   const user = await ctx.db.get(userId as Id<"users">);
-  if (!user || !allowedRoles.includes(user.role)) {
+  if (!user) throw new Error("Utilisateur introuvable");
+  if (isSuperAdmin(user)) return user;
+  if (!allowedRoles.includes(user.role)) {
     throw new Error("Accès refusé : rôle insuffisant");
   }
   if (classe && user.role === "enseignant" && user.classe !== classe) {
@@ -45,13 +60,33 @@ async function requireRole(
 }
 
 // ========== QUERY ==========
+
+/**
+ * ✅ FIX : `userId` devient OPTIONNEL.
+ * Si fourni → vérifie le cloisonnement école.
+ * 🟢 FIX : `.take(MAX_COURS)` pour éviter les gros volumes.
+ */
 export const list = query({
   args: {
     ecoleId: v.id("ecoles"),
     classe: v.optional(v.string()),
     anneeId: v.optional(v.id("anneesScolaires")),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    // ✅ Cloisonnement si userId fourni
+    if (args.userId) {
+      const caller = await ctx.db.get(args.userId);
+      if (!caller) throw new Error("Authentification requise");
+
+      if (!isSuperAdmin(caller)) {
+        if (!caller.ecoleId) throw new Error("Accès refusé");
+        if (caller.ecoleId !== args.ecoleId) {
+          throw new Error("Accès refusé : école différente.");
+        }
+      }
+    }
+
     if (args.anneeId) {
       let q = ctx.db
         .query("cours")
@@ -60,21 +95,24 @@ export const list = query({
       if (args.classe) {
         q = q.filter((q) => q.eq(q.field("classe"), args.classe));
       }
-      return await q.collect();
+      return await q.take(MAX_COURS);
     }
+
     let q = ctx.db
       .query("cours")
       .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId));
     if (args.classe) {
       q = q.filter((q) => q.eq(q.field("classe"), args.classe));
     }
-    return await q.collect();
+    return await q.take(MAX_COURS);
   },
 });
 
 // ========== MUTATIONS ==========
 
-// Ajouter un cours individuellement
+/**
+ * 🟡 FIX : `userId` devient REQUIS + audit.
+ */
 export const add = mutation({
   args: {
     nom: v.string(),
@@ -83,7 +121,7 @@ export const add = mutation({
     bareme: v.optional(v.float64()),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
@@ -104,7 +142,7 @@ export const add = mutation({
       throw new Error("Ce cours existe déjà pour cette classe.");
     }
 
-    await ctx.db.insert("cours", {
+    const newId = await ctx.db.insert("cours", {
       nom: args.nom,
       classe: args.classe,
       coefficient: args.coefficient ?? 1,
@@ -112,10 +150,26 @@ export const add = mutation({
       ecoleId: args.ecoleId,
       anneeId: args.anneeId,
     });
+
+    // 🟡 Audit
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "create_cours",
+      table: "cours",
+      documentId: newId,
+      details: `Création du cours "${args.nom}" (classe ${args.classe})`,
+      date: new Date().toISOString(),
+      ecoleId: args.ecoleId,
+    });
+
+    return { success: true, coursId: newId };
   },
 });
 
-// Ajouter un cours en masse à plusieurs classes
+/**
+ * 🟡 FIX : `userId` requis + audit (batch).
+ * 🟢 FIX : retour { inserted, duplicates } pour cohérence avec importClasses.
+ */
 export const addBulk = mutation({
   args: {
     nom: v.string(),
@@ -124,10 +178,13 @@ export const addBulk = mutation({
     classes: v.array(v.string()),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
+
+    let inserted = 0;
+    const duplicates: string[] = [];
 
     for (const classe of args.classes) {
       let duplicateQuery = ctx.db
@@ -142,8 +199,11 @@ export const addBulk = mutation({
         );
       }
       const existing = await duplicateQuery.first();
+
       if (existing) {
-        throw new Error(`Le cours "${args.nom}" existe déjà pour la classe ${classe}.`);
+        // 🟢 FIX : skip silencieux avec comptage au lieu de tout planter
+        duplicates.push(classe);
+        continue;
       }
 
       await ctx.db.insert("cours", {
@@ -154,11 +214,32 @@ export const addBulk = mutation({
         ecoleId: args.ecoleId,
         anneeId: args.anneeId,
       });
+      inserted++;
     }
+
+    // 🟡 Audit
+    if (inserted > 0) {
+      await ctx.db.insert("audit", {
+        userId: args.userId,
+        action: "create_cours_bulk",
+        table: "cours",
+        documentId: args.ecoleId,
+        details: `Cours "${args.nom}" ajouté à ${inserted} classe(s)${
+          duplicates.length ? `, ${duplicates.length} doublon(s) ignoré(s)` : ""
+        }`,
+        date: new Date().toISOString(),
+        ecoleId: args.ecoleId,
+      });
+    }
+
+    return { inserted, duplicates };
   },
 });
 
-// Mettre à jour un cours
+/**
+ * 🟡 FIX : `userId` requis + audit.
+ * 🟢 FIX : refuse la mise à jour si `fields` est vide (évite un patch inutile).
+ */
 export const update = mutation({
   args: {
     id: v.id("cours"),
@@ -166,7 +247,7 @@ export const update = mutation({
     classe: v.optional(v.string()),
     coefficient: v.optional(v.float64()),
     bareme: v.optional(v.float64()),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.id);
@@ -197,36 +278,73 @@ export const update = mutation({
     }
 
     const { id, userId, ...fields } = args;
+
+    // 🟢 FIX : évite un patch vide
+    if (Object.keys(fields).length === 0) {
+      return { success: true, noChange: true };
+    }
+
     await ctx.db.patch(id, fields);
+
+    // 🟡 Audit
+    const changes: string[] = [];
+    if (args.nom && args.nom !== existing.nom)
+      changes.push(`nom: "${existing.nom}" → "${args.nom}"`);
+    if (args.classe && args.classe !== existing.classe)
+      changes.push(`classe: ${existing.classe} → ${args.classe}`);
+    if (args.coefficient !== undefined && args.coefficient !== existing.coefficient)
+      changes.push(`coef: ${existing.coefficient} → ${args.coefficient}`);
+    if (args.bareme !== undefined && args.bareme !== existing.bareme)
+      changes.push(`barème: ${existing.bareme} → ${args.bareme}`);
+
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "update_cours",
+      table: "cours",
+      documentId: args.id,
+      details: changes.length > 0 ? changes.join(" · ") : "Mise à jour",
+      date: new Date().toISOString(),
+      ecoleId: existing.ecoleId,
+    });
+
     return { success: true };
   },
 });
 
-// Supprimer un cours
+/**
+ * 🟡 FIX : `userId` requis + audit systématique.
+ *
+ * ⚠️ Note : la table `notes` ne contient PAS de champ `coursId` dans le
+ * schéma actuel (les notes sont reliées par `matiere`/`cours` en string,
+ * ou pas du tout). Donc on ne peut pas vérifier côté backend l'existence
+ * de notes liées à ce cours. Si tu veux ajouter cette vérification, il
+ * faut d'abord ajouter `coursId: v.optional(v.id("cours"))` à la table
+ * `notes` dans `convex/schema.ts`.
+ */
 export const remove = mutation({
   args: {
     id: v.id("cours"),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const doc = await ctx.db.get(args.id);
-    if (!doc) return;
+    if (!doc) return { success: true, alreadyDeleted: true };
 
     await requireEcoleAdmin(ctx, args.userId, doc.ecoleId);
 
-    // Pas de vérification des notes pour l'instant (le champ classe n'existe pas dans la table notes)
     await ctx.db.delete(args.id);
 
-    if (args.userId) {
-      await ctx.db.insert("audit", {
-        userId: args.userId,
-        action: "delete",
-        table: "cours",
-        documentId: args.id,
-        details: `Suppression du cours ${doc.nom} (classe ${doc.classe})`,
-        date: new Date().toISOString(),
-        ecoleId: doc.ecoleId,
-      });
-    }
+    // 🟡 Audit systématique (avant : conditionnel à `args.userId`)
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "delete_cours",
+      table: "cours",
+      documentId: args.id,
+      details: `Suppression du cours "${doc.nom}" (classe ${doc.classe})`,
+      date: new Date().toISOString(),
+      ecoleId: doc.ecoleId,
+    });
+
+    return { success: true };
   },
 });

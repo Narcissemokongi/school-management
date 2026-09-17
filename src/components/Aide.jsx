@@ -3,7 +3,7 @@ import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   HelpCircle, Users, AlertTriangle, MessageCircle, Phone,
-  Settings, User, ChevronDown, ChevronRight, BookOpen, DollarSign,
+  User, ChevronDown, ChevronRight, BookOpen, DollarSign,
   Search, X, ArrowUp, Shield, UserCheck, Clock, Download,
   School, Calendar, ClipboardList, ChevronsUp, ChevronsDown, Copy,
 } from "lucide-react";
@@ -34,7 +34,10 @@ export function Aide({ user, role, isSuperAdmin }) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // 🟡 FIX : désactive "Tout déplier" si l'utilisateur clique une section
+  // (avant : impossible de replier une section quand allOpen était actif)
   const toggleSection = useCallback((id) => {
+    setAllOpen(false);
     setOpenSection((prev) => (prev === id ? null : id));
   }, []);
 
@@ -44,9 +47,26 @@ export function Aide({ user, role, isSuperAdmin }) {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
-  const copySectionContent = (text) => {
-    navigator.clipboard.writeText(text).then(() => toast.success("Contenu copié !"));
-  };
+  // 🟡 FIX : copie titre + contenu (fallback titre seul si contenu JSX)
+  const copySectionContent = useCallback(async (section) => {
+    try {
+      let rawText = "";
+      // Si le contenu est du JSX, on extrait le texte via un div temporaire
+      if (typeof section.content === "string") {
+        const tmp = document.createElement("div");
+        tmp.innerHTML = section.content;
+        rawText = tmp.textContent || tmp.innerText || "";
+      }
+      const fullText = rawText.trim()
+        ? `${section.title}\n\n${rawText.trim()}`
+        : section.title;
+      await navigator.clipboard.writeText(fullText);
+      toast.success("Contenu copié !");
+    } catch (err) {
+      console.error("[Aide] copy failed:", err);
+      toast.error("Impossible de copier");
+    }
+  }, []);
 
   // ===================== SECTIONS PAR RÔLE =====================
   const sectionsByRole = {
@@ -640,15 +660,26 @@ export function Aide({ user, role, isSuperAdmin }) {
     );
   }, [searchTerm, allSections]);
 
-  // Surligner le texte correspondant à la recherche
+  // 🟡 FIX : deux regex (split global + test non-global) pour éviter le bug
+  // `lastIndex` du regex global entre appels successifs
   const highlightText = (text) => {
     if (!searchTerm.trim()) return text;
     const q = searchTerm.trim();
-    const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
-    const parts = text.split(regex);
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const splitRegex = new RegExp(`(${escaped})`, "gi");
+    const testRegex = new RegExp(`^${escaped}$`, "i");
+    const parts = text.split(splitRegex);
     return parts.map((part, i) =>
-      regex.test(part) ? (
-        <mark key={i} style={{ background: dark ? "#FBBF24" : "#FDE68A", color: "#1E293B", borderRadius: 2, padding: "0 2px" }}>
+      testRegex.test(part) ? (
+        <mark
+          key={i}
+          style={{
+            background: dark ? "#FBBF24" : "#FDE68A",
+            color: "#1E293B",
+            borderRadius: 2,
+            padding: "0 2px",
+          }}
+        >
           {part}
         </mark>
       ) : (
@@ -701,13 +732,14 @@ export function Aide({ user, role, isSuperAdmin }) {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: containerPadding, width: "100%" }}>
+      {/* 🟢 FIX : keyframes préfixés `aide-*` */}
       <style>{`
-        @keyframes fadeIn {
+        @keyframes aide-fade-in {
           from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        .section-enter {
-          animation: fadeIn 0.2s ease;
+        .aide-section-enter {
+          animation: aide-fade-in 0.2s ease;
         }
       `}</style>
 
@@ -792,11 +824,11 @@ export function Aide({ user, role, isSuperAdmin }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 8 : 12 }}>
         {filteredSections.map((section) => {
-          const isOpen = allOpen ? true : openSection === section.id;
+          const isOpen = allOpen || openSection === section.id;
           return (
             <div
               key={section.id}
-              className="section-enter"
+              className="aide-section-enter"
               style={{
                 ...S.card,
                 borderRadius: 12,
@@ -838,10 +870,13 @@ export function Aide({ user, role, isSuperAdmin }) {
               <div
                 id={`section-${section.id}`}
                 style={{
-                  maxHeight: isOpen ? 500 : 0,
+                  // 🟢 FIX : maxHeight plus généreux (avant 500px, tronquait)
+                  maxHeight: isOpen ? 2000 : 0,
                   overflow: "hidden",
                   transition: "max-height 0.3s ease",
-                  padding: isOpen ? `0 ${sectionCardPadding} ${sectionCardPadding} ${sectionContentPaddingLeft}` : `0 ${sectionCardPadding} 0 ${sectionContentPaddingLeft}`,
+                  padding: isOpen
+                    ? `0 ${sectionCardPadding} ${sectionCardPadding} ${sectionContentPaddingLeft}`
+                    : `0 ${sectionCardPadding} 0 ${sectionContentPaddingLeft}`,
                   lineHeight: 1.8,
                 }}
               >
@@ -850,7 +885,8 @@ export function Aide({ user, role, isSuperAdmin }) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      copySectionContent(section.title);
+                      // 🟡 FIX : passe l'objet section complet
+                      copySectionContent(section);
                     }}
                     style={{
                       position: "absolute",
@@ -861,7 +897,8 @@ export function Aide({ user, role, isSuperAdmin }) {
                       cursor: "pointer",
                       color: dark ? "#94A3B8" : "#64748B",
                     }}
-                    title="Copier le titre"
+                    title="Copier le contenu"
+                    aria-label="Copier le contenu de la rubrique"
                   >
                     <Copy size={14} />
                   </button>
@@ -918,7 +955,7 @@ export function Aide({ user, role, isSuperAdmin }) {
             justifyContent: "center",
             cursor: "pointer",
             boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 4px 12px rgba(79,70,229,0.3)",
-            animation: "fadeIn 0.3s ease",
+            animation: "aide-fade-in 0.3s ease",
           }}
           aria-label="Retour en haut de page"
         >

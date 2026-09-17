@@ -1,21 +1,28 @@
+// src/components/GestionEcoles.jsx
 import { useState, useMemo, useCallback, useDeferredValue, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import toast from "react-hot-toast";
-import * as XLSX from "xlsx";
 import {
   Loader, Plus, Edit2, Trash2, Search, X, Check,
   Users, Building2, ArrowRight, ChevronUp, ChevronDown,
   Power, Ban, CheckCircle2, XCircle, LayoutGrid, List,
-  Filter, AlertTriangle, School, Download, CheckSquare, Square,
+  School, Download, CheckSquare, Square,
   ChevronLeft, ChevronRight, UserPlus, UserMinus,
 } from "lucide-react";
 
-// ─── Sous-composants existants (StatutBadge, SearchBar, SortButton, EcoleCard modifiée, etc.) ───
+// ════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+// ─── Sous-composants ───
 const StatutBadge = ({ statut, dark }) => {
   const isActive = statut !== "suspendue";
   const badgeActiveBg = dark ? "#064E3B" : "#D1FAE5";
@@ -51,7 +58,12 @@ const SearchBar = ({ searchTerm, setSearchTerm, textSecondary, cardBg, cardBorde
       style={{ border: "none", outline: "none", background: "transparent", color: textPrimary, fontSize: isMobile ? 16 : 14, width: "100%" }}
     />
     {searchTerm && (
-      <button onClick={() => setSearchTerm("")} aria-label="Effacer la recherche" style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}>
+      <button
+        type="button"
+        onClick={() => setSearchTerm("")}
+        aria-label="Effacer la recherche"
+        style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}
+      >
         <X size={16} />
       </button>
     )}
@@ -62,6 +74,7 @@ const SortButton = ({ label, field, currentSort, currentOrder, onClick, activeBg
   const isActive = currentSort === field;
   return (
     <button
+      type="button"
       onClick={() => onClick(field)}
       aria-label={`Trier par ${label}`}
       style={{
@@ -70,7 +83,7 @@ const SortButton = ({ label, field, currentSort, currentOrder, onClick, activeBg
         background: isActive ? activeBg : cardBg,
         color: isActive ? activeText : textSecondary,
         border: `1px solid ${cardBorder}`, borderRadius: 8,
-        cursor: "pointer", fontSize: isMobile ? 13 : 13, fontWeight: isActive ? 600 : 400,
+        cursor: "pointer", fontSize: 13, fontWeight: isActive ? 600 : 400,
         flex: isMobile ? 1 : "none",
       }}
     >
@@ -87,20 +100,28 @@ const EcoleCard = ({
   accentColor, successColor, warningColor, dangerColor, selected, onToggleSelect, isMobile,
 }) => {
   const isEditing = editingId === ecole._id;
+  // ✅ FIX — hover via state au lieu de mutation DOM
+  const [hovered, setHovered] = useState(false);
+  const noMotion = prefersReducedMotion();
+
   return (
     <div
+      onMouseEnter={() => !noMotion && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         background: cardBg, borderRadius: 16, padding: isMobile ? 14 : 20,
-        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+        boxShadow: hovered
+          ? (dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.1)")
+          : (dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)"),
         border: `1px solid ${selected ? accentColor : cardBorder}`,
-        transition: "box-shadow 0.2s, transform 0.1s, border-color 0.2s",
+        transition: noMotion ? "none" : "box-shadow 0.2s, transform 0.1s, border-color 0.2s",
+        transform: hovered && !noMotion ? "translateY(-2px)" : "translateY(0)",
         display: "flex", flexDirection: "column", gap: 12,
         position: "relative",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)"; e.currentTarget.style.transform = "translateY(0)"; }}
     >
       <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); onToggleSelect(ecole._id); }}
         style={{
           position: "absolute", top: 10, right: 10,
@@ -126,10 +147,20 @@ const EcoleCard = ({
             autoFocus
             onKeyDown={(e) => { if (e.key === "Enter") handleUpdate(ecole._id); if (e.key === "Escape") cancelEdit(); }}
           />
-          <button onClick={(e) => { e.stopPropagation(); handleUpdate(ecole._id); }} aria-label="Enregistrer" style={{ background: successColor, color: "white", border: "none", borderRadius: 8, padding: 8, cursor: "pointer" }}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleUpdate(ecole._id); }}
+            aria-label="Enregistrer"
+            style={{ background: successColor, color: "white", border: "none", borderRadius: 8, padding: 8, cursor: "pointer" }}
+          >
             <Check size={16} />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} aria-label="Annuler" style={{ background: "none", border: "none", color: textSecondary, cursor: "pointer", padding: 8, borderRadius: 8 }}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
+            aria-label="Annuler"
+            style={{ background: "none", border: "none", color: textSecondary, cursor: "pointer", padding: 8, borderRadius: 8 }}
+          >
             <X size={16} />
           </button>
         </div>
@@ -156,6 +187,7 @@ const EcoleCard = ({
 
           <div style={{ display: "flex", gap: 8, marginTop: "auto", flexDirection: isMobile ? "column" : "row" }}>
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); onSelectEcole(ecole._id); }}
               aria-label={`Ouvrir ${ecole.nom}`}
               style={{ flex: 1, padding: isMobile ? "12px 12px" : "8px 12px", background: accentColor, color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
@@ -163,25 +195,34 @@ const EcoleCard = ({
               Ouvrir <ArrowRight size={14} />
             </button>
             <div style={{ display: "flex", gap: 8, justifyContent: isMobile ? "space-between" : "flex-start" }}>
-              <button onClick={(e) => { e.stopPropagation(); startEdit(ecole); }} aria-label="Modifier" title="Modifier" style={{ background: "transparent", border: "none", color: accentColor, cursor: "pointer", padding: 8, borderRadius: 8 }}>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); startEdit(ecole); }}
+                aria-label="Modifier"
+                title="Modifier"
+                style={{ background: "transparent", border: "none", color: accentColor, cursor: "pointer", padding: 8, borderRadius: 8 }}
+              >
                 <Edit2 size={16} />
               </button>
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); handleToggleStatus(ecole); }}
                 disabled={togglingId === ecole._id}
                 aria-label={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
                 title={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
                 style={{ background: "transparent", border: "none", color: ecole.statut === "suspendue" ? successColor : warningColor, cursor: togglingId === ecole._id ? "not-allowed" : "pointer", padding: 8, borderRadius: 8, opacity: togglingId === ecole._id ? 0.6 : 1 }}
               >
-                {togglingId === ecole._id ? <Loader size={16} className="animate-spin" /> : ecole.statut === "suspendue" ? <Power size={16} /> : <Ban size={16} />}
+                {togglingId === ecole._id ? <Loader size={16} className="ge-spin" /> : ecole.statut === "suspendue" ? <Power size={16} /> : <Ban size={16} />}
               </button>
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); handleDelete(ecole); }}
                 disabled={deletingId === ecole._id}
-                aria-label="Supprimer" title="Supprimer"
+                aria-label="Supprimer"
+                title="Supprimer"
                 style={{ background: "transparent", border: "none", color: dangerColor, cursor: deletingId === ecole._id ? "not-allowed" : "pointer", padding: 8, borderRadius: 8, opacity: deletingId === ecole._id ? 0.6 : 1 }}
               >
-                {deletingId === ecole._id ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                {deletingId === ecole._id ? <Loader size={16} className="ge-spin" /> : <Trash2 size={16} />}
               </button>
             </div>
           </div>
@@ -212,6 +253,7 @@ const EcoleListView = ({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: isMobile ? "100%" : 200 }}>
           <button
+            type="button"
             onClick={() => onToggleSelect(ecole._id)}
             style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: selectedIds.has(ecole._id) ? accentColor : textSecondary }}
             aria-label={selectedIds.has(ecole._id) ? "Désélectionner" : "Sélectionner"}
@@ -227,28 +269,41 @@ const EcoleListView = ({
           <span style={{ color: textSecondary, fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
             <Users size={14} /> {ecole.userCount ?? 0}
           </span>
-          <button onClick={() => onSelectEcole(ecole._id)} style={{ background: accentColor, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+          <button
+            type="button"
+            onClick={() => onSelectEcole(ecole._id)}
+            style={{ background: accentColor, color: "white", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+          >
             Ouvrir
           </button>
-          <button onClick={() => startEdit(ecole)} aria-label="Modifier" title="Modifier" style={{ background: "none", border: "none", color: accentColor, cursor: "pointer", padding: 4 }}>
+          <button
+            type="button"
+            onClick={() => startEdit(ecole)}
+            aria-label="Modifier"
+            title="Modifier"
+            style={{ background: "none", border: "none", color: accentColor, cursor: "pointer", padding: 4 }}
+          >
             <Edit2 size={16} />
           </button>
           <button
+            type="button"
             onClick={() => handleToggleStatus(ecole)}
             disabled={togglingId === ecole._id}
             aria-label={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
             title={ecole.statut === "suspendue" ? "Activer" : "Suspendre"}
             style={{ background: "none", border: "none", color: ecole.statut === "suspendue" ? successColor : warningColor, cursor: togglingId === ecole._id ? "not-allowed" : "pointer", padding: 4, opacity: togglingId === ecole._id ? 0.6 : 1 }}
           >
-            {togglingId === ecole._id ? <Loader size={16} className="animate-spin" /> : ecole.statut === "suspendue" ? <Power size={16} /> : <Ban size={16} />}
+            {togglingId === ecole._id ? <Loader size={16} className="ge-spin" /> : ecole.statut === "suspendue" ? <Power size={16} /> : <Ban size={16} />}
           </button>
           <button
+            type="button"
             onClick={() => handleDelete(ecole)}
             disabled={deletingId === ecole._id}
-            aria-label="Supprimer" title="Supprimer"
+            aria-label="Supprimer"
+            title="Supprimer"
             style={{ background: "none", border: "none", color: dangerColor, cursor: deletingId === ecole._id ? "not-allowed" : "pointer", padding: 4, opacity: deletingId === ecole._id ? 0.6 : 1 }}
           >
-            {deletingId === ecole._id ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            {deletingId === ecole._id ? <Loader size={16} className="ge-spin" /> : <Trash2 size={16} />}
           </button>
         </div>
         {editingId === ecole._id && (
@@ -256,13 +311,24 @@ const EcoleListView = ({
             <input
               value={editNom}
               onChange={(e) => setEditNom(e.target.value)}
+              aria-label="Modifier le nom de l'école"
               style={{ flex: 1, padding: 6, borderRadius: 6, border: `1px solid ${accentColor}`, background: inputBg, color: textPrimary }}
               autoFocus
             />
-            <button onClick={() => handleUpdate(ecole._id)} style={{ background: successColor, color: "white", border: "none", borderRadius: 6, padding: 6, cursor: "pointer" }}>
+            <button
+              type="button"
+              onClick={() => handleUpdate(ecole._id)}
+              aria-label="Enregistrer"
+              style={{ background: successColor, color: "white", border: "none", borderRadius: 6, padding: 6, cursor: "pointer" }}
+            >
               <Check size={14} />
             </button>
-            <button onClick={cancelEdit} style={{ background: "none", border: "none", color: textSecondary, cursor: "pointer" }}>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              aria-label="Annuler"
+              style={{ background: "none", border: "none", color: textSecondary, cursor: "pointer" }}
+            >
               <X size={14} />
             </button>
           </div>
@@ -272,13 +338,14 @@ const EcoleListView = ({
   </div>
 );
 
-const PaginationControls = ({ currentPage, totalPages, onPageChange, textPrimary, textSecondary, borderColor, isMobile }) => (
+const PaginationControls = ({ currentPage, totalPages, onPageChange, textPrimary, textSecondary, borderColor }) => (
   <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16, width: "100%" }}>
     <button
+      type="button"
       onClick={() => onPageChange(Math.max(1, currentPage - 1))}
       disabled={currentPage === 1}
       aria-label="Page précédente"
-      style={{ padding: isMobile ? "8px 12px" : "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === 1 ? "not-allowed" : "pointer", color: textPrimary }}
+      style={{ padding: "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === 1 ? "not-allowed" : "pointer", color: textPrimary }}
     >
       <ChevronLeft size={16} />
     </button>
@@ -286,22 +353,46 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange, textPrimary
       Page {currentPage} / {totalPages}
     </span>
     <button
+      type="button"
       onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
       disabled={currentPage === totalPages}
       aria-label="Page suivante"
-      style={{ padding: isMobile ? "8px 12px" : "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === totalPages ? "not-allowed" : "pointer", color: textPrimary }}
+      style={{ padding: "8px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "transparent", cursor: currentPage === totalPages ? "not-allowed" : "pointer", color: textPrimary }}
     >
       <ChevronRight size={16} />
     </button>
   </div>
 );
 
+// ─── Helper : batch les mutations + rapport réel succès/échecs ───
+const runInBatchesWithReport = async (items, fn, size = 5) => {
+  let succeeded = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (let i = 0; i < items.length; i += size) {
+    const batch = items.slice(i, i + size);
+    const results = await Promise.allSettled(batch.map(fn));
+    for (const r of results) {
+      if (r.status === "fulfilled") succeeded++;
+      else {
+        failed++;
+        errors.push(r.reason?.message ?? "Erreur inconnue");
+      }
+    }
+  }
+
+  return { succeeded, failed, errors };
+};
+
 export function GestionEcoles({ onSelectEcole, user }) {
   const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // <-- Hook mobile
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
-  // États existants
+  // ✅ FIX — userId extrait une fois
+  const currentUserId = user?._id;
+
   const [nouveauNom, setNouveauNom] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [adding, setAdding] = useState(false);
@@ -315,16 +406,18 @@ export function GestionEcoles({ onSelectEcole, user }) {
   const [filterStatut, setFilterStatut] = useState("all");
   const [viewMode, setViewMode] = useState("grid");
 
-  // Nouveaux états
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
-  const pageSize = 10;
+  const PAGE_SIZE = 10;
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
-  const ecolesQuery = useQuery(api.ecoles.listWithUserCount);
-  const ecoles = ecolesQuery ?? [];
+  const ecolesQuery = useQuery(
+    api.ecoles.listWithUserCount,
+    currentUserId ? { userId: currentUserId } : "skip"
+  );
+  const ecoles = useMemo(() => ecolesQuery ?? [], [ecolesQuery]);
   const isLoading = ecolesQuery === undefined;
 
   const addEcole = useMutation(api.ecoles.add);
@@ -341,18 +434,22 @@ export function GestionEcoles({ onSelectEcole, user }) {
     return { total, actives, suspendues };
   }, [ecoles]);
 
-  // Filtrage et tri
+  // ✅ FIX — guards sur `e.nom`
   const ecolesTriees = useMemo(() => {
     let filtered = ecoles;
     if (filterStatut === "active") filtered = filtered.filter((e) => e.statut !== "suspendue");
     else if (filterStatut === "suspendue") filtered = filtered.filter((e) => e.statut === "suspendue");
     if (deferredSearchTerm.trim()) {
       const term = deferredSearchTerm.toLowerCase();
-      filtered = filtered.filter((e) => e.nom.toLowerCase().includes(term));
+      filtered = filtered.filter((e) => (e.nom ?? "").toLowerCase().includes(term));
     }
     const sorted = [...filtered].sort((a, b) => {
       if (sortBy === "nom") {
-        return sortOrder === "asc" ? a.nom.localeCompare(b.nom, undefined, { sensitivity: "base" }) : b.nom.localeCompare(a.nom, undefined, { sensitivity: "base" });
+        const an = a.nom ?? "";
+        const bn = b.nom ?? "";
+        return sortOrder === "asc"
+          ? an.localeCompare(bn, undefined, { sensitivity: "base" })
+          : bn.localeCompare(an, undefined, { sensitivity: "base" });
       } else if (sortBy === "users") {
         const aUsers = a.userCount ?? 0;
         const bUsers = b.userCount ?? 0;
@@ -368,13 +465,17 @@ export function GestionEcoles({ onSelectEcole, user }) {
   }, [ecoles, filterStatut, deferredSearchTerm, sortBy, sortOrder]);
 
   // Pagination
-  const totalPages = Math.ceil(ecolesTriees.length / pageSize);
+  const totalPages = Math.ceil(ecolesTriees.length / PAGE_SIZE);
   const safeCurrentPage = Math.min(currentPage, totalPages || 1);
-  const paginatedEcoles = ecolesTriees.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+  const paginatedEcoles = useMemo(
+    () => ecolesTriees.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE),
+    [ecolesTriees, safeCurrentPage]
+  );
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [deferredSearchTerm, filterStatut]);
+    setSelectedIds(new Set());
+  }, [deferredSearchTerm, filterStatut, sortBy, sortOrder]);
 
   const toggleSelectOne = useCallback((id) => {
     setSelectedIds((prev) => {
@@ -385,69 +486,80 @@ export function GestionEcoles({ onSelectEcole, user }) {
     });
   }, []);
 
-  const toggleSelectAll = useCallback(() => {
-    setSelectedIds((prev) => {
-      const allVisibleIds = paginatedEcoles.map((e) => e._id);
-      const allSelected = allVisibleIds.every((id) => prev.has(id));
-      const next = new Set(prev);
-      if (allSelected) {
-        allVisibleIds.forEach((id) => next.delete(id));
-      } else {
-        allVisibleIds.forEach((id) => next.add(id));
-      }
-      return next;
-    });
-  }, [paginatedEcoles]);
-
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-  const bulkSuspend = async () => {
+  // ✅ FIX — actions groupées avec rapport réel
+  const bulkSuspend = useCallback(async () => {
     if (selectedIds.size === 0) return;
+    if (!currentUserId) { toast.error("Session invalide."); return; }
     const ok = await confirm("Suspendre les écoles sélectionnées", `Voulez-vous suspendre ${selectedIds.size} école(s) ?`);
     if (!ok) return;
     setBulkProcessing(true);
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => suspendEcole({ ecoleId: id, userId: user._id })));
-      toast.success(`${selectedIds.size} école(s) suspendue(s)`);
+      const { succeeded, failed, errors } = await runInBatchesWithReport(
+        Array.from(selectedIds),
+        (id) => suspendEcole({ ecoleId: id, userId: currentUserId })
+      );
+      if (failed === 0) toast.success(`${succeeded} école(s) suspendue(s)`);
+      else if (succeeded === 0) toast.error(`Aucune école suspendue (${failed} échec(s))`);
+      else toast.error(`${succeeded} réussie(s), ${failed} échec(s) : ${errors[0]}`);
       clearSelection();
     } catch (err) {
-      toast.error(err.message);
+      console.error("[GestionEcoles] bulkSuspend failed:", err);
+      toast.error("Impossible de suspendre les écoles");
     } finally {
       setBulkProcessing(false);
     }
-  };
+  }, [selectedIds, currentUserId, confirm, suspendEcole, clearSelection]);
 
-  const bulkActivate = async () => {
+  const bulkActivate = useCallback(async () => {
     if (selectedIds.size === 0) return;
+    if (!currentUserId) { toast.error("Session invalide."); return; }
     const ok = await confirm("Activer les écoles sélectionnées", `Voulez-vous activer ${selectedIds.size} école(s) ?`);
     if (!ok) return;
     setBulkProcessing(true);
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => reactiverEcole({ ecoleId: id, userId: user._id })));
-      toast.success(`${selectedIds.size} école(s) activée(s)`);
+      const { succeeded, failed, errors } = await runInBatchesWithReport(
+        Array.from(selectedIds),
+        (id) => reactiverEcole({ ecoleId: id, userId: currentUserId })
+      );
+      if (failed === 0) toast.success(`${succeeded} école(s) activée(s)`);
+      else if (succeeded === 0) toast.error(`Aucune école activée (${failed} échec(s))`);
+      else toast.error(`${succeeded} réussie(s), ${failed} échec(s) : ${errors[0]}`);
       clearSelection();
     } catch (err) {
-      toast.error(err.message);
+      console.error("[GestionEcoles] bulkActivate failed:", err);
+      toast.error("Impossible d'activer les écoles");
     } finally {
       setBulkProcessing(false);
     }
-  };
+  }, [selectedIds, currentUserId, confirm, reactiverEcole, clearSelection]);
 
-  const bulkDelete = async () => {
+  const bulkDelete = useCallback(async () => {
     if (selectedIds.size === 0) return;
-    const ok = await confirm("Supprimer les écoles sélectionnées", `⚠️ Attention : ${selectedIds.size} école(s) et leurs utilisateurs associés seront supprimés définitivement. Cette action est irréversible.`);
+    if (!currentUserId) { toast.error("Session invalide."); return; }
+    const ok = await confirm(
+      "Supprimer les écoles sélectionnées",
+      `⚠️ Attention : ${selectedIds.size} école(s) et leurs utilisateurs associés seront supprimés définitivement. Cette action est irréversible.`
+    );
     if (!ok) return;
     setBulkProcessing(true);
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => removeEcole({ id, userId: user._id })));
-      toast.success(`${selectedIds.size} école(s) supprimée(s)`);
+      const { succeeded, failed, errors } = await runInBatchesWithReport(
+        Array.from(selectedIds),
+        (id) => removeEcole({ ecoleId: id, userId: currentUserId })
+      );
+      if (failed === 0) toast.success(`${succeeded} école(s) supprimée(s)`);
+      else if (succeeded === 0) toast.error(`Aucune école supprimée (${failed} échec(s))`);
+      else toast.error(`${succeeded} réussie(s), ${failed} échec(s) : ${errors[0]}`);
       clearSelection();
     } catch (err) {
-      toast.error(err.message);
+      console.error("[GestionEcoles] bulkDelete failed:", err);
+      toast.error("Impossible de supprimer les écoles");
     } finally {
       setBulkProcessing(false);
     }
-  };
+  }, [selectedIds, currentUserId, confirm, removeEcole, clearSelection]);
 
   const toggleSort = useCallback((field) => {
     setSortBy((prevField) => {
@@ -462,74 +574,112 @@ export function GestionEcoles({ onSelectEcole, user }) {
 
   const handleAdd = useCallback(async (e) => {
     e.preventDefault();
+    if (!currentUserId) { toast.error("Session invalide."); return; }
     if (!nouveauNom.trim()) { toast.error("Veuillez saisir un nom d'école."); return; }
     setAdding(true);
     try {
-      await addEcole({ nom: nouveauNom.trim(), userId: user._id });
+      await addEcole({ nom: nouveauNom.trim(), userId: currentUserId });
       setNouveauNom("");
       setSuccess(true);
       toast.success("École créée avec succès");
       setTimeout(() => setSuccess(false), 2000);
     } catch (err) {
-      toast.error(err.message || "Erreur lors de la création");
-    } finally { setAdding(false); }
-  }, [addEcole, nouveauNom, user._id]);
+      console.error("[GestionEcoles] add failed:", err);
+      toast.error(err?.message ?? "Impossible de créer l'école");
+    } finally {
+      setAdding(false);
+    }
+  }, [addEcole, nouveauNom, currentUserId]);
 
-  const startEdit = useCallback((ecole) => { setEditingId(ecole._id); setEditNom(ecole.nom); }, []);
-  const cancelEdit = useCallback(() => { setEditingId(null); setEditNom(""); }, []);
+  const startEdit = useCallback((ecole) => {
+    setEditingId(ecole._id);
+    setEditNom(ecole.nom);
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null);
+    setEditNom("");
+  }, []);
 
   const handleUpdate = useCallback(async (id) => {
+    if (!currentUserId) { toast.error("Session invalide."); return; }
     if (!editNom.trim()) { toast.error("Le nom ne peut pas être vide"); return; }
     try {
-      await updateEcole({ ecoleId: id, nom: editNom.trim(), userId: user._id });
+      await updateEcole({ ecoleId: id, nom: editNom.trim(), userId: currentUserId });
       toast.success("École mise à jour");
-      setEditingId(null); setEditNom("");
+      setEditingId(null);
+      setEditNom("");
     } catch (err) {
-      toast.error(err.message || "Erreur lors de la mise à jour");
+      console.error("[GestionEcoles] update failed:", err);
+      toast.error(err?.message ?? "Impossible de mettre à jour l'école");
     }
-  }, [editNom, updateEcole, user._id]);
+  }, [editNom, updateEcole, currentUserId]);
 
   const handleToggleStatus = useCallback(async (ecole) => {
+    if (!currentUserId) { toast.error("Session invalide."); return; }
     const nouveauStatut = ecole.statut === "suspendue" ? "active" : "suspendue";
     const action = nouveauStatut === "suspendue" ? "suspendre" : "activer";
-    const ok = await confirm(nouveauStatut === "suspendue" ? "Suspendre l'école" : "Activer l'école", `Voulez-vous vraiment ${action} l'école "${ecole.nom}" ?`);
+    const ok = await confirm(
+      nouveauStatut === "suspendue" ? "Suspendre l'école" : "Activer l'école",
+      `Voulez-vous vraiment ${action} l'école "${ecole.nom}" ?`
+    );
     if (!ok) return;
     setTogglingId(ecole._id);
     try {
-      if (nouveauStatut === "suspendue") await suspendEcole({ ecoleId: ecole._id, userId: user._id });
-      else await reactiverEcole({ ecoleId: ecole._id, userId: user._id });
+      if (nouveauStatut === "suspendue") await suspendEcole({ ecoleId: ecole._id, userId: currentUserId });
+      else await reactiverEcole({ ecoleId: ecole._id, userId: currentUserId });
       toast.success(`École ${action}`);
     } catch (err) {
-      toast.error(err.message || "Erreur lors du changement de statut");
-    } finally { setTogglingId(null); }
-  }, [confirm, suspendEcole, reactiverEcole, user._id]);
+      console.error("[GestionEcoles] toggleStatus failed:", err);
+      toast.error(err?.message ?? "Impossible de changer le statut de l'école");
+    } finally {
+      setTogglingId(null);
+    }
+  }, [confirm, suspendEcole, reactiverEcole, currentUserId]);
 
   const handleDelete = useCallback(async (ecole) => {
+    if (!currentUserId) { toast.error("Session invalide."); return; }
     const userCount = ecole.userCount ?? 0;
-    const ok = await confirm("Supprimer l'école", `Voulez-vous vraiment supprimer "${ecole.nom}" ?\n${userCount > 0 ? `⚠️ ${userCount} utilisateur(s) associé(s) seront également supprimés.` : "Cette école n'a aucun utilisateur associé."}\nCette action est irréversible.`);
+    const ok = await confirm(
+      "Supprimer l'école",
+      `Voulez-vous vraiment supprimer "${ecole.nom}" ?\n${
+        userCount > 0
+          ? `⚠️ ${userCount} utilisateur(s) associé(s) seront également supprimés.`
+          : "Cette école n'a aucun utilisateur associé."
+      }\nCette action est irréversible.`
+    );
     if (!ok) return;
     setDeletingId(ecole._id);
     try {
-      await removeEcole({ id: ecole._id, userId: user._id });
+      await removeEcole({ ecoleId: ecole._id, userId: currentUserId });
       toast.success("École supprimée");
     } catch (err) {
-      toast.error(err.message || "Erreur lors de la suppression");
-    } finally { setDeletingId(null); }
-  }, [confirm, removeEcole, user._id]);
+      console.error("[GestionEcoles] delete failed:", err);
+      toast.error(err?.message ?? "Impossible de supprimer l'école");
+    } finally {
+      setDeletingId(null);
+    }
+  }, [confirm, removeEcole, currentUserId]);
 
-  const handleExportExcel = useCallback(() => {
+  const handleExportExcel = useCallback(async () => {
     if (ecolesTriees.length === 0) { toast.error("Aucune donnée à exporter"); return; }
-    const data = ecolesTriees.map((e) => ({
-      "Nom": e.nom,
-      "Code": e.code || "N/A",
-      "Statut": e.statut === "suspendue" ? "Suspendue" : "Active",
-      "Utilisateurs": e.userCount ?? 0,
-    }));
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Écoles");
-    XLSX.writeFile(workbook, "ecoles.xlsx");
-    toast.success("Export Excel généré");
+    try {
+      const XLSX = await import("xlsx");
+      const data = ecolesTriees.map((e) => ({
+        "Nom": e.nom,
+        "Code": e.code || "N/A",
+        "Statut": e.statut === "suspendue" ? "Suspendue" : "Active",
+        "Utilisateurs": e.userCount ?? 0,
+      }));
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Écoles");
+      XLSX.writeFile(workbook, "ecoles.xlsx");
+      toast.success("Export Excel généré");
+    } catch (err) {
+      console.error("[GestionEcoles] export failed:", err);
+      toast.error("Impossible de générer l'export");
+    }
   }, [ecolesTriees]);
 
   // Couleurs
@@ -548,7 +698,13 @@ export function GestionEcoles({ onSelectEcole, user }) {
 
   return (
     <div style={{ width: "100%", maxWidth: "100%", margin: 0, padding: isMobile ? "16px 12px" : 0 }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+      <style>{`
+        @keyframes ge-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .ge-spin { animation: ge-spin 1s linear infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .ge-spin { animation: none !important; }
+        }
+      `}</style>
 
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ ...S.h2, color: textPrimary, fontSize: isMobile ? 20 : 24 }}>Gestion des écoles</h2>
@@ -556,15 +712,27 @@ export function GestionEcoles({ onSelectEcole, user }) {
           {isLoading ? "Chargement..." : `${ecolesTriees.length} école(s) affichée(s) sur ${stats.total} au total`}
         </p>
         <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
-          <span style={{ color: textSecondary, fontSize: 13 }}><School size={14} style={{ verticalAlign: "middle", marginRight: 4 }} /> Total: {stats.total}</span>
-          <span style={{ color: successColor, fontSize: 13 }}><CheckCircle2 size={14} style={{ verticalAlign: "middle", marginRight: 4 }} /> Actives: {stats.actives}</span>
-          <span style={{ color: warningColor, fontSize: 13 }}><XCircle size={14} style={{ verticalAlign: "middle", marginRight: 4 }} /> Suspendues: {stats.suspendues}</span>
+          <span style={{ color: textSecondary, fontSize: 13 }}>
+            <School size={14} style={{ verticalAlign: "middle", marginRight: 4 }} /> Total: {stats.total}
+          </span>
+          <span style={{ color: successColor, fontSize: 13 }}>
+            <CheckCircle2 size={14} style={{ verticalAlign: "middle", marginRight: 4 }} /> Actives: {stats.actives}
+          </span>
+          <span style={{ color: warningColor, fontSize: 13 }}>
+            <XCircle size={14} style={{ verticalAlign: "middle", marginRight: 4 }} /> Suspendues: {stats.suspendues}
+          </span>
         </div>
       </div>
 
       {/* Formulaire de création */}
       <div style={{ ...S.card, background: cardBg, border: `1px solid ${cardBorder}`, transition: "background-color 0.3s", padding: isMobile ? 14 : 20 }}>
-        <div style={{ fontWeight: 700, marginBottom: 12, color: accentColor, fontSize: isMobile ? 15 : 16 }}>➕ Créer une nouvelle école</div>
+        {/* ✅ FIX — emoji ➕ retiré, icône lucide à la place */}
+        <div style={{
+          fontWeight: 700, marginBottom: 12, color: accentColor, fontSize: isMobile ? 15 : 16,
+          display: "flex", alignItems: "center", gap: 6,
+        }}>
+          <Plus size={16} /> Créer une nouvelle école
+        </div>
         <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
           <input
             style={{ ...S.input, marginBottom: 0, flex: 1, minWidth: isMobile ? "100%" : 180, background: inputBg, border: `1px solid ${cardBorder}`, color: textPrimary, padding: isMobile ? "12px 14px" : "10px 14px", fontSize: isMobile ? 16 : 14 }}
@@ -579,8 +747,15 @@ export function GestionEcoles({ onSelectEcole, user }) {
             disabled={adding || !nouveauNom.trim()}
             style={{ ...S.btn(buttonBg), width: isMobile ? "100%" : "auto", padding: isMobile ? "12px 20px" : "10px 20px", cursor: adding ? "not-allowed" : "pointer", opacity: adding ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: isMobile ? 16 : 14 }}
           >
-            {adding ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
-            {adding ? "Création..." : success ? "✅ Créée" : "Créer"}
+            {/* ✅ FIX — emoji ✅ retiré, icône lucide à la place */}
+            {adding ? (
+              <Loader size={16} className="ge-spin" />
+            ) : success ? (
+              <CheckCircle2 size={16} />
+            ) : (
+              <Plus size={16} />
+            )}
+            {adding ? "Création..." : success ? "Créée" : "Créer"}
           </button>
         </form>
       </div>
@@ -593,6 +768,7 @@ export function GestionEcoles({ onSelectEcole, user }) {
           {[{ value: "all", label: "Toutes" }, { value: "active", label: "Actives" }, { value: "suspendue", label: "Suspendues" }].map((f) => (
             <button
               key={f.value}
+              type="button"
               onClick={() => setFilterStatut(f.value)}
               aria-pressed={filterStatut === f.value}
               style={{ padding: isMobile ? "10px 12px" : "6px 12px", borderRadius: 20, border: `1px solid ${cardBorder}`, background: filterStatut === f.value ? accentColor : cardBg, color: filterStatut === f.value ? "white" : textSecondary, cursor: "pointer", fontSize: isMobile ? 14 : 12, fontWeight: filterStatut === f.value ? 600 : 400, width: isMobile ? "100%" : "auto", textAlign: "center" }}
@@ -609,13 +785,31 @@ export function GestionEcoles({ onSelectEcole, user }) {
         </div>
 
         <div style={{ display: "flex", gap: 4, marginLeft: isMobile ? "0" : "auto", justifyContent: isMobile ? "space-between" : "flex-start" }}>
-          <button onClick={() => setViewMode("grid")} aria-label="Vue en grille" title="Vue en grille" style={{ padding: 8, background: viewMode === "grid" ? accentColor : cardBg, color: viewMode === "grid" ? "white" : textSecondary, border: `1px solid ${cardBorder}`, borderRadius: 8, cursor: "pointer" }}>
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            aria-label="Vue en grille"
+            title="Vue en grille"
+            style={{ padding: 8, background: viewMode === "grid" ? accentColor : cardBg, color: viewMode === "grid" ? "white" : textSecondary, border: `1px solid ${cardBorder}`, borderRadius: 8, cursor: "pointer" }}
+          >
             <LayoutGrid size={16} />
           </button>
-          <button onClick={() => setViewMode("list")} aria-label="Vue en liste" title="Vue en liste" style={{ padding: 8, background: viewMode === "list" ? accentColor : cardBg, color: viewMode === "list" ? "white" : textSecondary, border: `1px solid ${cardBorder}`, borderRadius: 8, cursor: "pointer" }}>
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            aria-label="Vue en liste"
+            title="Vue en liste"
+            style={{ padding: 8, background: viewMode === "list" ? accentColor : cardBg, color: viewMode === "list" ? "white" : textSecondary, border: `1px solid ${cardBorder}`, borderRadius: 8, cursor: "pointer" }}
+          >
             <List size={16} />
           </button>
-          <button onClick={handleExportExcel} aria-label="Exporter en Excel" title="Exporter en Excel" style={{ padding: 8, background: cardBg, color: textSecondary, border: `1px solid ${cardBorder}`, borderRadius: 8, cursor: "pointer" }}>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            aria-label="Exporter en Excel"
+            title="Exporter en Excel"
+            style={{ padding: 8, background: cardBg, color: textSecondary, border: `1px solid ${cardBorder}`, borderRadius: 8, cursor: "pointer" }}
+          >
             <Download size={16} />
           </button>
         </div>
@@ -625,16 +819,36 @@ export function GestionEcoles({ onSelectEcole, user }) {
       {selectedIds.size > 0 && (
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16, flexDirection: isMobile ? "column" : "row", width: "100%" }}>
           <span style={{ fontSize: 13, color: textSecondary }}>{selectedIds.size} sélectionnée(s)</span>
-          <button onClick={bulkActivate} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#10B981", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}>
+          <button
+            type="button"
+            onClick={bulkActivate}
+            disabled={bulkProcessing}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#10B981", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}
+          >
             <UserPlus size={14} /> Activer
           </button>
-          <button onClick={bulkSuspend} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#F59E0B", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}>
+          <button
+            type="button"
+            onClick={bulkSuspend}
+            disabled={bulkProcessing}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#F59E0B", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}
+          >
             <UserMinus size={14} /> Suspendre
           </button>
-          <button onClick={bulkDelete} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#EF4444", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}>
+          <button
+            type="button"
+            onClick={bulkDelete}
+            disabled={bulkProcessing}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "#EF4444", color: "white", border: "none", borderRadius: 6, cursor: bulkProcessing ? "not-allowed" : "pointer", fontSize: 13, width: isMobile ? "100%" : "auto" }}
+          >
             <Trash2 size={14} /> Supprimer
           </button>
-          <button onClick={clearSelection} disabled={bulkProcessing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "transparent", border: `1px solid ${cardBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 13, color: textPrimary, width: isMobile ? "100%" : "auto" }}>
+          <button
+            type="button"
+            onClick={clearSelection}
+            disabled={bulkProcessing}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: isMobile ? "10px 12px" : "6px 12px", background: "transparent", border: `1px solid ${cardBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 13, color: textPrimary, width: isMobile ? "100%" : "auto" }}
+          >
             <X size={14} /> Annuler
           </button>
         </div>
@@ -643,11 +857,13 @@ export function GestionEcoles({ onSelectEcole, user }) {
       {/* Contenu principal */}
       {isLoading ? (
         <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-          <Loader size={28} className="animate-spin" />
+          <Loader size={28} className="ge-spin" />
         </div>
       ) : ecolesTriees.length === 0 ? (
         <div style={{ marginTop: 12, background: cardBg, border: `1px solid ${cardBorder}`, textAlign: "center", color: textSecondary, padding: 40, borderRadius: 12 }}>
-          {searchTerm || filterStatut !== "all" ? "Aucune école ne correspond à vos critères." : "Aucune école disponible. Créez votre première école ci-dessus."}
+          {searchTerm || filterStatut !== "all"
+            ? "Aucune école ne correspond à vos critères."
+            : "Aucune école disponible. Créez votre première école ci-dessus."}
         </div>
       ) : viewMode === "grid" ? (
         <>
@@ -677,15 +893,13 @@ export function GestionEcoles({ onSelectEcole, user }) {
                 successColor={successColor}
                 warningColor={warningColor}
                 dangerColor={dangerColor}
-                badgeActiveBg={badgeActiveBg}
-                badgeActiveText={badgeActiveText}
                 selected={selectedIds.has(ecole._id)}
                 onToggleSelect={toggleSelectOne}
                 isMobile={isMobile}
               />
             ))}
           </div>
-          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} isMobile={isMobile} />
+          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} />
         </>
       ) : (
         <>
@@ -716,7 +930,7 @@ export function GestionEcoles({ onSelectEcole, user }) {
             onToggleSelect={toggleSelectOne}
             isMobile={isMobile}
           />
-          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} isMobile={isMobile} />
+          <PaginationControls currentPage={safeCurrentPage} totalPages={totalPages} onPageChange={setCurrentPage} textPrimary={textPrimary} textSecondary={textSecondary} borderColor={cardBorder} />
         </>
       )}
 

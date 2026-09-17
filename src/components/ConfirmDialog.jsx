@@ -1,7 +1,86 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
-import { AlertTriangle, X } from "lucide-react";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import {
+  AlertTriangle, X, Info, CheckCircle2, AlertOctagon,
+} from "lucide-react";
+
+// ============================================================
+// KEYFRAMES (module-level, préfixés cd-*)
+// ============================================================
+const ConfirmDialogKeyframes = (
+  <style>{`
+    @keyframes cd-fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes cd-slideUp {
+      from { transform: translateY(20px) scale(0.96); opacity: 0; }
+      to   { transform: translateY(0)    scale(1);    opacity: 1; }
+    }
+    @keyframes cd-haloPulse {
+      0%   { transform: scale(1);    opacity: 0.55; }
+      50%  { transform: scale(1.15); opacity: 0.25; }
+      100% { transform: scale(1);    opacity: 0.55; }
+    }
+    .cd-fade-in {
+      animation: cd-fadeIn 0.2s ease;
+    }
+    .cd-slide-up {
+      animation: cd-slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .cd-halo {
+      animation: cd-haloPulse 2.2s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cd-fade-in, .cd-slide-up, .cd-halo {
+        animation: none !important;
+      }
+    }
+  `}</style>
+);
+
+// ============================================================
+// VARIANTS (couleurs selon le type de confirmation)
+// ============================================================
+const VARIANTS = {
+  danger: {
+    icon: AlertOctagon,
+    iconColor: "#EF4444",
+    iconBgLight: "#FEE2E2",
+    iconBgDark: "#7F1D1D",
+    confirmBg: "#EF4444",
+    confirmBgHover: "#DC2626",
+    confirmText: "#FFFFFF",
+  },
+  warning: {
+    icon: AlertTriangle,
+    iconColor: "#F59E0B",
+    iconBgLight: "#FEF3C7",
+    iconBgDark: "#78350F",
+    confirmBg: "#F59E0B",
+    confirmBgHover: "#D97706",
+    confirmText: "#FFFFFF",
+  },
+  info: {
+    icon: Info,
+    iconColor: "#4F46E5",
+    iconBgLight: "#EEF2FF",
+    iconBgDark: "#312E81",
+    confirmBg: "#4F46E5",
+    confirmBgHover: "#4338CA",
+    confirmText: "#FFFFFF",
+  },
+  success: {
+    icon: CheckCircle2,
+    iconColor: "#10B981",
+    iconBgLight: "#D1FAE5",
+    iconBgDark: "#064E3B",
+    confirmBg: "#10B981",
+    confirmBgHover: "#059669",
+    confirmText: "#FFFFFF",
+  },
+};
 
 export function ConfirmDialog({
   open,
@@ -9,157 +88,257 @@ export function ConfirmDialog({
   message = "",
   confirmLabel = "Confirmer",
   cancelLabel = "Annuler",
+  variant = "danger", // ✅ danger | warning | info | success
   onConfirm,
   onCancel,
 }) {
-  const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const { dark } = useStyles();
+  const isMobile = useIsMobile();
 
-  // Fermeture par Échap
+  const confirmBtnRef = useRef(null);
+  const previousFocusRef = useRef(null);
+
+  // ✅ Handlers sécurisés (pas de crash si prop manquante)
+  const handleCancel = useCallback(() => {
+    onCancel?.();
+  }, [onCancel]);
+
+  const handleConfirm = useCallback(() => {
+    onConfirm?.();
+  }, [onConfirm]);
+
+  // ===== Fermeture par Échap + focus management =====
   useEffect(() => {
     if (!open) return;
+
+    previousFocusRef.current = document.activeElement;
+
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
-        onCancel?.();
+        e.preventDefault();
+        handleCancel();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
+
+    const focusTimer = setTimeout(() => {
+      confirmBtnRef.current?.focus();
+    }, 50);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      clearTimeout(focusTimer);
+      if (
+        previousFocusRef.current &&
+        typeof previousFocusRef.current.focus === "function"
+      ) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, [open, handleCancel]);
 
   if (!open) return null;
 
-  // Styles adaptatifs
-  const dialogPadding = isMobile ? 20 : 28;
-  const dialogWidth = isMobile ? "95%" : 420;
-  const iconSize = isMobile ? 28 : 32;
-  const iconContainerSize = isMobile ? 56 : 64;
-  const titleFontSize = isMobile ? 18 : 20;
-  const messageFontSize = isMobile ? 14 : 14;
-  const buttonPadding = isMobile ? "12px 20px" : "10px 24px";
-  const buttonFontSize = isMobile ? 16 : 14;
-  const buttonFlexDirection = isMobile ? "column" : "row";
-  const buttonWidth = isMobile ? "100%" : "auto";
-  const closeButtonSize = isMobile ? 22 : 20;
+  // ✅ Résolution du variant (fallback sur danger)
+  const v = VARIANTS[variant] ?? VARIANTS.danger;
+  const IconComponent = v.icon;
+
+  // ===== Tailles adaptatives =====
+  const iconSize = isMobile ? 30 : 34;
+  const iconContainerSize = isMobile ? 68 : 76;
+  const haloSize = iconContainerSize + 24;
+
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 10000,
-        animation: "fadeIn 0.2s ease",
-        padding: isMobile ? 12 : 16,
-      }}
-      onClick={onCancel}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="confirm-dialog-title"
-    >
+    <>
+      {ConfirmDialogKeyframes}
       <div
+        className="cd-fade-in"
         style={{
-          background: dark ? "#1E293B" : "#FFFFFF",
-          color: dark ? "#F1F5F9" : "#1E293B",
-          borderRadius: 16,
-          padding: dialogPadding,
-          width: dialogWidth,
-          maxWidth: "95%",
-          boxShadow: dark ? "0 10px 30px rgba(0,0,0,0.5)" : "0 10px 30px rgba(0,0,0,0.3)",
-          textAlign: "center",
-          border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-          position: "relative",
-          animation: "slideUp 0.25s ease",
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(2px)",
+          WebkitBackdropFilter: "blur(2px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          // ✅ CORRIGÉ : 950 → 1500 (au-dessus de toutes les modales 1200–1300)
+          zIndex: 1500,
+          padding: isMobile ? 16 : 20,
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleCancel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
       >
-        {/* Bouton de fermeture X */}
-        <button
-          onClick={onCancel}
-          style={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            background: "transparent",
-            border: "none",
-            color: dark ? "#94A3B8" : "#64748B",
-            cursor: "pointer",
-            padding: 4,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          aria-label="Fermer"
-        >
-          <X size={closeButtonSize} />
-        </button>
-
         <div
+          className="cd-slide-up"
           style={{
-            width: iconContainerSize,
-            height: iconContainerSize,
-            borderRadius: "50%",
-            background: dark ? "#78350F" : "#FEF3C7",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 16px",
+            background: cardBg,
+            color: textPrimary,
+            borderRadius: 20,
+            padding: isMobile ? "28px 20px 20px" : "32px 28px 24px",
+            width: "100%",
+            maxWidth: 400,
+            boxShadow: dark
+              ? "0 20px 50px rgba(0,0,0,0.6)"
+              : "0 20px 50px rgba(0,0,0,0.25)",
+            textAlign: "center",
+            border: `1px solid ${cardBorder}`,
+            position: "relative",
           }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <AlertTriangle size={iconSize} color={dark ? "#FBBF24" : "#F59E0B"} />
-        </div>
-        <h3
-          id="confirm-dialog-title"
-          style={{ marginBottom: 8, fontSize: titleFontSize, fontWeight: 700 }}
-        >
-          {title}
-        </h3>
-        <p style={{ fontSize: messageFontSize, color: S.textMuted, marginBottom: isMobile ? 20 : 24, lineHeight: 1.5 }}>
-          {message}
-        </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexDirection: buttonFlexDirection }}>
-          <button
-            onClick={onCancel}
+          {/* ===== ICÔNE HERO avec halo pulse ===== */}
+          <div
             style={{
-              padding: buttonPadding,
-              borderRadius: 8,
-              border: `1px solid ${S.cardBorder}`,
-              background: "transparent",
-              color: S.textMuted,
-              cursor: "pointer",
-              fontWeight: 500,
-              fontSize: buttonFontSize,
-              transition: "background 0.2s",
-              width: buttonWidth,
+              position: "relative",
+              width: iconContainerSize,
+              height: iconContainerSize,
+              margin: "0 auto 18px",
             }}
           >
-            {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
+            {/* Halo pulse */}
+            <div
+              className="cd-halo"
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                width: haloSize,
+                height: haloSize,
+                transform: "translate(-50%, -50%)",
+                borderRadius: "50%",
+                background: v.iconColor,
+                opacity: 0.15,
+                pointerEvents: "none",
+              }}
+            />
+            {/* Cercle icône */}
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                height: "100%",
+                borderRadius: "50%",
+                background: dark ? v.iconBgDark : v.iconBgLight,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: `0 4px 14px ${v.iconColor}30`,
+              }}
+            >
+              <IconComponent size={iconSize} color={v.iconColor} />
+            </div>
+          </div>
+
+          {/* ===== TITRE ===== */}
+          <h3
+            id="confirm-dialog-title"
             style={{
-              padding: buttonPadding,
-              borderRadius: 8,
-              border: "none",
-              background: "#EF4444",
-              color: "white",
-              cursor: "pointer",
-              fontWeight: 600,
-              fontSize: buttonFontSize,
-              transition: "background 0.2s",
-              width: buttonWidth,
+              margin: "0 0 8px",
+              fontSize: isMobile ? 18 : 19,
+              fontWeight: 700,
+              color: textPrimary,
+              lineHeight: 1.25,
             }}
           >
-            {confirmLabel}
-          </button>
+            {title}
+          </h3>
+
+          {/* ===== MESSAGE ===== */}
+          {message && (
+            <p
+              id="confirm-dialog-message"
+              style={{
+                fontSize: 14,
+                color: textSecondary,
+                margin: "0 0 24px",
+                lineHeight: 1.55,
+                padding: "0 4px",
+              }}
+            >
+              {message}
+            </p>
+          )}
+
+          {/* ===== ACTIONS ===== */}
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              justifyContent: "center",
+              flexDirection: isMobile ? "column-reverse" : "row",
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleCancel}
+              style={{
+                flex: isMobile ? "none" : 1,
+                padding: isMobile ? "13px 20px" : "11px 20px",
+                borderRadius: 12,
+                border: `1px solid ${cardBorder}`,
+                background: "transparent",
+                color: textSecondary,
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: isMobile ? 15 : 14,
+                transition: "background 0.15s, border-color 0.15s",
+                width: isMobile ? "100%" : "auto",
+                fontFamily: "inherit",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = dark
+                  ? "#0F172A"
+                  : "#F8FAFC";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              {cancelLabel}
+            </button>
+            <button
+              ref={confirmBtnRef}
+              type="button"
+              onClick={handleConfirm}
+              style={{
+                flex: isMobile ? "none" : 1,
+                padding: isMobile ? "13px 20px" : "11px 20px",
+                borderRadius: 12,
+                border: "none",
+                background: `linear-gradient(135deg, ${v.confirmBg} 0%, ${v.confirmBgHover} 100%)`,
+                color: v.confirmText,
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: isMobile ? 15 : 14,
+                transition: "transform 0.1s, box-shadow 0.15s",
+                width: isMobile ? "100%" : "auto",
+                fontFamily: "inherit",
+                boxShadow: `0 4px 12px ${v.confirmBg}40`,
+                outline: "none",
+              }}
+              onMouseDown={(e) =>
+                (e.currentTarget.style.transform = "scale(0.97)")
+              }
+              onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform = "scale(1)")
+              }
+            >
+              {confirmLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

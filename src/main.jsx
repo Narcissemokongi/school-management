@@ -9,7 +9,10 @@ import './fonts.css';
 import './index.css';
 import './App.css';
 
+console.log("🔗 VITE_CONVEX_URL =", import.meta.env.VITE_CONVEX_URL);
+
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
+
 
 window.addEventListener("unhandledrejection", (event) => {
   console.error("Erreur réseau non gérée :", event.reason);

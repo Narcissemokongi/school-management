@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// src/components/EditParentPanel.jsx
+import { useState, useEffect, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -7,10 +8,13 @@ import { ConfirmDialog } from "../ConfirmDialog";
 import { Loader, UserPlus, X, Check } from "lucide-react";
 import toast from "react-hot-toast";
 
+// ✅ FIX #1 — aligné sur le reste de l'app
+const MIN_PASSWORD_LENGTH = 8;
+
 export function EditParentPanel({
   eleveId,
   initialParentId,
-  parents,
+  parents = [],   // ✅ FIX #4
   ecoleId,
   userId,
   onClose,
@@ -33,18 +37,26 @@ export function EditParentPanel({
     setParentId(initialParentId || "");
   }, [initialParentId]);
 
-  const validate = () => {
+  const validate = useCallback(() => {
     const errs = {};
     if (createParent) {
       if (!newParentNom.trim()) errs.newParentNom = "Requis";
       if (!newParentLogin.trim()) errs.newParentLogin = "Requis";
-      if (!newParentPassword || newParentPassword.length < 4) errs.newParentPassword = "4 caractères min.";
+      // ✅ FIX #1
+      if (!newParentPassword || newParentPassword.length < MIN_PASSWORD_LENGTH) {
+        errs.newParentPassword = `${MIN_PASSWORD_LENGTH} caractères min.`;
+      }
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
-  };
+  }, [createParent, newParentNom, newParentLogin, newParentPassword]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
+    // ✅ FIX #5 — guard
+    if (!eleveId || !userId) {
+      toast.error("Élève ou utilisateur invalide");
+      return;
+    }
     if (!validate()) return;
 
     const ok = await confirm(
@@ -63,20 +75,30 @@ export function EditParentPanel({
           password: newParentPassword,
           role: "parent",
           ecoleId,
-          userId,
+          // ✅ FIX #2
+          requesterId: userId,
         });
         finalParentId = newUser;
       }
-      // ✅ Correction : suppression du champ actionUserId
-      await updateEleve({ id: eleveId, parentId: finalParentId });
+      // ✅ FIX #3 — user d'action ajouté
+      await updateEleve({
+        id: eleveId,
+        parentId: finalParentId,
+        requesterId: userId,
+      });
       toast.success("Parent mis à jour");
       onClose();
     } catch (err) {
-      toast.error(err.message);
+      // ✅ FIX #7
+      toast.error(err?.message ?? "Erreur lors de la mise à jour");
     } finally {
       setUpdating(false);
     }
-  };
+  }, [
+    eleveId, userId, validate, confirm, parentId,
+    createParent, newParentNom, newParentLogin, newParentPassword,
+    ecoleId, addUser, updateEleve, onClose,
+  ]);
 
   const inputStyle = (field) => ({
     width: "100%",
@@ -92,20 +114,29 @@ export function EditParentPanel({
   });
 
   return (
-    <div style={{
-      background: dark ? "#1E293B" : "#FFFFFF",
-      borderRadius: 16,
-      padding: 24,
-      marginTop: 24,
-      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-      transition: "background-color 0.3s",
-    }}>
+    <div
+      role="dialog"              // ✅ FIX #9
+      aria-label="Modifier le parent"
+      style={{
+        background: dark ? "#1E293B" : "#FFFFFF",
+        borderRadius: 16,
+        padding: 24,
+        marginTop: 24,
+        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
+        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        transition: "background-color 0.3s",
+      }}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: dark ? "#F1F5F9" : "#1E293B" }}>
           Modifier le parent
         </h3>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: dark ? "#94A3B8" : "#64748B" }}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fermer"
+          style={{ background: "none", border: "none", cursor: "pointer", color: dark ? "#94A3B8" : "#64748B" }}
+        >
           <X size={20} />
         </button>
       </div>
@@ -128,6 +159,7 @@ export function EditParentPanel({
             ))}
           </select>
           <button
+            type="button"
             onClick={() => setCreateParent(true)}
             style={{
               background: "none",
@@ -162,6 +194,7 @@ export function EditParentPanel({
             onChange={(e) => setNewParentNom(e.target.value)}
             placeholder="Nom complet du parent"
             style={inputStyle("newParentNom")}
+            autoFocus             // ✅ FIX #9
           />
           {errors.newParentNom && <div style={{ color: "#EF4444", fontSize: 13, marginTop: -6, marginBottom: 8 }}>{errors.newParentNom}</div>}
           <input
@@ -175,11 +208,12 @@ export function EditParentPanel({
             type="password"
             value={newParentPassword}
             onChange={(e) => setNewParentPassword(e.target.value)}
-            placeholder="Mot de passe (min 4 caractères)"
+            placeholder={`Mot de passe (min ${MIN_PASSWORD_LENGTH} caractères)`}
             style={inputStyle("newParentPassword")}
           />
           {errors.newParentPassword && <div style={{ color: "#EF4444", fontSize: 13, marginTop: -6, marginBottom: 8 }}>{errors.newParentPassword}</div>}
           <button
+            type="button"
             onClick={() => setCreateParent(false)}
             style={{
               background: "none",
@@ -196,6 +230,7 @@ export function EditParentPanel({
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={updating}
           style={{
@@ -214,19 +249,25 @@ export function EditParentPanel({
             fontSize: 14,
           }}
         >
-          {updating ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+          {/* ✅ FIX #6 — keyframe ep-spin scopé */}
+          {updating
+            ? <Loader size={16} style={{ animation: "ep-spin 0.8s linear infinite" }} />
+            : <Check size={16} />}
           {updating ? "Enregistrement..." : "Enregistrer"}
         </button>
         <button
+          type="button"
           onClick={onClose}
+          disabled={updating}       // ✅ FIX #10
           style={{
             background: dark ? "#334155" : "#F1F5F9",
             border: "none",
             borderRadius: 8,
             padding: "10px 16px",
-            cursor: "pointer",
+            cursor: updating ? "not-allowed" : "pointer",
             color: dark ? "#F1F5F9" : "#1E293B",
             fontWeight: 500,
+            opacity: updating ? 0.5 : 1,
           }}
         >
           Annuler
@@ -234,6 +275,17 @@ export function EditParentPanel({
       </div>
 
       <ConfirmDialog {...dialogProps} />
+
+      {/* ✅ FIX #6 */}
+      <style>{`
+        @keyframes ep-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          button svg[style*="ep-spin"] { animation: none !important; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,22 +1,177 @@
-import { useState, useEffect } from "react";
+// src/components/Parametres.jsx
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useAppStore } from "@/store/appStore";
 import {
-  User, Building, Shield, Save, Upload, Eye, EyeOff,
-  Calendar, Loader, AlertCircle, ShieldCheck, Mail,
-  KeyRound, Trash2, Info,
+  User,
+  Building,
+  Shield,
+  Save,
+  Upload,
+  Eye,
+  EyeOff,
+  Calendar,
+  Loader,
+  AlertCircle,
+  ShieldCheck,
+  Mail,
+  Trash2,
+  Lock,
+  Check,
+  BookOpen,
+  TrendingUp,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Skeleton } from "./Skeleton";
-import { hashPassword, verifyPassword } from "@/utils/crypto";
 import { GestionAnnees } from "./GestionAnnees";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-// ===== Sous-composant pour la gestion de la 2FA par email =====
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES
+// ════════════════════════════════════════════════════════════════════
+const MIN_PASSWORD_LENGTH = 8;
+
+// ════════════════════════════════════════════════════════════════════
+// INDICATEUR DE FORCE DU MOT DE PASSE
+// ════════════════════════════════════════════════════════════════════
+function getPasswordStrength(pwd) {
+  if (!pwd) return { level: 0, label: "", color: "" };
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (pwd.length >= 12) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+
+  if (score <= 1) return { level: 1, label: "Faible", color: "#EF4444" };
+  if (score <= 3) return { level: 2, label: "Moyen", color: "#F59E0B" };
+  return { level: 3, label: "Fort", color: "#10B981" };
+}
+
+function PasswordStrengthBar({ password, dark }) {
+  const strength = useMemo(() => getPasswordStrength(password), [password]);
+  if (!password) return null;
+  return (
+    <div style={{ marginTop: -4, marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              height: 3,
+              borderRadius: 2,
+              background:
+                i <= strength.level
+                  ? strength.color
+                  : dark
+                  ? "#334155"
+                  : "#E2E8F0",
+              transition: "background 0.2s",
+            }}
+          />
+        ))}
+      </div>
+      <div
+        style={{
+          fontSize: 10.5,
+          color: strength.color,
+          fontWeight: 600,
+          textAlign: "right",
+        }}
+      >
+        {strength.label}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CARTE DE SECTION RÉUTILISABLE
+// ════════════════════════════════════════════════════════════════════
+function SectionCard({
+  icon,
+  title,
+  subtitle,
+  children,
+  dark,
+  isMobile,
+  iconColor,
+}) {
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const accent = iconColor || (dark ? "#818CF8" : "#4F46E5");
+
+  return (
+    <div
+      style={{
+        background: cardBg,
+        borderRadius: 14,
+        padding: isMobile ? 14 : 18,
+        border: `1px solid ${cardBorder}`,
+        boxShadow: dark
+          ? "0 1px 3px rgba(0,0,0,0.3)"
+          : "0 1px 3px rgba(0,0,0,0.05)",
+        marginBottom: isMobile ? 12 : 16,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 16,
+          paddingBottom: 12,
+          borderBottom: `1px solid ${cardBorder}`,
+        }}
+      >
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: `${accent}20`,
+            color: accent,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: isMobile ? 14 : 15,
+              fontWeight: 700,
+              color: textPrimary,
+              lineHeight: 1.2,
+            }}
+          >
+            {title}
+          </div>
+          {subtitle && (
+            <div style={{ fontSize: 11, color: textSecondary, marginTop: 1 }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// 2FA EMAIL
+// ════════════════════════════════════════════════════════════════════
 function TwoFactorEmailSettings({ userId, isMobile }) {
   const { dark } = useStyles();
   const [email, setEmail] = useState("");
@@ -25,232 +180,365 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
-  const twoFactorRecord = useQuery(api.twoFactorEmail.getByUser, { userId });
+  const twoFactorRecord = useQuery(
+    api.twoFactorEmail.getByUser,
+    userId ? { userId, requesterId: userId } : "skip"
+  );
 
   const setupEmail = useMutation(api.twoFactorEmail.setupEmail);
   const verifyAndEnable = useMutation(api.twoFactorEmail.verifyAndEnableEmail);
   const disableEmail = useMutation(api.twoFactorEmail.disableEmail);
 
-  if (twoFactorRecord === undefined) {
-    return <Skeleton height={100} />;
-  }
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const inputBg = dark ? "#0F172A" : "#F8FAFC";
+  const inputText = dark ? "#F1F5F9" : "#1E293B";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const success = dark ? "#34D399" : "#10B981";
+
+  if (twoFactorRecord === undefined) return <Skeleton height={100} />;
+
+  const inputStyle = {
+    width: "100%",
+    padding: isMobile ? "12px 14px" : "10px 14px",
+    border: `1px solid ${cardBorder}`,
+    borderRadius: 10,
+    fontSize: isMobile ? 15 : 14,
+    outline: "none",
+    background: inputBg,
+    color: inputText,
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+  };
 
   const handleSendCode = async () => {
+    if (!userId) {
+      toast.error("Session invalide.");
+      return;
+    }
     if (!email.trim()) {
       toast.error("Veuillez saisir votre adresse email.");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      toast.error("Adresse email invalide.");
+      return;
+    }
     setSending(true);
     try {
-      await setupEmail({ userId, email: email.trim() });
+      await setupEmail({ userId, email: email.trim(), requesterId: userId });
       setIsSettingUp(true);
       toast.success("Code de vérification envoyé à votre email.");
     } catch (err) {
-      toast.error(err.message);
+      toast.error(
+        "Impossible d'envoyer le code : " +
+          (err?.message || "erreur inconnue")
+      );
     } finally {
       setSending(false);
     }
   };
 
   const handleVerifyCode = async () => {
+    if (!userId) return;
     if (code.length !== 6) {
       toast.error("Le code doit contenir 6 chiffres.");
       return;
     }
     setVerifying(true);
     try {
-      await verifyAndEnable({ userId, code });
-      toast.success("2FA par email activée avec succès !");
+      await verifyAndEnable({ userId, code, requesterId: userId });
+      toast.success("2FA par email activée !");
       setIsSettingUp(false);
       setCode("");
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err?.message || "Code invalide");
     } finally {
       setVerifying(false);
     }
   };
 
   const handleDisable = async () => {
+    if (!userId) return;
     setVerifying(true);
     try {
-      await disableEmail({ userId });
-      toast.success("2FA par email désactivée.");
+      await disableEmail({ userId, requesterId: userId });
+      toast.success("2FA désactivée.");
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err?.message || "Impossible de désactiver la 2FA");
     } finally {
       setVerifying(false);
     }
   };
 
-  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
-  const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const inputBg = dark ? "#0F172A" : "#F9FAFB";
-  const inputText = dark ? "#F1F5F9" : "#1E293B";
-  const buttonPrimary = dark ? "#818CF8" : "#4F46E5";
-
-  // Styles adaptatifs
-  const inputPadding = isMobile ? "12px 14px" : "10px 14px";
-  const inputFontSize = isMobile ? 16 : 14;
-  const buttonPadding = isMobile ? "12px 16px" : "8px 16px";
-  const buttonFontSize = isMobile ? 16 : 14;
-  const containerPadding = isMobile ? 16 : 20;
-
-  return (
-    <div style={{ background: cardBg, borderRadius: 12, padding: containerPadding, border: `1px solid ${cardBorder}` }}>
-      <h3 style={{ display: "flex", alignItems: "center", gap: 8, color: textPrimary, marginBottom: 12, fontSize: isMobile ? 16 : 18 }}>
-        <ShieldCheck size={isMobile ? 18 : 20} color={buttonPrimary} />
-        Authentification à deux facteurs (Email)
-      </h3>
-
-      {twoFactorRecord?.enabled ? (
-        <div>
-          <p style={{ color: textSecondary, marginBottom: 8, fontSize: isMobile ? 14 : 14 }}>
-            La 2FA par email est <strong>activée</strong> sur : {twoFactorRecord.email}
-          </p>
-          <button
-            onClick={handleDisable}
-            disabled={verifying}
+  // État activé
+  if (twoFactorRecord?.enabled) {
+    return (
+      <div
+        style={{
+          background: dark ? "#064E3B20" : "#D1FAE5",
+          border: `1px solid ${dark ? "#065F46" : "#A7F3D0"}`,
+          borderRadius: 12,
+          padding: isMobile ? 14 : 16,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
+          <div
             style={{
-              display: "inline-flex",
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: success,
+              color: "#FFFFFF",
+              display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 8,
-              padding: buttonPadding,
-              background: "#EF4444",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              cursor: "pointer",
-              opacity: verifying ? 0.7 : 1,
-              fontSize: buttonFontSize,
-              width: isMobile ? "100%" : "auto",
+              flexShrink: 0,
             }}
           >
-            {verifying ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
-            Désactiver la 2FA
-          </button>
-        </div>
-      ) : isSettingUp ? (
-        <div>
-          <p style={{ color: textSecondary, marginBottom: 8, fontSize: isMobile ? 14 : 14 }}>
-            Un code à 6 chiffres a été envoyé à <strong>{email}</strong>. Saisissez-le ci-dessous :
-          </p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              placeholder="123456"
+            <ShieldCheck size={18} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
               style={{
-                padding: inputPadding,
-                border: `1px solid ${cardBorder}`,
-                borderRadius: 8,
-                fontSize: 16,
-                width: isMobile ? "100%" : 140,
-                textAlign: "center",
-                letterSpacing: "4px",
-                background: inputBg,
-                color: inputText,
-              }}
-            />
-            <button
-              onClick={handleVerifyCode}
-              disabled={verifying || code.length !== 6}
-              style={{
-                padding: buttonPadding,
-                background: verifying ? "#A5B4FC" : buttonPrimary,
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "inline-flex",
+                fontSize: 14,
+                fontWeight: 700,
+                color: success,
+                display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                fontSize: buttonFontSize,
-                width: isMobile ? "100%" : "auto",
+                gap: 4,
               }}
             >
-              {verifying ? <Loader size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-              Vérifier et activer
-            </button>
+              <Check size={14} /> 2FA activée
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: textSecondary,
+                marginTop: 2,
+                wordBreak: "break-all",
+              }}
+            >
+              {twoFactorRecord.email}
+            </div>
           </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleDisable}
+          disabled={verifying}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            padding: isMobile ? "10px 14px" : "8px 14px",
+            background: "transparent",
+            color: "#EF4444",
+            border: "1px solid #EF4444",
+            borderRadius: 10,
+            fontWeight: 600,
+            fontSize: 13,
+            cursor: verifying ? "not-allowed" : "pointer",
+            width: isMobile ? "100%" : "auto",
+            opacity: verifying ? 0.6 : 1,
+          }}
+        >
+          {verifying ? (
+            <Loader size={14} className="pg-spin" />
+          ) : (
+            <Trash2 size={14} />
+          )}
+          Désactiver la 2FA
+        </button>
+      </div>
+    );
+  }
+
+  // État configuration (code envoyé)
+  if (isSettingUp) {
+    return (
+      <div>
+        <p
+          style={{
+            color: textSecondary,
+            marginTop: 0,
+            marginBottom: 12,
+            fontSize: 13,
+            lineHeight: 1.4,
+          }}
+        >
+          Un code à 6 chiffres a été envoyé à{" "}
+          <strong style={{ color: textPrimary }}>{email}</strong>. Saisissez-le
+          ci-dessous :
+        </p>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexDirection: isMobile ? "column" : "row",
+          }}
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={code}
+            onChange={(e) =>
+              setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+            }
+            placeholder="123456"
+            style={{
+              ...inputStyle,
+              width: isMobile ? "100%" : 140,
+              textAlign: "center",
+              letterSpacing: "4px",
+              fontSize: 18,
+              fontWeight: 700,
+            }}
+          />
           <button
-            onClick={() => setIsSettingUp(false)}
-            style={{ marginTop: 8, background: "none", border: "none", color: textSecondary, cursor: "pointer", fontSize: isMobile ? 14 : 13 }}
+            type="button"
+            onClick={handleVerifyCode}
+            disabled={verifying || code.length !== 6}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              padding: isMobile ? "12px 16px" : "10px 16px",
+              background: verifying || code.length !== 6 ? "#A5B4FC" : accent,
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              fontWeight: 700,
+              fontSize: 13.5,
+              cursor: verifying || code.length !== 6 ? "not-allowed" : "pointer",
+              flex: isMobile ? "none" : 1,
+            }}
           >
-            Annuler
+            {verifying ? (
+              <Loader size={14} className="pg-spin" />
+            ) : (
+              <ShieldCheck size={14} />
+            )}
+            Vérifier et activer
           </button>
         </div>
-      ) : (
-        <div>
-          <p style={{ color: textSecondary, marginBottom: 8, fontSize: isMobile ? 14 : 14 }}>
-            Ajoutez une couche de sécurité supplémentaire en recevant un code par email à chaque connexion.
-          </p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
-            <input
-              type="email"
-              placeholder="Votre adresse email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{
-                flex: 1,
-                minWidth: isMobile ? "100%" : 200,
-                padding: inputPadding,
-                border: `1px solid ${cardBorder}`,
-                borderRadius: 8,
-                fontSize: inputFontSize,
-                background: inputBg,
-                color: inputText,
-              }}
-            />
-            <button
-              onClick={handleSendCode}
-              disabled={sending || !email.trim()}
-              style={{
-                padding: buttonPadding,
-                background: sending ? "#A5B4FC" : buttonPrimary,
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                fontSize: buttonFontSize,
-                width: isMobile ? "100%" : "auto",
-              }}
-            >
-              {sending ? <Loader size={16} className="animate-spin" /> : <Mail size={16} />}
-              Envoyer le code
-            </button>
-          </div>
-        </div>
-      )}
+        <button
+          type="button"
+          onClick={() => setIsSettingUp(false)}
+          style={{
+            marginTop: 10,
+            background: "none",
+            border: "none",
+            color: textSecondary,
+            cursor: "pointer",
+            fontSize: 12,
+            padding: 0,
+          }}
+        >
+          ← Annuler
+        </button>
+      </div>
+    );
+  }
+
+  // État initial
+  return (
+    <div>
+      <p
+        style={{
+          color: textSecondary,
+          marginTop: 0,
+          marginBottom: 12,
+          fontSize: 13,
+          lineHeight: 1.4,
+        }}
+      >
+        Ajoutez une couche de sécurité supplémentaire en recevant un code par
+        email à chaque connexion.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexDirection: isMobile ? "column" : "row",
+        }}
+      >
+        <input
+          type="email"
+          placeholder="votre@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <button
+          type="button"
+          onClick={handleSendCode}
+          disabled={sending || !email.trim()}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            padding: isMobile ? "12px 16px" : "10px 18px",
+            background: sending || !email.trim() ? "#A5B4FC" : accent,
+            color: "white",
+            border: "none",
+            borderRadius: 10,
+            fontWeight: 700,
+            fontSize: 13.5,
+            cursor: sending || !email.trim() ? "not-allowed" : "pointer",
+            opacity: sending || !email.trim() ? 0.7 : 1,
+          }}
+        >
+          {sending ? (
+            <Loader size={14} className="pg-spin" />
+          ) : (
+            <Mail size={14} />
+          )}
+          Envoyer le code
+        </button>
+      </div>
     </div>
   );
 }
 
-// ===== Composant principal Parametres =====
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export function Parametres({ ecoleId, user }) {
-  const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const { dark } = useStyles();
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
   const tab = useAppStore((state) => state.parametresTab || "profil");
   const setTab = useAppStore((state) => state.setParametresTab);
 
-  const ecole = useQuery(api.ecoles.get, ecoleId ? { ecoleId } : "skip");
-  const users = useQuery(api.users.listByEcole, ecoleId ? { ecoleId } : "skip") ?? [];
+  const userId = user?._id;
 
+  // ✅ Queries avec userId
+  const ecole = useQuery(
+    api.ecoles.get,
+    ecoleId && userId ? { ecoleId, userId } : "skip"
+  );
+  const usersRaw = useQuery(
+    api.users.listByEcole,
+    ecoleId && userId ? { ecoleId, userId } : "skip"
+  );
+  const users = useMemo(() => usersRaw ?? [], [usersRaw]);
+
+  // Mutations
   const changePassword = useMutation(api.users.changePassword);
   const updateEcole = useMutation(api.ecoles.update);
   const updateLogo = useMutation(api.ecoles.updateLogo);
@@ -260,13 +548,16 @@ export function Parametres({ ecoleId, user }) {
   const updateBareme = useMutation(api.ecoles.updateBareme);
   const updateMentions = useMutation(api.ecoles.updateMentions);
 
+  // === État mot de passe ===
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [changingPwd, setChangingPwd] = useState(false);
 
+  // === État école ===
   const [nomEcole, setNomEcole] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [devise, setDevise] = useState("CDF");
@@ -278,67 +569,102 @@ export function Parametres({ ecoleId, user }) {
   const [updating, setUpdating] = useState({});
   const [logoError, setLogoError] = useState("");
 
+  // Synchronisation
   useEffect(() => {
-    if (ecole) {
-      setNomEcole(ecole.nom || "");
-      setLogoUrl(ecole.logo || "");
-      setDevise(ecole.devise || "CDF");
-      setTypePeriode(ecole.typePeriode || "trimestre");
-      setBareme(ecole.bareme ?? 20);
-      setSeuilF(ecole.seuilFelicitations ?? 80);
-      setSeuilE(ecole.seuilEncouragement ?? 60);
-      setSeuilA(ecole.seuilAvertissement ?? 50);
-    }
+    if (!ecole) return;
+    setNomEcole(ecole.nom || "");
+    setLogoUrl(ecole.logo || "");
+    setDevise(ecole.devise || "CDF");
+    setTypePeriode(ecole.typePeriode || "trimestre");
+    setBareme(ecole.bareme ?? 20);
+    setSeuilF(ecole.seuilFelicitations ?? 80);
+    setSeuilE(ecole.seuilEncouragement ?? 60);
+    setSeuilA(ecole.seuilAvertissement ?? 50);
   }, [ecole]);
 
-  const handleChangePassword = async () => {
-    if (newPwd !== confirmPwd) {
-      toast.error("Les nouveaux mots de passe ne correspondent pas");
+  // ════════════════════════════════════════════════════════════════════
+  // HANDLERS
+  // ════════════════════════════════════════════════════════════════════
+  const handleChangePassword = useCallback(async () => {
+    if (changingPwd) return;
+    if (!userId) {
+      toast.error("Session invalide.");
       return;
     }
-    if (newPwd.length < 4) {
-      toast.error("Le mot de passe doit contenir au moins 4 caractères");
+    if (!oldPwd) {
+      toast.error("Veuillez saisir votre mot de passe actuel.");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error("Les mots de passe ne correspondent pas.");
+      return;
+    }
+    if (newPwd.length < MIN_PASSWORD_LENGTH) {
+      toast.error(
+        `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`
+      );
+      return;
+    }
+    if (newPwd === oldPwd) {
+      toast.error("Le nouveau mot de passe doit être différent.");
       return;
     }
 
-    const isOldOk = await verifyPassword(oldPwd, user.password);
-    if (!isOldOk) {
-      toast.error("Ancien mot de passe incorrect");
-      return;
-    }
+    const ok = await confirm(
+      "Changer le mot de passe",
+      "Voulez-vous vraiment modifier votre mot de passe ?"
+    );
+    if (!ok) return;
 
     setChangingPwd(true);
     try {
-      const hashedNew = await hashPassword(newPwd);
-      await changePassword({ userId: user._id, newPassword: hashedNew });
+      // ✅ FIX — Retiré `requesterId` (non accepté par le backend)
+      await changePassword({
+        userId,
+        currentPassword: oldPwd,
+        newPassword: newPwd,
+      });
       toast.success("Mot de passe modifié avec succès");
       setOldPwd("");
       setNewPwd("");
       setConfirmPwd("");
     } catch (err) {
-      toast.error(err.message || "Erreur lors du changement de mot de passe");
+      toast.error(
+        "Erreur lors du changement de mot de passe : " +
+          (err?.message || "erreur inconnue")
+      );
     } finally {
       setChangingPwd(false);
     }
-  };
+  }, [
+    changingPwd,
+    userId,
+    oldPwd,
+    newPwd,
+    confirmPwd,
+    confirm,
+    changePassword,
+  ]);
 
   const handleUpdateEcole = async () => {
+    if (!userId || !ecoleId) return;
     if (!nomEcole.trim()) {
       toast.error("Le nom de l'école est requis");
       return;
     }
     setUpdating((prev) => ({ ...prev, ecole: true }));
     try {
-      await updateEcole({ ecoleId, nom: nomEcole, userId: user._id });
+      await updateEcole({ ecoleId, nom: nomEcole, userId });
       toast.success("École mise à jour");
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "inconnue"));
     } finally {
       setUpdating((prev) => ({ ...prev, ecole: false }));
     }
   };
 
   const handleUpdateLogo = async () => {
+    if (!userId || !ecoleId) return;
     if (logoUrl && !/^https?:\/\/.+\..+/.test(logoUrl)) {
       setLogoError("URL invalide (doit commencer par http:// ou https://)");
       return;
@@ -346,61 +672,70 @@ export function Parametres({ ecoleId, user }) {
     setLogoError("");
     setUpdating((prev) => ({ ...prev, logo: true }));
     try {
-      await updateLogo({ ecoleId, logoUrl, userId: user._id });
+      await updateLogo({ ecoleId, logoUrl, userId });
       toast.success("Logo mis à jour");
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "inconnue"));
     } finally {
       setUpdating((prev) => ({ ...prev, logo: false }));
     }
   };
 
   const handleUpdateDevise = async () => {
+    if (!userId || !ecoleId) return;
     setUpdating((prev) => ({ ...prev, devise: true }));
     try {
-      await updateDevise({ ecoleId, devise });
+      await updateDevise({ ecoleId, devise, userId });
       toast.success("Devise mise à jour");
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "inconnue"));
     } finally {
       setUpdating((prev) => ({ ...prev, devise: false }));
     }
   };
 
   const handleUpdateTypePeriode = async () => {
+    if (!userId || !ecoleId) return;
     setUpdating((prev) => ({ ...prev, periode: true }));
     try {
-      await updateTypePeriode({ ecoleId, typePeriode });
+      await updateTypePeriode({ ecoleId, typePeriode, userId });
       toast.success("Périodicité mise à jour");
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "inconnue"));
     } finally {
       setUpdating((prev) => ({ ...prev, periode: false }));
     }
   };
 
   const handleUpdateBareme = async () => {
+    if (!userId || !ecoleId) return;
     if (isNaN(Number(bareme)) || Number(bareme) <= 0) {
       toast.error("Barème invalide");
       return;
     }
     setUpdating((prev) => ({ ...prev, bareme: true }));
     try {
-      await updateBareme({ ecoleId, bareme: Number(bareme) });
+      await updateBareme({ ecoleId, bareme: Number(bareme), userId });
       toast.success("Barème mis à jour");
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "inconnue"));
     } finally {
       setUpdating((prev) => ({ ...prev, bareme: false }));
     }
   };
 
   const handleUpdateMentions = async () => {
+    if (!userId || !ecoleId) return;
     if (
-      isNaN(Number(seuilF)) || isNaN(Number(seuilE)) || isNaN(Number(seuilA)) ||
-      Number(seuilF) < 0 || Number(seuilF) > 100 ||
-      Number(seuilE) < 0 || Number(seuilE) > 100 ||
-      Number(seuilA) < 0 || Number(seuilA) > 100
+      isNaN(Number(seuilF)) ||
+      isNaN(Number(seuilE)) ||
+      isNaN(Number(seuilA)) ||
+      Number(seuilF) < 0 ||
+      Number(seuilF) > 100 ||
+      Number(seuilE) < 0 ||
+      Number(seuilE) > 100 ||
+      Number(seuilA) < 0 ||
+      Number(seuilA) > 100
     ) {
       toast.error("Les seuils doivent être entre 0 et 100");
       return;
@@ -412,17 +747,19 @@ export function Parametres({ ecoleId, user }) {
         seuilFelicitations: Number(seuilF),
         seuilEncouragement: Number(seuilE),
         seuilAvertissement: Number(seuilA),
+        userId,
       });
-      toast.success("Seuils des mentions mis à jour");
+      toast.success("Seuils mis à jour");
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "inconnue"));
     } finally {
       setUpdating((prev) => ({ ...prev, mentions: false }));
     }
   };
 
-  const handleRoleChange = async (userId, newRole) => {
-    if (userId === user._id) {
+  const handleRoleChange = async (targetUserId, newRole) => {
+    if (!userId) return;
+    if (targetUserId === userId) {
       toast.error("Vous ne pouvez pas modifier votre propre rôle.");
       return;
     }
@@ -432,443 +769,908 @@ export function Parametres({ ecoleId, user }) {
     );
     if (!ok) return;
     try {
-      await updateRole({ userId, newRole });
+      // ✅ FIX — Retiré `requesterId` (non accepté par le backend)
+      await updateRole({
+        userId: targetUserId,
+        newRole,
+        adminId: userId,
+      });
       toast.success("Rôle modifié");
     } catch (err) {
-      toast.error("Erreur : " + err.message);
+      toast.error("Erreur : " + (err?.message || "inconnue"));
     }
   };
 
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU PRÉCOCE : user non chargé
+  // ════════════════════════════════════════════════════════════════════
+  if (!user || !userId) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          padding: 40,
+        }}
+      >
+        <style>{`
+          @keyframes pg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          .pg-spin { animation: pg-spin 1s linear infinite; }
+          @media (prefers-reduced-motion: reduce) {
+            .pg-spin { animation: none !important; }
+          }
+        `}</style>
+        <Loader
+          size={28}
+          className="pg-spin"
+          style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+        />
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU PRÉCOCE : école non chargée
+  // ════════════════════════════════════════════════════════════════════
   if (!ecole) return <Skeleton height={200} />;
 
   const roles = [
-    "admin", "directeur", "disciplinaire", "enseignant", "parent", "comptable", "eleve",
+    "admin",
+    "directeur",
+    "disciplinaire",
+    "enseignant",
+    "parent",
+    "comptable",
+    "eleve",
   ];
 
   const tabs = [
-    { id: "profil", label: "Profil", icon: <User size={18} /> },
-    { id: "securite", label: "Sécurité", icon: <ShieldCheck size={18} /> },
-    { id: "ecole", label: "École", icon: <Building size={18} /> },
-    { id: "roles", label: "Rôles", icon: <Shield size={18} /> },
-    { id: "annees", label: "Année scolaire", icon: <Calendar size={18} /> },
+    { id: "profil", label: "Profil", icon: <User size={16} /> },
+    { id: "securite", label: "Sécurité", icon: <ShieldCheck size={16} /> },
+    { id: "ecole", label: "École", icon: <Building size={16} /> },
+    { id: "roles", label: "Rôles", icon: <Shield size={16} /> },
+    { id: "annees", label: "Années", icon: <Calendar size={16} /> },
   ];
 
-  // Styles adaptatifs
-  const containerPadding = isMobile ? "16px 12px" : "24px";
-  const titleSize = isMobile ? 20 : 24;
-  const tabContainerStyle = {
-    display: "flex",
-    gap: isMobile ? 4 : 16,
-    marginBottom: isMobile ? 16 : 24,
-    flexWrap: "wrap",
-    overflowX: isMobile ? "auto" : "visible",
-    whiteSpace: "nowrap",
-  };
-  const tabButtonStyle = (isActive) => ({
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: isMobile ? "10px 12px" : "8px 16px",
-    border: "none",
-    borderRadius: 8,
-    background: isActive ? (dark ? "#818CF8" : "#4F46E5") : "transparent",
-    color: isActive ? "#fff" : dark ? "#CBD5E1" : "#374151",
-    fontWeight: 600,
-    cursor: "pointer",
-    transition: "all 0.2s",
-    fontSize: isMobile ? 14 : 14,
-    flexShrink: 0,
-  });
-  const sectionCardStyle = {
-    background: dark ? "#1E293B" : "#FFFFFF",
-    borderRadius: 16,
-    padding: isMobile ? 16 : 24,
-    boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-  };
+  // Couleurs
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const inputBg = dark ? "#0F172A" : "#F8FAFC";
+  const inputText = dark ? "#F1F5F9" : "#1E293B";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const accentBg = dark ? "#312E81" : "#EEF2FF";
+
   const inputStyle = {
     width: "100%",
     padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-    borderRadius: 8,
-    fontSize: isMobile ? 16 : 14,
+    border: `1px solid ${cardBorder}`,
+    borderRadius: 10,
+    fontSize: isMobile ? 15 : 14,
     outline: "none",
-    background: dark ? "#0F172A" : "#F9FAFB",
-    color: dark ? "#F1F5F9" : "#1E293B",
-    transition: "border-color 0.2s, background-color 0.3s",
+    background: inputBg,
+    color: inputText,
     boxSizing: "border-box",
+    fontFamily: "inherit",
+    appearance: "none",
+    WebkitAppearance: "none",
   };
-  const buttonPrimaryStyle = {
+
+  const labelStyle = {
+    display: "block",
+    fontSize: 11,
+    fontWeight: 700,
+    color: dark ? "#CBD5E1" : "#374151",
+    marginBottom: 5,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  };
+
+  const btnPrimary = (disabled = false) => ({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    padding: isMobile ? "12px 20px" : "10px 20px",
-    background: dark ? "#818CF8" : "#4F46E5",
-    color: "white",
+    gap: 6,
+    padding: isMobile ? "12px 16px" : "10px 18px",
+    background: disabled ? "#A5B4FC" : accent,
+    color: "#FFFFFF",
     border: "none",
-    borderRadius: 8,
-    fontWeight: 600,
-    cursor: "pointer",
-    fontSize: isMobile ? 16 : 14,
+    borderRadius: 10,
+    fontWeight: 700,
+    fontSize: 13.5,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.7 : 1,
     width: isMobile ? "100%" : "auto",
-  };
-  const gridFormStyle = {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: 12,
-  };
+    whiteSpace: "nowrap",
+  });
+
+  const gridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))";
+
+  const canChangePwd =
+    !changingPwd &&
+    oldPwd &&
+    newPwd &&
+    newPwd === confirmPwd &&
+    newPwd.length >= MIN_PASSWORD_LENGTH;
 
   return (
-    <div style={{ padding: containerPadding }}>
-      <h2 style={{ fontSize: titleSize, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: isMobile ? 16 : 24 }}>
-        Paramètres
-      </h2>
+    <div
+      style={{
+        maxWidth: 900,
+        margin: "0 auto",
+        padding: isMobile ? "10px 8px 24px" : "20px 16px 32px",
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Keyframes préfixés pg-* */}
+      <style>{`
+        @keyframes pg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .pg-spin { animation: pg-spin 1s linear infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .pg-spin { animation: none !important; }
+        }
+      `}</style>
 
-      <div style={tabContainerStyle} role="tablist" aria-label="Sections des paramètres">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            aria-controls={`panel-${t.id}`}
-            id={`tab-${t.id}`}
-            onClick={() => setTab(t.id)}
-            style={tabButtonStyle(tab === t.id)}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
+      {/* En-tête */}
+      <div style={{ marginBottom: isMobile ? 12 : 20 }}>
+        <h2
+          style={{
+            fontSize: isMobile ? 17 : 22,
+            fontWeight: 700,
+            color: textPrimary,
+            margin: 0,
+            lineHeight: 1.2,
+          }}
+        >
+          Paramètres
+        </h2>
+        <p
+          style={{
+            color: textSecondary,
+            marginTop: 2,
+            marginBottom: 0,
+            fontSize: isMobile ? 11.5 : 13,
+          }}
+        >
+          Gérez votre compte, votre école et la configuration
+        </p>
       </div>
 
+      {/* Tabs */}
+      <div
+        role="tablist"
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: `2px solid ${cardBorder}`,
+          marginBottom: isMobile ? 14 : 20,
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+          scrollbarWidth: "none",
+        }}
+      >
+        {tabs.map((t) => {
+          const isActive = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setTab(t.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: isMobile ? "12px 14px" : "12px 18px",
+                minHeight: isMobile ? 44 : 42,
+                border: "none",
+                background: "transparent",
+                color: isActive ? accent : textSecondary,
+                fontWeight: isActive ? 700 : 500,
+                borderBottom: isActive
+                  ? `3px solid ${accent}`
+                  : "3px solid transparent",
+                cursor: "pointer",
+                fontSize: isMobile ? 13.5 : 14.5,
+                flexShrink: 0,
+                marginBottom: -2,
+              }}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ════════════════════ PROFIL ════════════════════ */}
       {tab === "profil" && (
-        <div role="tabpanel" id="panel-profil" aria-labelledby="tab-profil">
-          <div style={sectionCardStyle}>
-            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-              <User size={18} /> Informations du profil
-            </h3>
-            <div style={{ marginBottom: 16, ...gridFormStyle }}>
+        <div role="tabpanel">
+          <SectionCard
+            icon={<User size={16} />}
+            title="Mon compte"
+            subtitle="Informations de connexion"
+            dark={dark}
+            isMobile={isMobile}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridColumns,
+                gap: 12,
+                marginBottom: 16,
+              }}
+            >
               <div>
-                <span style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>Nom</span>
-                <p style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "4px 0 0" }}>{user.nom} {user.postnom || ""}</p>
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: textSecondary,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.3,
+                    marginBottom: 4,
+                  }}
+                >
+                  Nom complet
+                </div>
+                <div
+                  style={{
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    color: textPrimary,
+                  }}
+                >
+                  {user.nom} {user.postnom || ""}
+                </div>
               </div>
               <div>
-                <span style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>Login</span>
-                <p style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "4px 0 0" }}>@{user.login}</p>
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: textSecondary,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.3,
+                    marginBottom: 4,
+                  }}
+                >
+                  Identifiant
+                </div>
+                <div
+                  style={{
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    color: textPrimary,
+                    fontFamily: "ui-monospace, monospace",
+                  }}
+                >
+                  @{user.login}
+                </div>
               </div>
               <div>
-                <span style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13 }}>Rôle</span>
-                <p style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "4px 0 0" }}>{user.role}</p>
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: textSecondary,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.3,
+                    marginBottom: 4,
+                  }}
+                >
+                  Rôle
+                </div>
+                <div
+                  style={{
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    color: textPrimary,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {user.role}
+                </div>
               </div>
             </div>
+          </SectionCard>
 
-            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>
-              Modifier mon mot de passe
-            </h3>
-            <div style={{ marginBottom: 12 }}>
-              <label htmlFor="old-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Ancien mot de passe</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <SectionCard
+            icon={<Lock size={16} />}
+            title="Modifier le mot de passe"
+            subtitle="Renforcez la sécurité de votre compte"
+            dark={dark}
+            isMobile={isMobile}
+          >
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Mot de passe actuel</label>
+              <div style={{ position: "relative" }}>
                 <input
-                  id="old-password"
                   type={showOld ? "text" : "password"}
                   value={oldPwd}
                   onChange={(e) => setOldPwd(e.target.value)}
-                  style={{ ...inputStyle, marginBottom: 0 }}
-                  aria-label="Ancien mot de passe"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  style={{ ...inputStyle, paddingRight: 42 }}
                 />
                 <button
+                  type="button"
                   onClick={() => setShowOld(!showOld)}
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: dark ? "#94A3B8" : "#64748B" }}
-                  aria-label={showOld ? "Cacher le mot de passe" : "Afficher le mot de passe"}
+                  aria-label={showOld ? "Masquer" : "Afficher"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: textSecondary,
+                    cursor: "pointer",
+                    padding: 6,
+                    display: "flex",
+                  }}
                 >
-                  {showOld ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
+                  {showOld ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label htmlFor="new-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Nouveau mot de passe</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Nouveau mot de passe</label>
+              <div style={{ position: "relative" }}>
                 <input
-                  id="new-password"
                   type={showNew ? "text" : "password"}
                   value={newPwd}
                   onChange={(e) => setNewPwd(e.target.value)}
-                  style={{ ...inputStyle, marginBottom: 0 }}
-                  aria-label="Nouveau mot de passe"
+                  autoComplete="new-password"
+                  placeholder={`Min. ${MIN_PASSWORD_LENGTH} caractères`}
+                  style={{ ...inputStyle, paddingRight: 42 }}
                 />
                 <button
+                  type="button"
                   onClick={() => setShowNew(!showNew)}
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: dark ? "#94A3B8" : "#64748B" }}
-                  aria-label={showNew ? "Cacher le mot de passe" : "Afficher le mot de passe"}
+                  aria-label={showNew ? "Masquer" : "Afficher"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: textSecondary,
+                    cursor: "pointer",
+                    padding: 6,
+                    display: "flex",
+                  }}
                 >
-                  {showNew ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
+                  {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              <PasswordStrengthBar password={newPwd} dark={dark} />
+              {newPwd.length > 0 && newPwd.length < MIN_PASSWORD_LENGTH && (
+                <div
+                  style={{
+                    color: "#EF4444",
+                    fontSize: 11,
+                    marginTop: 4,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <AlertCircle size={11} />
+                  Au moins {MIN_PASSWORD_LENGTH} caractères requis
+                </div>
+              )}
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="confirm-password" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Confirmer le nouveau mot de passe</label>
-              <input
-                id="confirm-password"
-                type="password"
-                value={confirmPwd}
-                onChange={(e) => setConfirmPwd(e.target.value)}
-                style={inputStyle}
-                aria-label="Confirmation du nouveau mot de passe"
-              />
-            </div>
-            <button
-              onClick={handleChangePassword}
-              disabled={changingPwd}
-              style={{
-                ...buttonPrimaryStyle,
-                background: changingPwd ? "#94A3B8" : dark ? "#818CF8" : "#4F46E5",
-                cursor: changingPwd ? "not-allowed" : "pointer",
-              }}
-              aria-label="Enregistrer le nouveau mot de passe"
-            >
-              {changingPwd ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-              {changingPwd ? "Enregistrement..." : "Enregistrer"}
-            </button>
-          </div>
-        </div>
-      )}
 
-      {tab === "securite" && (
-        <div role="tabpanel" id="panel-securite" aria-labelledby="tab-securite">
-          <TwoFactorEmailSettings userId={user._id} isMobile={isMobile} />
-        </div>
-      )}
-
-      {tab === "ecole" && (
-        <div role="tabpanel" id="panel-ecole" aria-labelledby="tab-ecole">
-          <div style={sectionCardStyle}>
-            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>Informations de l'école</h3>
-
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-nom" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Nom de l'école</label>
-              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Confirmer le mot de passe</label>
+              <div style={{ position: "relative" }}>
                 <input
-                  id="ecole-nom"
+                  type={showConfirm ? "text" : "password"}
+                  value={confirmPwd}
+                  onChange={(e) => setConfirmPwd(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="Confirmer"
+                  style={{
+                    ...inputStyle,
+                    paddingRight: 42,
+                    borderColor:
+                      confirmPwd && newPwd !== confirmPwd
+                        ? "#EF4444"
+                        : confirmPwd && newPwd === confirmPwd
+                        ? "#10B981"
+                        : cardBorder,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  aria-label={showConfirm ? "Masquer" : "Afficher"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: textSecondary,
+                    cursor: "pointer",
+                    padding: 6,
+                    display: "flex",
+                  }}
+                >
+                  {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {confirmPwd && newPwd !== confirmPwd && (
+                <div
+                  style={{
+                    color: "#EF4444",
+                    fontSize: 11,
+                    marginTop: 6,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <AlertCircle size={11} />
+                  Les mots de passe ne correspondent pas
+                </div>
+              )}
+              {confirmPwd &&
+                newPwd === confirmPwd &&
+                newPwd.length >= MIN_PASSWORD_LENGTH && (
+                  <div
+                    style={{
+                      color: "#10B981",
+                      fontSize: 11,
+                      marginTop: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <Check size={11} />
+                    Les mots de passe correspondent
+                  </div>
+                )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleChangePassword}
+              disabled={!canChangePwd}
+              style={btnPrimary(!canChangePwd)}
+            >
+              {changingPwd ? (
+                <Loader size={16} className="pg-spin" />
+              ) : (
+                <Lock size={16} />
+              )}
+              {changingPwd ? "Enregistrement…" : "Changer le mot de passe"}
+            </button>
+          </SectionCard>
+        </div>
+      )}
+
+      {/* ════════════════════ SÉCURITÉ ════════════════════ */}
+      {tab === "securite" && (
+        <div role="tabpanel">
+          <SectionCard
+            icon={<ShieldCheck size={16} />}
+            title="Authentification à deux facteurs"
+            subtitle="Recevez un code par email à chaque connexion"
+            dark={dark}
+            isMobile={isMobile}
+            iconColor={dark ? "#34D399" : "#10B981"}
+          >
+            <TwoFactorEmailSettings userId={userId} isMobile={isMobile} />
+          </SectionCard>
+        </div>
+      )}
+
+      {/* ════════════════════ ÉCOLE ════════════════════ */}
+      {tab === "ecole" && (
+        <div role="tabpanel">
+          <SectionCard
+            icon={<Building size={16} />}
+            title="Informations de l'école"
+            subtitle="Nom, logo et identité visuelle"
+            dark={dark}
+            isMobile={isMobile}
+          >
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Nom de l'école</label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
+                <input
                   value={nomEcole}
                   onChange={(e) => setNomEcole(e.target.value)}
                   style={{ ...inputStyle, flex: 1 }}
-                  aria-label="Nom de l'école"
                 />
                 <button
+                  type="button"
                   onClick={handleUpdateEcole}
                   disabled={updating.ecole}
-                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
-                  aria-label="Mettre à jour le nom de l'école"
+                  style={btnPrimary(updating.ecole)}
                 >
-                  {updating.ecole ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                  {updating.ecole ? (
+                    <Loader size={14} className="pg-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
                   Mettre à jour
                 </button>
               </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-logo" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Logo (URL)</label>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexDirection: isMobile ? "column" : "row" }}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Logo (URL)</label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
                 <input
-                  id="ecole-logo"
                   value={logoUrl}
-                  onChange={(e) => { setLogoUrl(e.target.value); setLogoError(""); }}
-                  style={{ ...inputStyle, flex: 1, borderColor: logoError ? "#EF4444" : undefined }}
-                  aria-label="URL du logo"
+                  onChange={(e) => {
+                    setLogoUrl(e.target.value);
+                    setLogoError("");
+                  }}
+                  style={{
+                    ...inputStyle,
+                    flex: 1,
+                    borderColor: logoError ? "#EF4444" : cardBorder,
+                  }}
+                  placeholder="https://exemple.com/logo.png"
                 />
                 <button
+                  type="button"
                   onClick={handleUpdateLogo}
                   disabled={updating.logo}
-                  style={{ ...buttonPrimaryStyle, background: "#10B981", width: isMobile ? "100%" : "auto" }}
-                  aria-label="Mettre à jour le logo"
+                  style={btnPrimary(updating.logo)}
                 >
-                  {updating.logo ? <Loader size={16} className="animate-spin" /> : <Upload size={16} />}
+                  {updating.logo ? (
+                    <Loader size={14} className="pg-spin" />
+                  ) : (
+                    <Upload size={14} />
+                  )}
                   Mettre à jour
                 </button>
               </div>
               {logoError && (
-                <div style={{ color: "#EF4444", fontSize: 12, marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
-                  <AlertCircle size={14} /> {logoError}
+                <div
+                  style={{
+                    color: "#EF4444",
+                    fontSize: 11,
+                    marginTop: 6,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <AlertCircle size={11} /> {logoError}
                 </div>
               )}
               {logoUrl && !logoError && (
-                <img
-                  src={logoUrl}
-                  alt="Logo de l'école"
-                  style={{ maxWidth: 100, marginTop: 12, borderRadius: 8 }}
-                  onError={(e) => (e.target.style.display = "none")}
-                />
+                <div style={{ marginTop: 12 }}>
+                  <img
+                    src={logoUrl}
+                    alt="Logo"
+                    style={{
+                      maxWidth: 100,
+                      borderRadius: 8,
+                      border: `1px solid ${cardBorder}`,
+                    }}
+                    onError={(e) => (e.target.style.display = "none")}
+                  />
+                </div>
               )}
             </div>
+          </SectionCard>
 
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-devise" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Devise</label>
-              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
+          <SectionCard
+            icon={<BookOpen size={16} />}
+            title="Paramètres pédagogiques"
+            subtitle="Devise, périodes et barèmes"
+            dark={dark}
+            isMobile={isMobile}
+            iconColor={dark ? "#C4B5FD" : "#8B5CF6"}
+          >
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Devise</label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
                 <select
-                  id="ecole-devise"
                   value={devise}
                   onChange={(e) => setDevise(e.target.value)}
                   style={{ ...inputStyle, flex: 1 }}
-                  aria-label="Devise"
                 >
-                  <option value="CDF">CDF</option>
-                  <option value="USD">USD</option>
+                  <option value="CDF">CDF — Franc congolais</option>
+                  <option value="USD">USD — Dollar américain</option>
                 </select>
                 <button
+                  type="button"
                   onClick={handleUpdateDevise}
                   disabled={updating.devise}
-                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
+                  style={btnPrimary(updating.devise)}
                 >
-                  {updating.devise ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                  {updating.devise ? (
+                    <Loader size={14} className="pg-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
                   Mettre à jour
                 </button>
               </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-periode" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Type de période</label>
-              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Type de période</label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
                 <select
-                  id="ecole-periode"
                   value={typePeriode}
                   onChange={(e) => setTypePeriode(e.target.value)}
                   style={{ ...inputStyle, flex: 1 }}
-                  aria-label="Type de période"
                 >
                   <option value="trimestre">Trimestre</option>
                   <option value="semestre">Semestre</option>
                   <option value="mois">Mois</option>
                 </select>
                 <button
+                  type="button"
                   onClick={handleUpdateTypePeriode}
                   disabled={updating.periode}
-                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
+                  style={btnPrimary(updating.periode)}
                 >
-                  {updating.periode ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                  {updating.periode ? (
+                    <Loader size={14} className="pg-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
                   Mettre à jour
                 </button>
               </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor="ecole-bareme" style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Barème</label>
-              <div style={{ display: "flex", gap: 8, flexDirection: isMobile ? "column" : "row" }}>
+            <div>
+              <label style={labelStyle}>Barème (note maximale)</label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
                 <input
-                  id="ecole-bareme"
                   type="number"
                   min="1"
                   value={bareme}
                   onChange={(e) => setBareme(e.target.value)}
                   style={{ ...inputStyle, flex: 1 }}
-                  aria-label="Barème"
                 />
                 <button
+                  type="button"
                   onClick={handleUpdateBareme}
                   disabled={updating.bareme}
-                  style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", width: isMobile ? "100%" : "auto" }}
+                  style={btnPrimary(updating.bareme)}
                 >
-                  {updating.bareme ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                  {updating.bareme ? (
+                    <Loader size={14} className="pg-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
                   Mettre à jour
                 </button>
               </div>
             </div>
+          </SectionCard>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", marginBottom: 4, color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 15 : 14 }}>Seuils des mentions</label>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-                <div>
-                  <span style={{ fontSize: 13 }}>Félicitations</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={seuilF}
-                    onChange={(e) => setSeuilF(e.target.value)}
-                    style={inputStyle}
-                    aria-label="Seuil félicitations"
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: 13 }}>Encouragement</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={seuilE}
-                    onChange={(e) => setSeuilE(e.target.value)}
-                    style={inputStyle}
-                    aria-label="Seuil encouragement"
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: 13 }}>Avertissement</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={seuilA}
-                    onChange={(e) => setSeuilA(e.target.value)}
-                    style={inputStyle}
-                    aria-label="Seuil avertissement"
-                  />
-                </div>
+          <SectionCard
+            icon={<TrendingUp size={16} />}
+            title="Seuils des mentions"
+            subtitle="Utilisés pour les appréciations automatiques"
+            dark={dark}
+            isMobile={isMobile}
+            iconColor={dark ? "#FBBF24" : "#F59E0B"}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+                gap: 12,
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <label style={labelStyle}>Félicitations</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={seuilF}
+                  onChange={(e) => setSeuilF(e.target.value)}
+                  style={inputStyle}
+                />
               </div>
-              <button
-                onClick={handleUpdateMentions}
-                disabled={updating.mentions}
-                style={{ ...buttonPrimaryStyle, background: dark ? "#818CF8" : "#4F46E5", marginTop: 8 }}
-              >
-                {updating.mentions ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-                Mettre à jour les seuils
-              </button>
+              <div>
+                <label style={labelStyle}>Encouragement</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={seuilE}
+                  onChange={(e) => setSeuilE(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Avertissement</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={seuilA}
+                  onChange={(e) => setSeuilA(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
             </div>
-          </div>
+            <button
+              type="button"
+              onClick={handleUpdateMentions}
+              disabled={updating.mentions}
+              style={btnPrimary(updating.mentions)}
+            >
+              {updating.mentions ? (
+                <Loader size={14} className="pg-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              Mettre à jour les seuils
+            </button>
+          </SectionCard>
         </div>
       )}
 
+      {/* ════════════════════ RÔLES ════════════════════ */}
       {tab === "roles" && (
-        <div role="tabpanel" id="panel-roles" aria-labelledby="tab-roles">
-          <div style={sectionCardStyle}>
-            <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 16 }}>Gestion des rôles</h3>
-            {users.length === 0 && <p style={{ color: dark ? "#94A3B8" : "#64748B" }}>Aucun utilisateur.</p>}
-            {users.map((u) => (
-              <div
-                key={u._id}
+        <div role="tabpanel">
+          <SectionCard
+            icon={<Shield size={16} />}
+            title="Gestion des rôles"
+            subtitle={`${users.length} utilisateur${users.length > 1 ? "s" : ""}`}
+            dark={dark}
+            isMobile={isMobile}
+            iconColor={dark ? "#F87171" : "#EF4444"}
+          >
+            {users.length === 0 ? (
+              <p
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "8px 0",
-                  borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                  flexDirection: isMobile ? "column" : "row",
-                  gap: 8,
+                  color: textSecondary,
+                  fontSize: 13,
+                  margin: 0,
+                  textAlign: "center",
+                  padding: "16px 0",
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B" }}>{u.nom}</div>
-                  <div style={{ fontSize: 13, color: dark ? "#94A3B8" : "#64748B" }}>Actuel : {u.role}</div>
-                </div>
-                <select
-                  value={u.role}
-                  onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                  style={{ ...inputStyle, width: isMobile ? "100%" : 150, marginBottom: 0, cursor: u._id === user._id ? "not-allowed" : "pointer", opacity: u._id === user._id ? 0.6 : 1 }}
-                  disabled={u._id === user._id}
-                  aria-label={`Changer le rôle de ${u.nom}`}
-                >
-                  {roles.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
+                Aucun utilisateur
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {users.map((u) => {
+                  const isSelf = u._id === userId;
+                  return (
+                    <div
+                      key={u._id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: isMobile ? "stretch" : "center",
+                        gap: 8,
+                        padding: "10px 12px",
+                        border: `1px solid ${cardBorder}`,
+                        borderRadius: 10,
+                        background: isSelf
+                          ? dark
+                            ? "#0F172A"
+                            : "#F8FAFC"
+                          : "transparent",
+                        flexDirection: isMobile ? "column" : "row",
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 13.5,
+                            color: textPrimary,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          {u.nom}
+                          {isSelf && (
+                            <span
+                              style={{
+                                background: accentBg,
+                                color: accent,
+                                padding: "1px 6px",
+                                borderRadius: 8,
+                                fontSize: 9.5,
+                                fontWeight: 700,
+                              }}
+                            >
+                              VOUS
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: textSecondary,
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          Rôle actuel : {u.role}
+                        </div>
+                      </div>
+                      <select
+                        value={u.role}
+                        onChange={(e) =>
+                          handleRoleChange(u._id, e.target.value)
+                        }
+                        disabled={isSelf}
+                        style={{
+                          ...inputStyle,
+                          width: isMobile ? "100%" : 160,
+                          cursor: isSelf ? "not-allowed" : "pointer",
+                          opacity: isSelf ? 0.5 : 1,
+                        }}
+                      >
+                        {roles.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            )}
+          </SectionCard>
         </div>
       )}
 
+      {/* ════════════════════ ANNÉES ════════════════════ */}
       {tab === "annees" && (
-        <div role="tabpanel" id="panel-annees" aria-labelledby="tab-annees">
-          <GestionAnnees ecoleId={ecoleId} />
+        <div role="tabpanel">
+          <GestionAnnees ecoleId={ecoleId} userId={userId} />
         </div>
       )}
 

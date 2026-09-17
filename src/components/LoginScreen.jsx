@@ -1,15 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Loader2, User, Lock, Eye, EyeOff, LogIn, Clock, ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
+import toast from "react-hot-toast";
+
+// ============================================================
+// COMPTE À REBOURS pour le renvoi de code
+// ============================================================
+const RESEND_COOLDOWN_S = 30;
 
 export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const { dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
+
   const [step, setStep] = useState("credentials");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -18,17 +26,42 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const [errorType, setErrorType] = useState("normal");
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [pendingUser, setPendingUser] = useState(null);
   const [code, setCode] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
-  const [pendingUser, setPendingUser] = useState(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  const codeInputRef = useRef(null);
 
   const authenticate = useMutation(api.users.login);
   const sendLoginCode = useMutation(api.twoFactorEmail.sendLoginCode);
   const verifyLoginCode = useMutation(api.twoFactorEmail.verifyLoginCode);
 
-  // Soumission des identifiants
+  // ============================================================
+  // Effet : compte à rebours du renvoi
+  // ============================================================
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // ============================================================
+  // Effet : focus auto sur le champ code en 2FA
+  // ============================================================
+  useEffect(() => {
+    if (step === "twoFactor") {
+      codeInputRef.current?.focus();
+    }
+  }, [step]);
+
+  // ============================================================
+  // SOUMISSION DES IDENTIFIANTS
+  // ============================================================
   const handleCredentialsSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
     setErrorType("normal");
 
@@ -49,53 +82,86 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
       if (user.requiresTwoFactor) {
         setPendingUser(user);
         setUserId(user._id);
+        setCode("");
+        setResendCooldown(0);
         setStep("twoFactor");
       } else {
         onLogin(user);
       }
     } catch (err) {
-      if (err.message.includes("verrouillé")) {
+      // ✅ Guard : err.message peut être absent
+      const msg =
+        (err && typeof err === "object" && err.message) ||
+        (typeof err === "string" ? err : "") ||
+        "Erreur de connexion.";
+
+      if (typeof msg === "string" && msg.toLowerCase().includes("verrouill")) {
         setErrorType("locked");
       }
-      setError(err.message || "Erreur de connexion.");
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Soumission du code 2FA
+  // ============================================================
+  // SOUMISSION DU CODE 2FA
+  // ============================================================
   const handleTwoFactorSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
     if (code.length !== 6) {
       setError("Veuillez saisir les 6 chiffres.");
       return;
     }
+
     setLoading(true);
     try {
       await verifyLoginCode({ userId, code });
       onLogin(pendingUser);
     } catch (err) {
-      setError(err.message || "Code invalide.");
+      const msg =
+        (err && typeof err === "object" && err.message) ||
+        (typeof err === "string" ? err : "") ||
+        "Code invalide.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Renvoyer le code
-  const handleResendCode = async () => {
+  // ============================================================
+  // RENVOYER LE CODE (avec cooldown + feedback)
+  // ============================================================
+  const handleResendCode = useCallback(async () => {
+    if (sendingCode || resendCooldown > 0) return;
     setSendingCode(true);
     setError("");
     try {
       await sendLoginCode({ userId });
+      toast.success("Nouveau code envoyé", {
+        style: {
+          background: dark ? "#1E293B" : "#FFFFFF",
+          color: dark ? "#F1F5F9" : "#1E293B",
+          border: dark ? "1px solid #334155" : "1px solid #E2E8F0",
+        },
+      });
+      setResendCooldown(RESEND_COOLDOWN_S);
     } catch (err) {
-      setError(err.message || "Impossible de renvoyer le code.");
+      const msg =
+        (err && typeof err === "object" && err.message) ||
+        "Impossible de renvoyer le code.";
+      setError(msg);
     } finally {
       setSendingCode(false);
     }
-  };
+  }, [sendingCode, resendCooldown, sendLoginCode, userId, dark]);
 
-  // Styles adaptatifs
+  // ============================================================
+  // STYLES
+  // ============================================================
   const containerBg = dark ? "#0F172A" : "#F3F4F6";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
@@ -106,114 +172,256 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const inputText = dark ? "#F1F5F9" : "#111827";
   const inputBorder = dark ? "#334155" : "#E2E8F0";
   const buttonBg = dark ? "#818CF8" : "#4F46E5";
-  const errorBg = errorType === "locked" ? (dark ? "#78350F" : "#FEF3C7") : (dark ? "#7F1D1D" : "#FEE2E2");
-  const errorText = errorType === "locked" ? (dark ? "#FBBF24" : "#92400E") : (dark ? "#F87171" : "#B91C1C");
-  const linkColor = dark ? "#818CF8" : "#4F46E5";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+  const errorBg =
+    errorType === "locked"
+      ? dark
+        ? "#78350F"
+        : "#FEF3C7"
+      : dark
+      ? "#7F1D1D"
+      : "#FEE2E2";
+  const errorText =
+    errorType === "locked"
+      ? dark
+        ? "#FBBF24"
+        : "#92400E"
+      : dark
+      ? "#F87171"
+      : "#B91C1C";
+  const linkColor = accent;
   const iconColor = dark ? "#94A3B8" : "#9CA3AF";
 
-  // Ajustements mobiles
-  const inputFontSize = isMobile ? 16 : 14; // 16px pour éviter le zoom iOS
+  const inputFontSize = isMobile ? 16 : 14;
   const cardPadding = isMobile ? "32px 20px" : "40px 32px";
   const logoSize = isMobile ? 64 : 72;
 
+  const commonInputStyle = (hasRightPadding = false) => ({
+    width: "100%",
+    padding: hasRightPadding
+      ? "12px 42px 12px 42px"
+      : "12px 14px 12px 42px",
+    border: `1.5px solid ${inputBorder}`,
+    borderRadius: 10,
+    fontSize: inputFontSize,
+    outline: "none",
+    background: inputBg,
+    color: inputText,
+    transition: "border-color 0.2s, background-color 0.3s, color 0.3s",
+    boxSizing: "border-box",
+  });
+
+  const commonButtonStyle = {
+    width: "100%",
+    padding: "12px 0",
+    background: loading ? "#A5B4FC" : buttonBg,
+    color: "#FFFFFF",
+    border: "none",
+    borderRadius: 10,
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: loading ? "not-allowed" : "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    boxShadow: dark
+      ? "0 4px 12px rgba(0,0,0,0.3)"
+      : "0 4px 12px rgba(79,70,229,0.2)",
+    transition: "background 0.2s",
+  };
+
+  // ============================================================
+  // RENDU
+  // ============================================================
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: containerBg,
-      padding: isMobile ? "16px" : "24px",
-      transition: "background-color 0.3s",
-    }}>
-      <div style={{
-        background: cardBg,
-        borderRadius: 16,
-        boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
-        border: `1px solid ${cardBorder}`,
-        padding: cardPadding,
-        width: "100%",
-        maxWidth: 420,
-        transition: "background-color 0.3s, border-color 0.3s",
-      }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: containerBg,
+        padding: isMobile ? "16px" : "24px",
+        transition: "background-color 0.3s",
+      }}
+    >
+      {/* Keyframes préfixés lg-* */}
+      <style>{`
+        @keyframes lg-spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        .lg-spin {
+          animation: lg-spin 1s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .lg-spin { animation: none !important; }
+        }
+      `}</style>
+
+      <div
+        style={{
+          background: cardBg,
+          borderRadius: 16,
+          boxShadow: dark
+            ? "0 4px 12px rgba(0,0,0,0.5)"
+            : "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
+          border: `1px solid ${cardBorder}`,
+          padding: cardPadding,
+          width: "100%",
+          maxWidth: 420,
+          transition: "background-color 0.3s, border-color 0.3s",
+        }}
+      >
         {/* En-tête */}
         <div style={{ textAlign: "center", marginBottom: isMobile ? 24 : 32 }}>
-          <img src="/logo.png" alt="School Management" style={{ width: logoSize, height: logoSize, marginBottom: 16 }} />
-          <h1 style={{ fontSize: isMobile ? 22 : 24, fontWeight: 700, color: textPrimary, margin: 0 }}>
-            {step === "credentials" ? "School Management" : "Vérification en deux étapes"}
+          <img
+            src="/logo.png"
+            alt="School Management"
+            style={{
+              width: logoSize,
+              height: logoSize,
+              marginBottom: 16,
+              objectFit: "contain",
+            }}
+          />
+          <h1
+            style={{
+              fontSize: isMobile ? 22 : 24,
+              fontWeight: 700,
+              color: textPrimary,
+              margin: 0,
+            }}
+          >
+            {step === "credentials"
+              ? "School Management"
+              : "Vérification en deux étapes"}
           </h1>
-          <p style={{ color: textSecondary, marginTop: 8, fontSize: isMobile ? 14 : 14 }}>
+          <p
+            style={{
+              color: textSecondary,
+              marginTop: 8,
+              fontSize: 14,
+            }}
+          >
             {step === "credentials"
               ? "Connectez-vous à votre compte"
               : "Un code a été envoyé à votre adresse email."}
           </p>
         </div>
 
-        {step === "credentials" ? (
+        {/* ==================== ÉTAPE 1 : IDENTIFIANTS ==================== */}
+        {step === "credentials" && (
           <form onSubmit={handleCredentialsSubmit}>
-            {/* Champ identifiant */}
+            {/* Identifiant */}
             <div style={{ marginBottom: 20 }}>
-              <label htmlFor="login-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: labelColor }}>
+              <label
+                htmlFor="login-input"
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontWeight: 500,
+                  fontSize: isMobile ? 15 : 14,
+                  color: labelColor,
+                }}
+              >
                 Identifiant
               </label>
               <div style={{ position: "relative" }}>
-                <User size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: iconColor }} />
+                <User
+                  size={18}
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: iconColor,
+                    pointerEvents: "none",
+                  }}
+                />
                 <input
                   id="login-input"
                   type="text"
                   placeholder="Votre identifiant"
                   value={login}
-                  onChange={(e) => { setLogin(e.target.value); setError(""); }}
-                  autoComplete="username"
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px 12px 42px",
-                    border: `1.5px solid ${inputBorder}`,
-                    borderRadius: 10,
-                    fontSize: inputFontSize,
-                    outline: "none",
-                    background: inputBg,
-                    color: inputText,
-                    transition: "border-color 0.2s, background-color 0.3s, color 0.3s",
+                  onChange={(e) => {
+                    setLogin(e.target.value);
+                    if (error) setError("");
                   }}
-                  onFocus={(e) => (e.target.style.borderColor = dark ? "#818CF8" : "#4F46E5")}
+                  autoComplete="username"
+                  autoFocus
+                  style={commonInputStyle()}
+                  onFocus={(e) =>
+                    (e.target.style.borderColor = accent)
+                  }
                   onBlur={(e) => (e.target.style.borderColor = inputBorder)}
                 />
               </div>
             </div>
 
-            {/* Champ mot de passe */}
+            {/* Mot de passe */}
             <div style={{ marginBottom: 20 }}>
-              <label htmlFor="password-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: labelColor }}>
+              <label
+                htmlFor="password-input"
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontWeight: 500,
+                  fontSize: isMobile ? 15 : 14,
+                  color: labelColor,
+                }}
+              >
                 Mot de passe
               </label>
               <div style={{ position: "relative" }}>
-                <Lock size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: iconColor }} />
+                <Lock
+                  size={18}
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: iconColor,
+                    pointerEvents: "none",
+                  }}
+                />
                 <input
                   id="password-input"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                  autoComplete="current-password"
-                  style={{
-                    width: "100%",
-                    padding: "12px 42px 12px 42px",
-                    border: `1.5px solid ${inputBorder}`,
-                    borderRadius: 10,
-                    fontSize: inputFontSize,
-                    outline: "none",
-                    background: inputBg,
-                    color: inputText,
-                    transition: "border-color 0.2s, background-color 0.3s, color 0.3s",
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError("");
                   }}
-                  onFocus={(e) => (e.target.style.borderColor = dark ? "#818CF8" : "#4F46E5")}
+                  autoComplete="current-password"
+                  style={commonInputStyle(true)}
+                  onFocus={(e) =>
+                    (e.target.style.borderColor = accent)
+                  }
                   onBlur={(e) => (e.target.style.borderColor = inputBorder)}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: iconColor, cursor: "pointer" }}
+                  aria-label={
+                    showPassword
+                      ? "Masquer le mot de passe"
+                      : "Afficher le mot de passe"
+                  }
+                  style={{
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: iconColor,
+                    cursor: "pointer",
+                    padding: 4,
+                    display: "flex",
+                  }}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -222,97 +430,118 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
 
             {/* Message d'erreur */}
             {error && (
-              <div style={{
-                padding: "10px 14px",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 500,
-                marginBottom: 16,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                background: errorBg,
-                color: errorText,
-              }}>
-                {errorType === "locked" ? <Clock size={16} /> : "⚠️"}
-                {error}
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  marginBottom: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: errorBg,
+                  color: errorText,
+                }}
+              >
+                {errorType === "locked" ? (
+                  <Clock size={16} />
+                ) : (
+                  <AlertCircle size={16} />
+                )}
+                <span>{error}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              style={{
-                width: "100%",
-                padding: "12px 0",
-                background: loading ? "#A5B4FC" : buttonBg,
-                color: "#FFFFFF",
-                border: "none",
-                borderRadius: 10,
-                fontSize: 16,
-                fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)",
-                transition: "background 0.2s",
-              }}
+              style={commonButtonStyle}
             >
-              {loading ? <Loader2 size={18} className="spin" /> : <><LogIn size={18} /> Se connecter</>}
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="lg-spin" />
+                  Connexion...
+                </>
+              ) : (
+                <>
+                  <LogIn size={18} /> Se connecter
+                </>
+              )}
             </button>
           </form>
-        ) : (
+        )}
+
+        {/* ==================== ÉTAPE 2 : 2FA ==================== */}
+        {step === "twoFactor" && (
           <form onSubmit={handleTwoFactorSubmit}>
-            {/* Champ code 2FA */}
             <div style={{ marginBottom: 20 }}>
-              <label htmlFor="code-input" style={{ display: "block", marginBottom: 6, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: labelColor }}>
+              <label
+                htmlFor="code-input"
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontWeight: 500,
+                  fontSize: isMobile ? 15 : 14,
+                  color: labelColor,
+                }}
+              >
                 Code de vérification
               </label>
               <div style={{ position: "relative" }}>
-                <ShieldCheck size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: iconColor }} />
+                <ShieldCheck
+                  size={18}
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: iconColor,
+                    pointerEvents: "none",
+                  }}
+                />
                 <input
+                  ref={codeInputRef}
                   id="code-input"
                   type="text"
+                  inputMode="numeric"
                   placeholder="6 chiffres"
                   value={code}
-                  onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); setError(""); }}
+                  onChange={(e) => {
+                    setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                    if (error) setError("");
+                  }}
                   maxLength={6}
                   autoComplete="one-time-code"
                   style={{
-                    width: "100%",
-                    padding: "12px 14px 12px 42px",
-                    border: `1.5px solid ${inputBorder}`,
-                    borderRadius: 10,
+                    ...commonInputStyle(),
                     fontSize: 16,
-                    outline: "none",
-                    background: inputBg,
-                    color: inputText,
                     letterSpacing: "4px",
                     textAlign: "center",
-                    transition: "border-color 0.2s, background-color 0.3s, color 0.3s",
                   }}
-                  onFocus={(e) => (e.target.style.borderColor = dark ? "#818CF8" : "#4F46E5")}
+                  onFocus={(e) => (e.target.style.borderColor = accent)}
                   onBlur={(e) => (e.target.style.borderColor = inputBorder)}
                 />
               </div>
             </div>
 
             {error && (
-              <div style={{
-                padding: "10px 14px",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 500,
-                marginBottom: 16,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                background: errorBg,
-                color: errorText,
-              }}>
-                ⚠️ {error}
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  marginBottom: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: errorBg,
+                  color: errorText,
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>{error}</span>
               </div>
             )}
 
@@ -320,42 +549,50 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
               type="submit"
               disabled={loading || code.length !== 6}
               style={{
-                width: "100%",
-                padding: "12px 0",
-                background: loading ? "#A5B4FC" : buttonBg,
-                color: "#FFFFFF",
-                border: "none",
-                borderRadius: 10,
-                fontSize: 16,
-                fontWeight: 600,
-                cursor: loading || code.length !== 6 ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)",
-                transition: "background 0.2s",
+                ...commonButtonStyle,
+                background:
+                  loading || code.length !== 6 ? "#A5B4FC" : buttonBg,
+                cursor:
+                  loading || code.length !== 6 ? "not-allowed" : "pointer",
               }}
             >
-              {loading ? <Loader2 size={18} className="spin" /> : "Vérifier"}
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="lg-spin" />
+                  Vérification...
+                </>
+              ) : (
+                "Vérifier"
+              )}
             </button>
 
             <button
               type="button"
               onClick={handleResendCode}
-              disabled={sendingCode}
+              disabled={sendingCode || resendCooldown > 0}
               style={{
                 marginTop: 12,
                 background: "none",
                 border: "none",
-                color: linkColor,
-                cursor: "pointer",
+                color:
+                  sendingCode || resendCooldown > 0
+                    ? textSecondary
+                    : linkColor,
+                cursor:
+                  sendingCode || resendCooldown > 0
+                    ? "not-allowed"
+                    : "pointer",
                 fontSize: 14,
                 fontWeight: 500,
                 textDecoration: "underline",
+                width: "100%",
               }}
             >
-              {sendingCode ? "Envoi..." : "Renvoyer le code"}
+              {sendingCode
+                ? "Envoi..."
+                : resendCooldown > 0
+                ? `Renvoyer dans ${resendCooldown}s`
+                : "Renvoyer le code"}
             </button>
           </form>
         )}
@@ -367,10 +604,21 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
               Pas de compte ?{" "}
               <a
                 href="#"
-                onClick={(e) => { e.preventDefault(); onSwitchToRegister(); }}
-                style={{ color: linkColor, textDecoration: "none", fontWeight: 500 }}
-                onMouseEnter={(e) => (e.target.style.textDecoration = "underline")}
-                onMouseLeave={(e) => (e.target.style.textDecoration = "none")}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onSwitchToRegister();
+                }}
+                style={{
+                  color: linkColor,
+                  textDecoration: "none",
+                  fontWeight: 500,
+                }}
+                onMouseEnter={(e) =>
+                  (e.target.style.textDecoration = "underline")
+                }
+                onMouseLeave={(e) =>
+                  (e.target.style.textDecoration = "none")
+                }
               >
                 Créer un compte
               </a>

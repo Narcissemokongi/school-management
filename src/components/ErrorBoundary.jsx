@@ -1,36 +1,94 @@
-import { Component, useState } from "react";
+import { Component, useState, useEffect, useCallback } from "react";
 import { useTheme } from "./ThemeProvider";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
-import { AlertTriangle, RefreshCw, Home, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import {
+  AlertTriangle, RefreshCw, Home, Copy, Check,
+  ChevronDown, ChevronUp,
+} from "lucide-react";
 
-// Composant d'affichage avec thème et animations
-function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = false }) {
+// ============================================================
+// KEYFRAMES (module-level, préfixés eb-*)
+// ============================================================
+const ErrorBoundaryKeyframes = (
+  <style>{`
+    @keyframes eb-fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes eb-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      70%  { box-shadow: 0 0 0 15px rgba(239,68,68,0); }
+      100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    }
+    .eb-fade-in {
+      animation: eb-fadeIn 0.5s ease-out;
+    }
+    .eb-pulse {
+      animation: eb-pulse 2s infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .eb-fade-in, .eb-pulse {
+        animation: none !important;
+      }
+    }
+  `}</style>
+);
+
+// ============================================================
+// HOOK : prefers-reduced-motion (correct, avec fallback Safari)
+// ============================================================
+function usePrefersReducedMotion() {
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = (e) => setReduceMotion(e.matches);
+
+    // ✅ Fallback addListener pour vieux Safari
+    if (media.addEventListener) {
+      media.addEventListener("change", handler);
+      return () => media.removeEventListener("change", handler);
+    } else if (media.addListener) {
+      media.addListener(handler);
+      return () => media.removeListener(handler);
+    }
+  }, []);
+
+  return reduceMotion;
+}
+
+// ============================================================
+// AFFICHAGE DE L'ERREUR
+// ============================================================
+function ErrorDisplay({
+  error,
+  onRetry,
+  onReload,
+  showDetailsInProduction = false,
+}) {
   const { dark } = useTheme();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
+  const reduceMotion = usePrefersReducedMotion();
+
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const isDev = import.meta.env.DEV || showDetailsInProduction;
-  const [reduceMotion, setReduceMotion] = useState(false);
 
-  // Détecter la préférence de mouvement
-  useState(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduceMotion(media.matches);
-    const handler = (e) => setReduceMotion(e.matches);
-    media.addEventListener("change", handler);
-    return () => media.removeEventListener("change", handler);
-  });
-
-  const handleCopyError = async () => {
+  const handleCopyError = useCallback(async () => {
     if (!error) return;
     try {
       await navigator.clipboard.writeText(error.toString());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // ignorer
+      // Silencieux : la copie peut échouer en contexte non sécurisé
     }
-  };
+  }, [error]);
 
   // Styles adaptatifs
   const containerPadding = isMobile ? "24px 16px" : "32px 24px";
@@ -41,7 +99,7 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
   const errorBoxFontSize = isMobile ? 11 : 12;
   const errorBoxMaxWidth = isMobile ? "95%" : 500;
   const actionButtonPadding = isMobile ? "12px 16px" : "12px 24px";
-  const actionButtonFontSize = isMobile ? 15 : 15;
+  const actionButtonFontSize = 15;
   const actionsFlexDirection = isMobile ? "column" : "row";
   const actionsGap = isMobile ? 8 : 12;
   const actionsButtonWidth = isMobile ? "100%" : "auto";
@@ -50,6 +108,7 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
     <div
       role="alert"
       aria-live="assertive"
+      className={reduceMotion ? "" : "eb-fade-in"}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -61,10 +120,11 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
         background: dark ? "#0F172A" : "#F8FAFC",
         color: dark ? "#F1F5F9" : "#1E293B",
         transition: "background-color 0.3s, color 0.3s",
-        animation: reduceMotion ? "none" : "fadeIn 0.5s ease-out",
       }}
     >
+      {/* Icône avec pulse (désactivé si reduced-motion) */}
       <div
+        className={reduceMotion ? "" : "eb-pulse"}
         style={{
           width: iconContainerSize,
           height: iconContainerSize,
@@ -74,20 +134,38 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
           alignItems: "center",
           justifyContent: "center",
           marginBottom: isMobile ? 16 : 24,
-          boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(0,0,0,0.1)",
-          animation: reduceMotion ? "none" : "pulse 2s infinite",
+          boxShadow: dark
+            ? "0 4px 12px rgba(0,0,0,0.3)"
+            : "0 4px 12px rgba(0,0,0,0.1)",
         }}
       >
         <AlertTriangle size={iconSize} color="#EF4444" />
       </div>
 
-      <h1 style={{ fontSize: titleFontSize, fontWeight: 700, margin: "0 0 8px", color: dark ? "#F1F5F9" : "#1E293B" }}>
+      <h1
+        style={{
+          fontSize: titleFontSize,
+          fontWeight: 700,
+          margin: "0 0 8px",
+          color: dark ? "#F1F5F9" : "#1E293B",
+        }}
+      >
         Oups, une erreur est survenue
       </h1>
-      <p style={{ fontSize: messageFontSize, color: dark ? "#94A3B8" : "#64748B", marginBottom: isMobile ? 20 : 32, maxWidth: 460, lineHeight: 1.6 }}>
-        Quelque chose s'est mal passé. Vous pouvez essayer de recharger la page ou revenir à l'accueil.
+      <p
+        style={{
+          fontSize: messageFontSize,
+          color: dark ? "#94A3B8" : "#64748B",
+          marginBottom: isMobile ? 20 : 32,
+          maxWidth: 460,
+          lineHeight: 1.6,
+        }}
+      >
+        Quelque chose s'est mal passé. Vous pouvez essayer de recharger la page
+        ou revenir à l'accueil.
       </p>
 
+      {/* Détails techniques (dev uniquement) */}
       {isDev && error && (
         <div
           style={{
@@ -106,7 +184,15 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
             border: `1px solid ${dark ? "#334155" : "#FECACA"}`,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
             <span style={{ fontWeight: 600 }}>Détails techniques</span>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -124,7 +210,11 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
                 aria-expanded={showDetails}
                 aria-controls="error-details"
               >
-                {showDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {showDetails ? (
+                  <ChevronUp size={14} />
+                ) : (
+                  <ChevronDown size={14} />
+                )}
                 {showDetails ? "Masquer" : "Afficher"}
               </button>
               <button
@@ -141,25 +231,40 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
                 }}
                 aria-label="Copier les détails de l'erreur"
               >
-                {copied ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+                {copied ? (
+                  <Check size={14} color="#10B981" />
+                ) : (
+                  <Copy size={14} />
+                )}
                 {copied ? "Copié" : "Copier"}
               </button>
             </div>
           </div>
-          <div id="error-details" style={{ marginTop: 8, maxHeight: 200, overflowY: "auto", display: showDetails ? "block" : "none" }}>
+          <div
+            id="error-details"
+            style={{
+              marginTop: 8,
+              maxHeight: 200,
+              overflowY: "auto",
+              display: showDetails ? "block" : "none",
+            }}
+          >
             {error.toString()}
           </div>
         </div>
       )}
 
-      <div style={{
-        display: "flex",
-        flexDirection: actionsFlexDirection,
-        gap: actionsGap,
-        flexWrap: "wrap",
-        justifyContent: "center",
-        width: isMobile ? "100%" : "auto",
-      }}>
+      {/* Boutons d'action */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: actionsFlexDirection,
+          gap: actionsGap,
+          flexWrap: "wrap",
+          justifyContent: "center",
+          width: isMobile ? "100%" : "auto",
+        }}
+      >
         <button
           onClick={onRetry}
           style={{
@@ -175,7 +280,9 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
             fontSize: actionButtonFontSize,
             fontWeight: 600,
             cursor: "pointer",
-            boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)",
+            boxShadow: dark
+              ? "0 4px 12px rgba(0,0,0,0.3)"
+              : "0 4px 12px rgba(79,70,229,0.2)",
             transition: "background 0.2s, transform 0.1s",
             width: actionsButtonWidth,
           }}
@@ -190,6 +297,7 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
         >
           <RefreshCw size={20} /> Réessayer
         </button>
+
         <button
           onClick={onReload}
           style={{
@@ -204,7 +312,6 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
             borderRadius: 12,
             fontSize: actionButtonFontSize,
             fontWeight: 500,
-            textDecoration: "none",
             cursor: "pointer",
             transition: "background 0.2s, transform 0.1s",
             width: actionsButtonWidth,
@@ -220,6 +327,7 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
         >
           <RefreshCw size={20} /> Recharger
         </button>
+
         <a
           href="/"
           style={{
@@ -252,21 +360,14 @@ function ErrorDisplay({ error, onRetry, onReload, showDetailsInProduction = fals
         </a>
       </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
-          70% { box-shadow: 0 0 0 15px rgba(239,68,68,0); }
-          100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
-        }
-      `}</style>
+      {ErrorBoundaryKeyframes}
     </div>
   );
 }
 
+// ============================================================
+// ERROR BOUNDARY (class component)
+// ============================================================
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -278,7 +379,10 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    // ✅ Silencieux en prod, log détaillé en dev
+    if (import.meta.env.DEV) {
+      console.error("[ErrorBoundary] caught:", error, errorInfo);
+    }
   }
 
   handleRetry = () => {

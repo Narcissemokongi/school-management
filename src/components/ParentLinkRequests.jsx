@@ -7,14 +7,14 @@ import toast from "react-hot-toast";
 import {
   Loader, CheckCircle2, XCircle, Search, X, CheckSquare, Square,
   User, GraduationCap, Calendar, ChevronUp, ChevronDown, Mail,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ArrowUpDown,
 } from "lucide-react";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 export function ParentLinkRequests({ user, ecoleId }) {
   const { dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
@@ -25,30 +25,60 @@ export function ParentLinkRequests({ user, ecoleId }) {
   const [processingIds, setProcessingIds] = useState(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
-  const requests = useQuery(
+  // ── Fix #1 : ne plus masquer undefined avec ?? [] ────────────────
+  // ── Fix backend : la nouvelle signature exige `adminId`, plus `ecoleId`
+  const rawRequests = useQuery(
     api.parentLinks.listAll,
-    { status: statusFilter, ecoleId: ecoleId || undefined }
-  ) ?? [];
+    user?._id
+      ? { adminId: user._id, status: statusFilter }
+      : "skip"
+  );
+  const requests = rawRequests ?? [];
 
   const approve = useMutation(api.parentLinks.approveParentLinkRequest);
   const reject = useMutation(api.parentLinks.rejectParentLinkRequest);
   const { confirm, dialogProps } = useConfirm();
 
-  const parentIds = useMemo(() => requests.map((r) => r.parentId), [requests]);
-  const eleveIds = useMemo(() => requests.map((r) => r.eleveId), [requests]);
+  // ── Fix #5 : dedupe des IDs (évite d'envoyer 30× le même parent)
+  const parentIds = useMemo(
+    () => [...new Set(requests.map((r) => r.parentId))],
+    [requests]
+  );
+  const eleveIds = useMemo(
+    () => [...new Set(requests.map((r) => r.eleveId))],
+    [requests]
+  );
 
-  const parents = useQuery(api.users.getByIds, parentIds.length > 0 ? { ids: parentIds } : "skip") ?? [];
-  const eleves = useQuery(api.eleves.getByIds, eleveIds.length > 0 ? { ids: eleveIds } : "skip") ?? [];
+  const rawParents = useQuery(
+    api.users.getByIds,
+    parentIds.length > 0 ? { ids: parentIds } : "skip"
+  );
+  const rawEleves = useQuery(
+    api.eleves.getByIds,
+    eleveIds.length > 0 ? { ids: eleveIds } : "skip"
+  );
+  const parents = rawParents ?? [];
+  const eleves = rawEleves ?? [];
+
+  // ── Fix #1 (bis) : état de chargement de l'enrichissement
+  const enrichmentLoading =
+    rawRequests === undefined ||
+    (parentIds.length > 0 && rawParents === undefined) ||
+    (eleveIds.length > 0 && rawEleves === undefined);
 
   const parentMap = useMemo(() => {
     const map = {};
-    parents.forEach((p) => { map[p._id] = p; });
+    parents.forEach((p) => {
+      map[p._id] = p;
+    });
     return map;
   }, [parents]);
 
   const eleveMap = useMemo(() => {
     const map = {};
-    eleves.forEach((e) => { map[e._id] = e; });
+    eleves.forEach((e) => {
+      map[e._id] = e;
+    });
     return map;
   }, [eleves]);
 
@@ -64,8 +94,12 @@ export function ParentLinkRequests({ user, ecoleId }) {
     if (!searchTerm.trim()) return enrichedRequests;
     const q = searchTerm.toLowerCase();
     return enrichedRequests.filter((req) => {
-      const parentName = req.parent ? `${req.parent.nom} ${req.parent.postnom || ""}`.toLowerCase() : "";
-      const eleveName = req.eleve ? `${req.eleve.nom} ${req.eleve.postnom || ""}`.toLowerCase() : "";
+      const parentName = req.parent
+        ? `${req.parent.nom} ${req.parent.postnom || ""}`.toLowerCase()
+        : "";
+      const eleveName = req.eleve
+        ? `${req.eleve.nom} ${req.eleve.postnom || ""}`.toLowerCase()
+        : "";
       return parentName.includes(q) || eleveName.includes(q);
     });
   }, [enrichedRequests, searchTerm]);
@@ -93,7 +127,16 @@ export function ParentLinkRequests({ user, ecoleId }) {
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const paginated = sorted.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+  const paginated = sorted.slice(
+    (safeCurrentPage - 1) * pageSize,
+    safeCurrentPage * pageSize
+  );
+
+  // ── Fix #4 : toasts amicaux (pas de fuite d'erreur backend) ──────
+  const friendlyError = (err, action) => {
+    console.error(`[ParentLinkRequests] ${action} failed:`, err);
+    toast.error(`Échec : impossible de ${action}`);
+  };
 
   const handleApprove = async (id) => {
     const ok = await confirm("Approuver", "Voulez-vous approuver cette demande ?");
@@ -103,7 +146,7 @@ export function ParentLinkRequests({ user, ecoleId }) {
       await approve({ requestId: id, adminId: user._id });
       toast.success("Demande approuvée");
     } catch (err) {
-      toast.error(err.message);
+      friendlyError(err, "approuver la demande");
     } finally {
       setProcessingIds((prev) => {
         const next = new Set(prev);
@@ -121,7 +164,7 @@ export function ParentLinkRequests({ user, ecoleId }) {
       await reject({ requestId: id, adminId: user._id });
       toast.success("Demande rejetée");
     } catch (err) {
-      toast.error(err.message);
+      friendlyError(err, "rejeter la demande");
     } finally {
       setProcessingIds((prev) => {
         const next = new Set(prev);
@@ -131,33 +174,56 @@ export function ParentLinkRequests({ user, ecoleId }) {
     }
   };
 
+  // ── Fix #3 : "Tout approuver" approuve vraiment TOUT le filtré
+  //    (pas seulement la page courante), avec un compte clair.
+  //    Batch de 5 pour ne pas surcharger Convex.
+  const runInBatches = async (items, fn, batchSize = 5) => {
+    for (let i = 0; i < items.length; i += batchSize) {
+      await Promise.all(items.slice(i, i + batchSize).map(fn));
+    }
+  };
+
   const handleApproveAll = async () => {
-    const ok = await confirm("Approuver tout", "Voulez-vous approuver toutes les demandes affichées ?");
+    const pending = sorted.filter((r) => r.status === "pending");
+    if (pending.length === 0) return;
+
+    const ok = await confirm(
+      "Approuver tout",
+      `Voulez-vous approuver les ${pending.length} demande(s) en attente affichée(s) ?`
+    );
     if (!ok) return;
+
     setBulkProcessing(true);
     try {
-      await Promise.all(
-        paginated.map((req) => approve({ requestId: req._id, adminId: user._id }))
+      await runInBatches(pending, (req) =>
+        approve({ requestId: req._id, adminId: user._id })
       );
-      toast.success(`${paginated.length} demande(s) approuvée(s)`);
+      toast.success(`${pending.length} demande(s) approuvée(s)`);
     } catch (err) {
-      toast.error(err.message);
+      friendlyError(err, "approuver les demandes");
     } finally {
       setBulkProcessing(false);
     }
   };
 
   const handleRejectAll = async () => {
-    const ok = await confirm("Rejeter tout", "Voulez-vous rejeter toutes les demandes affichées ?");
+    const pending = sorted.filter((r) => r.status === "pending");
+    if (pending.length === 0) return;
+
+    const ok = await confirm(
+      "Rejeter tout",
+      `Voulez-vous rejeter les ${pending.length} demande(s) en attente affichée(s) ?`
+    );
     if (!ok) return;
+
     setBulkProcessing(true);
     try {
-      await Promise.all(
-        paginated.map((req) => reject({ requestId: req._id, adminId: user._id }))
+      await runInBatches(pending, (req) =>
+        reject({ requestId: req._id, adminId: user._id })
       );
-      toast.success(`${paginated.length} demande(s) rejetée(s)`);
+      toast.success(`${pending.length} demande(s) rejetée(s)`);
     } catch (err) {
-      toast.error(err.message);
+      friendlyError(err, "rejeter les demandes");
     } finally {
       setBulkProcessing(false);
     }
@@ -172,10 +238,21 @@ export function ParentLinkRequests({ user, ecoleId }) {
     }
   };
 
-  if (requests === undefined) {
+  // ── Fix #1 (ter) : loader basé sur la bonne variable ─────────────
+  if (enrichmentLoading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-        <Loader className="animate-spin" />
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 60,
+          color: dark ? "#94A3B8" : "#64748B",
+          gap: 12,
+        }}
+      >
+        <Loader className="animate-spin" size={24} />
+        <span>Chargement des demandes…</span>
       </div>
     );
   }
@@ -186,7 +263,9 @@ export function ParentLinkRequests({ user, ecoleId }) {
   const headerMarginBottom = isMobile ? 16 : 24;
   const searchBarFlexDirection = isMobile ? "column" : "row";
   const searchBarGap = isMobile ? 8 : 12;
-  const searchInputPadding = isMobile ? "12px 12px 12px 40px" : "8px 12px 8px 40px";
+  const searchInputPadding = isMobile
+    ? "12px 12px 12px 40px"
+    : "8px 12px 8px 40px";
   const searchInputFontSize = isMobile ? 16 : 14;
   const selectPadding = isMobile ? "12px 14px" : "8px 12px";
   const selectFontSize = isMobile ? 16 : 14;
@@ -197,25 +276,75 @@ export function ParentLinkRequests({ user, ecoleId }) {
   const cardAlignItems = isMobile ? "stretch" : "center";
   const cardGap = isMobile ? 8 : 12;
   const actionButtonPadding = isMobile ? "10px 12px" : "8px 16px";
-  const actionButtonFontSize = isMobile ? 14 : 14;
+  const actionButtonFontSize = 14;
   const bulkActionsFlexDirection = isMobile ? "column" : "row";
   const paginationButtonPadding = isMobile ? "10px 12px" : "6px 10px";
   const paginationFontSize = isMobile ? 14 : 13;
 
+  // ── Fix #6 : styles ellipsis pour noms longs
+  const nameStyle = {
+    fontWeight: 500,
+    color: dark ? "#F1F5F9" : "#1E293B",
+    fontSize: isMobile ? 15 : 14,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    maxWidth: isMobile ? "100%" : 260,
+    minWidth: 0,
+  };
+
+  const cardColumnStyle = {
+    flex: 1,
+    minWidth: 0, // ← permet à ellipsis de fonctionner
+  };
+
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: containerPadding }}>
-      <h2 style={{ fontSize: titleSize, fontWeight: 700, marginBottom: headerMarginBottom, color: dark ? "#F1F5F9" : "#1E293B" }}>
+      <h2
+        style={{
+          fontSize: titleSize,
+          fontWeight: 700,
+          marginBottom: headerMarginBottom,
+          color: dark ? "#F1F5F9" : "#1E293B",
+        }}
+      >
         Demandes d'association parent-enfant
       </h2>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: searchBarGap, marginBottom: 16, flexDirection: searchBarFlexDirection }}>
-        <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200, position: "relative" }}>
-          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: dark ? "#94A3B8" : "#9CA3AF" }} />
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: searchBarGap,
+          marginBottom: 16,
+          flexDirection: searchBarFlexDirection,
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            minWidth: isMobile ? "100%" : 200,
+            position: "relative",
+          }}
+        >
+          <Search
+            size={16}
+            style={{
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: dark ? "#94A3B8" : "#9CA3AF",
+            }}
+          />
           <input
             type="search"
             placeholder="Rechercher parent ou élève..."
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
             style={{
               width: "100%",
               padding: searchInputPadding,
@@ -231,7 +360,16 @@ export function ParentLinkRequests({ user, ecoleId }) {
           {searchTerm && (
             <button
               onClick={() => setSearchTerm("")}
-              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: dark ? "#94A3B8" : "#64748B" }}
+              style={{
+                position: "absolute",
+                right: 8,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: dark ? "#94A3B8" : "#64748B",
+              }}
             >
               <X size={16} />
             </button>
@@ -240,7 +378,10 @@ export function ParentLinkRequests({ user, ecoleId }) {
 
         <select
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+          }}
           style={{
             padding: selectPadding,
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
@@ -258,15 +399,30 @@ export function ParentLinkRequests({ user, ecoleId }) {
           <option value="all">Toutes</option>
         </select>
 
-        <div style={{ display: "flex", gap: sortButtonsGap, flexDirection: sortButtonsFlexDirection, width: isMobile ? "100%" : "auto" }}>
-          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} />
-          <SortButton label="Parent" field="parent" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} />
-          <SortButton label="Élève" field="eleve" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} />
+        <div
+          style={{
+            display: "flex",
+            gap: sortButtonsGap,
+            flexDirection: sortButtonsFlexDirection,
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
+          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} dark={dark} />
+          <SortButton label="Parent" field="parent" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} dark={dark} />
+          <SortButton label="Élève" field="eleve" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} dark={dark} />
         </div>
       </div>
 
       {statusFilter === "pending" && paginated.length > 0 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexDirection: bulkActionsFlexDirection, width: isMobile ? "100%" : "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 16,
+            flexDirection: bulkActionsFlexDirection,
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
           <button
             onClick={handleApproveAll}
             disabled={bulkProcessing}
@@ -286,7 +442,11 @@ export function ParentLinkRequests({ user, ecoleId }) {
               width: isMobile ? "100%" : "auto",
             }}
           >
-            {bulkProcessing ? <Loader size={18} className="animate-spin" /> : <CheckSquare size={18} />}
+            {bulkProcessing ? (
+              <Loader size={18} className="animate-spin" />
+            ) : (
+              <CheckSquare size={18} />
+            )}
             Tout approuver
           </button>
           <button
@@ -308,7 +468,11 @@ export function ParentLinkRequests({ user, ecoleId }) {
               width: isMobile ? "100%" : "auto",
             }}
           >
-            {bulkProcessing ? <Loader size={18} className="animate-spin" /> : <Square size={18} />}
+            {bulkProcessing ? (
+              <Loader size={18} className="animate-spin" />
+            ) : (
+              <Square size={18} />
+            )}
             Tout rejeter
           </button>
         </div>
@@ -331,33 +495,89 @@ export function ParentLinkRequests({ user, ecoleId }) {
               gap: cardGap,
             }}
           >
-            <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                <User size={16} style={{ color: dark ? "#94A3B8" : "#64748B" }} />
-                <span style={{ fontWeight: 500, color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 15 : 14 }}>
-                  {req.parent ? `${req.parent.nom} ${req.parent.postnom || ""}` : "Parent inconnu"}
+            <div style={cardColumnStyle}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 4,
+                  flexWrap: "wrap",
+                  minWidth: 0,
+                }}
+              >
+                <User
+                  size={16}
+                  style={{ color: dark ? "#94A3B8" : "#64748B", flexShrink: 0 }}
+                />
+                <span style={nameStyle}>
+                  {req.parent
+                    ? `${req.parent.nom} ${req.parent.postnom || ""}`
+                    : "Parent inconnu"}
                 </span>
                 {req.parent?.email && (
-                  <span style={{ fontSize: 12, color: dark ? "#94A3B8" : "#64748B", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: dark ? "#94A3B8" : "#64748B",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      maxWidth: isMobile ? "100%" : 220,
+                    }}
+                  >
                     <Mail size={12} /> {req.parent.email}
                   </span>
                 )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                <GraduationCap size={16} style={{ color: dark ? "#94A3B8" : "#64748B" }} />
-                <span style={{ color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 15 : 14 }}>
-                  {req.eleve ? `${req.eleve.nom} ${req.eleve.postnom || ""}` : "Élève inconnu"}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 4,
+                  flexWrap: "wrap",
+                  minWidth: 0,
+                }}
+              >
+                <GraduationCap
+                  size={16}
+                  style={{ color: dark ? "#94A3B8" : "#64748B", flexShrink: 0 }}
+                />
+                <span style={nameStyle}>
+                  {req.eleve
+                    ? `${req.eleve.nom} ${req.eleve.postnom || ""}`
+                    : "Élève inconnu"}
                   {req.eleve?.classe && ` (${req.eleve.classe})`}
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Calendar size={14} style={{ color: dark ? "#94A3B8" : "#64748B" }} />
-                <span style={{ fontSize: 12, color: dark ? "#94A3B8" : "#64748B" }}>
+                <Calendar
+                  size={14}
+                  style={{ color: dark ? "#94A3B8" : "#64748B" }}
+                />
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: dark ? "#94A3B8" : "#64748B",
+                  }}
+                >
                   {new Date(req.createdAt).toLocaleDateString("fr-FR")}
                 </span>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, flexShrink: 0, flexDirection: isMobile ? "column" : "row", width: isMobile ? "100%" : "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexShrink: 0,
+                flexDirection: isMobile ? "column" : "row",
+                width: isMobile ? "100%" : "auto",
+              }}
+            >
               {req.status === "pending" && (
                 <>
                   <button
@@ -369,16 +589,24 @@ export function ParentLinkRequests({ user, ecoleId }) {
                       justifyContent: "center",
                       gap: 6,
                       padding: actionButtonPadding,
-                      background: processingIds.has(req._id) ? "#94A3B8" : "#10B981",
+                      background: processingIds.has(req._id)
+                        ? "#94A3B8"
+                        : "#10B981",
                       color: "white",
                       border: "none",
                       borderRadius: 8,
-                      cursor: processingIds.has(req._id) ? "not-allowed" : "pointer",
+                      cursor: processingIds.has(req._id)
+                        ? "not-allowed"
+                        : "pointer",
                       fontSize: actionButtonFontSize,
                       width: isMobile ? "100%" : "auto",
                     }}
                   >
-                    {processingIds.has(req._id) ? <Loader size={16} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                    {processingIds.has(req._id) ? (
+                      <Loader size={16} className="animate-spin" />
+                    ) : (
+                      <CheckCircle2 size={18} />
+                    )}
                     Approuver
                   </button>
                   <button
@@ -390,27 +618,53 @@ export function ParentLinkRequests({ user, ecoleId }) {
                       justifyContent: "center",
                       gap: 6,
                       padding: actionButtonPadding,
-                      background: processingIds.has(req._id) ? "#94A3B8" : "#EF4444",
+                      background: processingIds.has(req._id)
+                        ? "#94A3B8"
+                        : "#EF4444",
                       color: "white",
                       border: "none",
                       borderRadius: 8,
-                      cursor: processingIds.has(req._id) ? "not-allowed" : "pointer",
+                      cursor: processingIds.has(req._id)
+                        ? "not-allowed"
+                        : "pointer",
                       fontSize: actionButtonFontSize,
                       width: isMobile ? "100%" : "auto",
                     }}
                   >
-                    {processingIds.has(req._id) ? <Loader size={16} className="animate-spin" /> : <XCircle size={18} />}
+                    {processingIds.has(req._id) ? (
+                      <Loader size={16} className="animate-spin" />
+                    ) : (
+                      <XCircle size={18} />
+                    )}
                     Rejeter
                   </button>
                 </>
               )}
               {req.status === "approved" && (
-                <span style={{ color: "#10B981", display: "flex", alignItems: "center", gap: 4, fontWeight: 500, fontSize: actionButtonFontSize }}>
+                <span
+                  style={{
+                    color: "#10B981",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontWeight: 500,
+                    fontSize: actionButtonFontSize,
+                  }}
+                >
                   <CheckCircle2 size={16} /> Approuvée
                 </span>
               )}
               {req.status === "rejected" && (
-                <span style={{ color: "#EF4444", display: "flex", alignItems: "center", gap: 4, fontWeight: 500, fontSize: actionButtonFontSize }}>
+                <span
+                  style={{
+                    color: "#EF4444",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontWeight: 500,
+                    fontSize: actionButtonFontSize,
+                  }}
+                >
                   <XCircle size={16} /> Rejetée
                 </span>
               )}
@@ -419,22 +673,85 @@ export function ParentLinkRequests({ user, ecoleId }) {
         ))}
       </div>
 
+      {paginated.length === 0 && !enrichmentLoading && (
+        <div
+          style={{
+            textAlign: "center",
+            padding: "40px 20px",
+            color: dark ? "#94A3B8" : "#64748B",
+          }}
+        >
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: "50%",
+              background: dark ? "#1E293B" : "#F1F5F9",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 16px",
+            }}
+          >
+            <User size={28} />
+          </div>
+          <p style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>
+            Aucune demande
+          </p>
+          <p style={{ fontSize: 13 }}>
+            {searchTerm
+              ? "Aucun résultat pour votre recherche."
+              : "Rien à afficher pour ce filtre."}
+          </p>
+        </div>
+      )}
+
       {totalPages > 1 && (
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 16,
+          }}
+        >
           <button
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={safeCurrentPage === 1}
-            style={{ padding: paginationButtonPadding, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: paginationFontSize }}
+            style={{
+              padding: paginationButtonPadding,
+              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+              borderRadius: 6,
+              background: "transparent",
+              cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer",
+              color: dark ? "#F1F5F9" : "#1E293B",
+              fontSize: paginationFontSize,
+            }}
           >
             <ChevronLeft size={16} />
           </button>
-          <span style={{ fontSize: paginationFontSize, color: dark ? "#94A3B8" : "#64748B" }}>
+          <span
+            style={{
+              fontSize: paginationFontSize,
+              color: dark ? "#94A3B8" : "#64748B",
+            }}
+          >
             Page {safeCurrentPage} / {totalPages}
           </span>
           <button
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={safeCurrentPage === totalPages}
-            style={{ padding: paginationButtonPadding, border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`, borderRadius: 6, background: "transparent", cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer", color: dark ? "#F1F5F9" : "#1E293B", fontSize: paginationFontSize }}
+            style={{
+              padding: paginationButtonPadding,
+              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+              borderRadius: 6,
+              background: "transparent",
+              cursor:
+                safeCurrentPage === totalPages ? "not-allowed" : "pointer",
+              color: dark ? "#F1F5F9" : "#1E293B",
+              fontSize: paginationFontSize,
+            }}
           >
             <ChevronRight size={16} />
           </button>
@@ -446,13 +763,22 @@ export function ParentLinkRequests({ user, ecoleId }) {
   );
 }
 
-// Composant pour les boutons de tri (corrigé avec isMobile)
-function SortButton({ label, field, currentSort, currentOrder, onClick, isMobile }) {
+// ── Fix #2 : SortButton prend `dark` + utilise ArrowUpDown ─────────
+function SortButton({
+  label,
+  field,
+  currentSort,
+  currentOrder,
+  onClick,
+  isMobile,
+  dark,
+}) {
   const isActive = currentSort === field;
-  let IconComponent = ChevronDown;
-  if (isActive) {
-    IconComponent = currentOrder === "asc" ? ChevronUp : ChevronDown;
-  }
+  const IconComponent = !isActive
+    ? ArrowUpDown
+    : currentOrder === "asc"
+    ? ChevronUp
+    : ChevronDown;
 
   return (
     <button
@@ -463,10 +789,22 @@ function SortButton({ label, field, currentSort, currentOrder, onClick, isMobile
         justifyContent: "center",
         gap: 4,
         padding: isMobile ? "10px 12px" : "8px 12px",
-        border: `1px solid ${isActive ? "#4F46E5" : "#E2E8F0"}`,
+        border: `1px solid ${
+          isActive ? "#4F46E5" : dark ? "#334155" : "#E2E8F0"
+        }`,
         borderRadius: 8,
-        background: isActive ? "#EEF2FF" : "transparent",
-        color: isActive ? "#4F46E5" : "#64748B",
+        background: isActive
+          ? dark
+            ? "rgba(79,70,229,0.15)"
+            : "#EEF2FF"
+          : "transparent",
+        color: isActive
+          ? dark
+            ? "#A5B4FC"
+            : "#4F46E5"
+          : dark
+          ? "#94A3B8"
+          : "#64748B",
         fontWeight: isActive ? 600 : 400,
         cursor: "pointer",
         fontSize: isMobile ? 14 : 13,
@@ -474,7 +812,7 @@ function SortButton({ label, field, currentSort, currentOrder, onClick, isMobile
       }}
     >
       {label}
-      <IconComponent size={14} style={isActive ? undefined : { opacity: 0.4 }} />
+      <IconComponent size={14} style={isActive ? undefined : { opacity: 0.5 }} />
     </button>
   );
 }

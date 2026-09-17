@@ -1,48 +1,295 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useDeferredValue, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
   Search, Edit2, Trash2, UserCheck, UserX, Loader,
   Users, UserPlus, Clock, CheckCircle, ChevronLeft, ChevronRight,
-  Filter, Download, LayoutGrid, List as ListIcon, Eye, X,
+  Download, LayoutGrid, List as ListIcon, ChevronRight as ChevronRightIcon,
+  SlidersHorizontal, X, Eye,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import * as XLSX from "xlsx";
+import {
+  AddUserModal,
+  DetailUserModal,
+  UtilisateursFiltersSheet,
+} from "./UtilisateursModals";
 
+// ============================================================
+// BADGE DE RÔLE
+// ============================================================
+export function RoleBadge({ role, dark }) {
+  const colors = {
+    admin: { bg: dark ? "#7F1D1D" : "#FEE2E2", color: dark ? "#F87171" : "#B91C1C" },
+    superAdmin: { bg: dark ? "#7F1D1D" : "#FEE2E2", color: dark ? "#F87171" : "#B91C1C" },
+    directeur: { bg: dark ? "#064E3B" : "#D1FAE5", color: dark ? "#34D399" : "#065F46" },
+    disciplinaire: { bg: dark ? "#78350F" : "#FEF3C7", color: dark ? "#FBBF24" : "#92400E" },
+    enseignant: { bg: dark ? "#312E81" : "#EEF2FF", color: dark ? "#A5B4FC" : "#4F46E5" },
+    parent: { bg: dark ? "#082F49" : "#E0F2FE", color: dark ? "#38BDF8" : "#0369A1" },
+    comptable: { bg: dark ? "#500724" : "#FCE7F3", color: dark ? "#F472B6" : "#BE185D" },
+    eleve: { bg: dark ? "#2E1065" : "#F3E8FF", color: dark ? "#C084FC" : "#6B21A8" },
+  };
+  const style =
+    colors[role] || {
+      bg: dark ? "#334155" : "#F1F5F9",
+      color: dark ? "#CBD5E1" : "#475569",
+    };
+  return (
+    <span
+      style={{
+        background: style.bg,
+        color: style.color,
+        padding: "2px 8px",
+        borderRadius: 10,
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: "capitalize",
+      }}
+    >
+      {role}
+    </span>
+  );
+}
+
+// ============================================================
+// CARTE STATISTIQUE COMPACTE
+// ============================================================
+function StatCard({ icon, label, value, color, dark, isMobile }) {
+  return (
+    <div
+      style={{
+        background: dark ? "#1E293B" : "#FFFFFF",
+        borderRadius: 12,
+        padding: isMobile ? "10px 12px" : "14px 16px",
+        boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.25)" : "0 1px 2px rgba(0,0,0,0.04)",
+        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        minWidth: isMobile ? 130 : "auto",
+        flex: isMobile ? "0 0 auto" : 1,
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: `${color}20`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          color,
+        }}
+      >
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            color: dark ? "#94A3B8" : "#64748B",
+            fontSize: 10.5,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            textTransform: "capitalize",
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            color: dark ? "#F1F5F9" : "#1E293B",
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: 1.1,
+          }}
+        >
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// CARTE UTILISATEUR COMPACTE
+// ============================================================
+function UserCard({ user, dark, isMobile, selected, selectionMode, onToggleSelect, onClick }) {
+  const handleClick = () => {
+    if (selectionMode) onToggleSelect(user._id);
+    else onClick();
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
+      style={{
+        background: dark ? "#1E293B" : "#FFFFFF",
+        borderRadius: 12,
+        padding: isMobile ? "10px 12px" : "12px 14px",
+        boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.25)" : "0 1px 2px rgba(0,0,0,0.04)",
+        border: `1.5px solid ${
+          selected
+            ? dark
+              ? "#818CF8"
+              : "#4F46E5"
+            : dark
+            ? "#334155"
+            : "#E2E8F0"
+        }`,
+        display: "flex",
+        alignItems: "center",
+        gap: isMobile ? 10 : 12,
+        cursor: "pointer",
+        transition: "border-color 0.15s, transform 0.1s",
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+        minWidth: 0,
+      }}
+      onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.99)")}
+      onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+    >
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            background: dark ? "#312E81" : "#EEF2FF",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: dark ? "#A5B4FC" : "#4F46E5",
+            fontWeight: 700,
+            fontSize: 13,
+          }}
+        >
+          {user.nom?.[0]?.toUpperCase()}
+          {user.postnom?.[0]?.toUpperCase() || ""}
+        </div>
+        {selectionMode && (
+          <div
+            style={{
+              position: "absolute",
+              top: -4,
+              right: -4,
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              background: selected ? (dark ? "#818CF8" : "#4F46E5") : (dark ? "#334155" : "#FFFFFF"),
+              border: `2px solid ${dark ? "#1E293B" : "#FFFFFF"}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#FFF",
+              fontSize: 10,
+              fontWeight: 700,
+            }}
+          >
+            {selected ? "✓" : ""}
+          </div>
+        )}
+      </div>
+
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div
+          style={{
+            fontWeight: 600,
+            fontSize: isMobile ? 13.5 : 14,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {user.nom}
+        </div>
+        <div
+          style={{
+            fontSize: isMobile ? 11 : 11.5,
+            color: dark ? "#94A3B8" : "#64748B",
+            marginTop: 2,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+          }}
+        >
+          <RoleBadge role={user.role} dark={dark} />
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            @{user.login}
+          </span>
+          {user.classe && (
+            <>
+              <span style={{ opacity: 0.5 }}>·</span>
+              <span>{user.classe}</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {!selectionMode && (
+        <ChevronRightIcon
+          size={18}
+          color={dark ? "#475569" : "#CBD5E1"}
+          style={{ flexShrink: 0 }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// COMPOSANT PRINCIPAL
+// ============================================================
 export function GestionUtilisateurs({ ecoleId, userId }) {
-  const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const { dark } = useStyles();
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
   const [tab, setTab] = useState("actifs");
 
-  const users = useQuery(api.users.listByEcole, ecoleId ? { ecoleId } : "skip");
-  const pendingUsers = useQuery(api.users.listPendingUsers, ecoleId ? { ecoleId } : "skip");
-  const classes = useQuery(api.classes.list, ecoleId ? { ecoleId } : "skip") ?? [];
+  // ===== Queries (userId obligatoire partout) =====
+  const users = useQuery(
+    api.users.listByEcole,
+    ecoleId && userId ? { ecoleId, userId } : "skip"
+  );
+  const pendingUsers = useQuery(
+    api.users.listPendingUsers,
+    ecoleId && userId ? { ecoleId, userId } : "skip"
+  );
+  // 🔴 FIX : userId ajouté sur classes.list
+  const classes =
+    useQuery(
+      api.classes.list,
+      ecoleId && userId ? { ecoleId, userId } : "skip"
+    ) ?? [];
 
+  // ===== Mutations =====
   const addUser = useMutation(api.users.add);
   const updateUser = useMutation(api.users.update);
   const removeUser = useMutation(api.users.remove);
   const approveUser = useMutation(api.users.approveUser);
   const rejectUser = useMutation(api.users.rejectUser);
 
+  // ===== État local =====
   const [showForm, setShowForm] = useState(false);
   const [editUser, setEditUser] = useState(null);
-  const [formData, setFormData] = useState({
-    nom: "",
-    login: "",
-    password: "",
-    confirmPassword: "",
-    role: "enseignant",
-    classe: "",
-  });
-  const [formErrors, setFormErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [detailUser, setDetailUser] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -51,17 +298,30 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
   const [sortDir, setSortDir] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [viewMode, setViewMode] = useState("table");
+  const [viewMode, setViewMode] = useState("cards");
   const [showFilters, setShowFilters] = useState(false);
-  const [detailUser, setDetailUser] = useState(null);
-  const pageSize = 10;
+  const [exporting, setExporting] = useState(false);
+  const pageSize = 15;
 
-  const classNames = useMemo(() => [...new Set(classes.map(c => c.nom))].sort(), [classes]);
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const headerCheckboxRef = useRef(null);
+
+  // ===== Données dérivées =====
+  const classNames = useMemo(
+    () => [...new Set(classes.map((c) => c.nom))].sort(),
+    [classes]
+  );
+
+  const roles = useMemo(() => {
+    if (!users) return [];
+    const set = new Set(users.map((u) => u.role));
+    return Array.from(set).sort();
+  }, [users]);
 
   const stats = useMemo(() => {
     const total = users?.length ?? 0;
     const parRole = {};
-    users?.forEach(u => {
+    users?.forEach((u) => {
       parRole[u.role] = (parRole[u.role] || 0) + 1;
     });
     return { total, pending: pendingUsers?.length ?? 0, parRole };
@@ -69,10 +329,11 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
 
   const filteredUsers = useMemo(() => {
     if (!users) return [];
-    let list = users.filter(u => {
-      const matchSearch = searchTerm.length === 0 ||
-        u.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.login.toLowerCase().includes(searchTerm.toLowerCase());
+    let list = users.filter((u) => {
+      const matchSearch =
+        deferredSearchTerm.length === 0 ||
+        u.nom.toLowerCase().includes(deferredSearchTerm.toLowerCase()) ||
+        u.login.toLowerCase().includes(deferredSearchTerm.toLowerCase());
       const matchRole = !roleFilter || u.role === roleFilter;
       const matchClasse = !classeFilter || u.classe === classeFilter;
       return matchSearch && matchRole && matchClasse;
@@ -81,107 +342,65 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
       const aVal = (a[sortKey] ?? "").toString().toLowerCase();
       const bVal = (b[sortKey] ?? "").toString().toLowerCase();
       if (sortDir === "asc") return aVal.localeCompare(bVal);
-      else return bVal.localeCompare(aVal);
+      return bVal.localeCompare(aVal);
     });
     return list;
-  }, [users, searchTerm, roleFilter, classeFilter, sortKey, sortDir]);
+  }, [users, deferredSearchTerm, roleFilter, classeFilter, sortKey, sortDir]);
 
-  const totalPages = Math.ceil(filteredUsers.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
   const paginatedUsers = filteredUsers.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
+    (safePage - 1) * pageSize,
+    safePage * pageSize
   );
 
-  const handleSearchChange = (val) => { setSearchTerm(val); setCurrentPage(1); };
-  const handleRoleFilterChange = (val) => { setRoleFilter(val); setCurrentPage(1); };
-  const handleClasseFilterChange = (val) => { setClasseFilter(val); setCurrentPage(1); };
-  const handleSort = (key) => {
-    if (sortKey === key) {
-      setSortDir(prev => prev === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
+  const activeFiltersCount = useMemo(() => {
+    let n = 0;
+    if (searchTerm.trim()) n++;
+    if (roleFilter) n++;
+    if (classeFilter) n++;
+    return n;
+  }, [searchTerm, roleFilter, classeFilter]);
 
-  const roles = useMemo(() => {
-    if (!users) return [];
-    const set = new Set(users.map(u => u.role));
-    return Array.from(set).sort();
-  }, [users]);
+  const selectionMode = selectedIds.size > 0;
 
-  const resetForm = () => {
-    setFormData({ nom: "", login: "", password: "", confirmPassword: "", role: "enseignant", classe: "" });
-    setFormErrors({});
-    setEditUser(null);
+  // Reset page + sélection quand filtres/tri changent
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds(new Set());
+  }, [deferredSearchTerm, roleFilter, classeFilter, sortKey, sortDir]);
+
+  // État indeterminate de la checkbox header
+  useEffect(() => {
+    if (!headerCheckboxRef.current) return;
+    const allSelected =
+      paginatedUsers.length > 0 &&
+      paginatedUsers.every((u) => selectedIds.has(u._id));
+    const someSelected = paginatedUsers.some((u) => selectedIds.has(u._id));
+    headerCheckboxRef.current.indeterminate = someSelected && !allSelected;
+  }, [paginatedUsers, selectedIds]);
+
+  // ==================== HANDLERS ====================
+  const resetFilters = () => {
+    setSearchTerm("");
+    setRoleFilter("");
+    setClasseFilter("");
+    setCurrentPage(1);
   };
 
   const openCreate = () => {
-    resetForm();
+    setEditUser(null);
     setShowForm(true);
   };
+
   const openEdit = (user) => {
     setEditUser(user);
-    setFormData({
-      nom: user.nom,
-      login: user.login,
-      password: "",
-      confirmPassword: "",
-      role: user.role,
-      classe: user.classe || "",
-    });
-    setFormErrors({});
     setShowForm(true);
   };
 
-  const validateForm = () => {
-    const errs = {};
-    if (!formData.nom.trim()) errs.nom = "Requis";
-    if (!editUser) {
-      if (!formData.login.trim()) errs.login = "Requis";
-      if (!formData.password.trim()) errs.password = "Requis";
-    }
-    if (formData.password && formData.password.length < 4) errs.password = "4 caractères min.";
-    if (formData.password !== formData.confirmPassword) errs.confirmPassword = "Les mots de passe ne correspondent pas.";
-    setFormErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-    setSubmitting(true);
-    try {
-      if (editUser) {
-        const payload = {
-          id: editUser._id,
-          nom: formData.nom.trim(),
-          role: formData.role,
-          classe: formData.classe || undefined,
-          adminId: userId,
-        };
-        if (formData.password) payload.password = formData.password;
-        await updateUser(payload);
-        toast.success("Utilisateur mis à jour");
-      } else {
-        await addUser({
-          nom: formData.nom.trim(),
-          login: formData.login.trim(),
-          password: formData.password,
-          role: formData.role,
-          classe: formData.classe || undefined,
-          ecoleId,
-          userId,
-        });
-        toast.success("Utilisateur créé");
-      }
-      setShowForm(false);
-      resetForm();
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSubmitting(false);
-    }
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditUser(null);
   };
 
   const handleDelete = async (id) => {
@@ -190,34 +409,44 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
     try {
       await removeUser({ id, adminId: userId });
       toast.success("Utilisateur supprimé");
+      setDetailUser(null);
     } catch (err) {
-      toast.error(err.message);
+      console.error("[GestionUtilisateurs] delete failed:", err);
+      toast.error("Impossible de supprimer l'utilisateur");
     }
   };
 
   const toggleSelect = (id) => {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
   };
-  const toggleSelectAll = () => {
-    if (selectedIds.size === paginatedUsers.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(paginatedUsers.map(u => u._id)));
-    }
-  };
 
   const deleteSelected = async () => {
-    const ok = await confirm("Supprimer la sélection", `Supprimer ${selectedIds.size} utilisateur(s) ?`);
+    const ids = Array.from(selectedIds);
+    const ok = await confirm(
+      "Supprimer la sélection",
+      `Supprimer ${ids.length} utilisateur(s) ?`
+    );
     if (!ok) return;
-    for (const id of selectedIds) {
-      await removeUser({ id, adminId: userId }).catch(() => {});
+
+    let success = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await removeUser({ id, adminId: userId });
+        success++;
+      } catch (err) {
+        console.error("[GestionUtilisateurs] bulk delete failed:", err);
+        failed++;
+      }
     }
-    toast.success(`${selectedIds.size} utilisateur(s) supprimé(s)`);
+
+    if (success > 0) toast.success(`${success} utilisateur(s) supprimé(s)`);
+    if (failed > 0) toast.error(`${failed} suppression(s) ont échoué`);
     setSelectedIds(new Set());
   };
 
@@ -226,23 +455,40 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
       await approveUser({ userId: id, adminId: userId });
       toast.success("Utilisateur approuvé");
     } catch (err) {
-      toast.error(err.message);
-    }
-  };
-  const handleReject = async (id) => {
-    const reason = prompt("Motif du rejet (optionnel) :");
-    try {
-      await rejectUser({ userId: id, reason: reason || undefined, adminId: userId });
-      toast.success("Utilisateur rejeté");
-    } catch (err) {
-      toast.error(err.message);
+      console.error("[GestionUtilisateurs] approve failed:", err);
+      toast.error("Impossible d'approuver l'utilisateur");
     }
   };
 
-  const handleExportExcel = () => {
+  // 🟡 FIX : guard sur cancel du prompt
+  const handleReject = async (id) => {
+    const reason = window.prompt("Motif du rejet (optionnel) :");
+    if (reason === null) return; // ✅ l'utilisateur a annulé
+
+    try {
+      await rejectUser({
+        userId: id,
+        reason: reason.trim() || undefined,
+        adminId: userId,
+      });
+      toast.success("Utilisateur rejeté");
+    } catch (err) {
+      console.error("[GestionUtilisateurs] reject failed:", err);
+      toast.error("Impossible de rejeter l'utilisateur");
+    }
+  };
+
+  const handleExportExcel = async () => {
+    // 🟢 FIX : garde si rien à exporter
+    if (filteredUsers.length === 0) {
+      toast.error("Aucune donnée à exporter.");
+      return;
+    }
+    if (exporting) return;
     setExporting(true);
     try {
-      const data = filteredUsers.map(u => ({
+      const XLSX = await import("xlsx");
+      const data = filteredUsers.map((u) => ({
         Nom: u.nom,
         Login: u.login,
         Rôle: u.role,
@@ -254,262 +500,915 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
       XLSX.writeFile(workbook, "utilisateurs.xlsx");
       toast.success("Export Excel réussi.");
     } catch (err) {
-      toast.error("Erreur lors de l'export.");
+      console.error("[GestionUtilisateurs] export failed:", err);
+      toast.error("Impossible de générer l'export");
     } finally {
       setExporting(false);
     }
   };
 
-  // ========== COULEURS ADAPTATIVES ==========
+  // ==================== COULEURS ====================
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const inputBg = dark ? "#0F172A" : "#F9FAFB";
-  const tableHeaderBg = dark ? "#0F172A" : "#F8FAFC";
-  const rowEvenBg = dark ? "#1E293B" : "#FFFFFF";
-  const rowOddBg = dark ? "#0F172A" : "#F8FAFC";
-  const buttonPrimary = dark ? "#818CF8" : "#4F46E5";
-  const buttonSecondaryBg = dark ? "#334155" : "#F1F5F9";
-  const buttonSecondaryText = dark ? "#F1F5F9" : "#1E293B";
-  const modalBg = dark ? "#1E293B" : "#FFFFFF";
+  const accent = dark ? "#818CF8" : "#4F46E5";
 
-  // ========== STYLES ADAPTATIFS MOBILE ==========
-  const containerPadding = isMobile ? "16px 12px" : "clamp(16px, 4vw, 32px)";
-  const headerMargin = isMobile ? 20 : 32;
-  const headerTitleSize = isMobile ? 22 : 28;
-  const headerSubtitleSize = isMobile ? 14 : 14;
-  const statGridCols = isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))";
-  const statGap = isMobile ? 8 : 16;
-  const tabPadding = isMobile ? "10px 12px" : "12px 20px";
-  const tabFontSize = isMobile ? 14 : 16;
-  const toolbarFlexDirection = isMobile ? "column" : "row";
-  const toolbarGap = isMobile ? 8 : 12;
-  const toolbarInputPadding = isMobile ? "10px 12px" : "8px 12px";
-  const toolbarInputFontSize = isMobile ? 16 : 14;
-  const toolbarButtonPadding = isMobile ? "10px 16px" : "10px 16px";
-  const toolbarButtonFontSize = isMobile ? 14 : 14;
-  const filterGridDirection = isMobile ? "column" : "row";
-  const filterSelectPadding = isMobile ? "10px 12px" : "8px 12px";
-  const filterSelectFontSize = isMobile ? 16 : 14;
-  const tableViewDisplay = isMobile ? "none" : "block"; // Masquer le tableau sur mobile, afficher les cartes
-  const cardsGridCols = isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))";
-  const modalMaxWidth = isMobile ? "92%" : 500;
-  const modalPadding = isMobile ? 18 : 24;
-  const formInputPadding = isMobile ? "12px 14px" : "10px 14px";
-  const formInputFontSize = isMobile ? 16 : 14;
-  const formButtonPadding = isMobile ? "12px 16px" : "10px 20px";
-  const formButtonFontSize = isMobile ? 16 : 14;
-
-  // ========== RENDU ==========
+  // ==================== LOADING ====================
   if (users === undefined || pendingUsers === undefined) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
-        <Loader size={32} className="animate-spin" style={{ color: buttonPrimary }} />
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: 300,
+        }}
+      >
+        <Loader size={32} className="gu-spin" style={{ color: accent }} />
       </div>
     );
   }
 
+  // ==================== RENDU ====================
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
+    <div
+      style={{
+        maxWidth: 1280,
+        margin: "0 auto",
+        padding: isMobile ? "10px 8px 90px" : "20px 16px",
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
       <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 1s linear infinite; }
-        @keyframes fadeInZoom {
-          0% { opacity: 0; transform: scale(0.95) translateY(10px); }
-          100% { opacity: 1; transform: scale(1) translateY(0); }
+        @keyframes gu-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .gu-spin { animation: gu-spin 1s linear infinite; }
+        @keyframes gu-slide-up-bar { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @media (prefers-reduced-motion: reduce) {
+          .gu-spin { animation: none !important; }
         }
       `}</style>
 
-      {/* En-tête */}
-      <div style={{ marginBottom: headerMargin }}>
-        <h2 style={{ fontSize: headerTitleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>Gestion des utilisateurs</h2>
-        <p style={{ color: textSecondary, marginTop: 4, fontSize: headerSubtitleSize }}>
-          {stats.total} compte(s) actif(s) · {stats.pending} en attente
-        </p>
+      {/* En-tête compact */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+          marginBottom: isMobile ? 12 : 20,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <h2
+            style={{
+              fontSize: isMobile ? 17 : 22,
+              fontWeight: 700,
+              color: textPrimary,
+              margin: 0,
+              lineHeight: 1.2,
+            }}
+          >
+            Utilisateurs
+          </h2>
+          <p
+            style={{
+              color: textSecondary,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 11.5 : 13,
+            }}
+          >
+            {stats.total} compte{stats.total > 1 ? "s" : ""}
+            {stats.pending > 0 ? ` · ${stats.pending} en attente` : ""}
+          </p>
+        </div>
+
+        {!isMobile && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleExportExcel}
+              disabled={exporting}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: `1px solid ${cardBorder}`,
+                background: cardBg,
+                color: textPrimary,
+                fontWeight: 500,
+                cursor: exporting ? "not-allowed" : "pointer",
+                fontSize: 13,
+              }}
+            >
+              {exporting ? (
+                <Loader size={15} className="gu-spin" />
+              ) : (
+                <Download size={15} />
+              )}
+              Exporter
+            </button>
+            <button
+              onClick={openCreate}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: accent,
+                color: "#FFF",
+                border: "none",
+                fontWeight: 600,
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              <UserPlus size={15} /> Nouveau
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Statistiques */}
-      <div style={{ display: "grid", gridTemplateColumns: statGridCols, gap: statGap, marginBottom: headerMargin }}>
-        <StatCard icon={<Users size={24} />} value={stats.total} label="Total" color="#4F46E5" dark={dark} isMobile={isMobile} />
-        <StatCard icon={<Clock size={24} />} value={stats.pending} label="En attente" color="#F59E0B" dark={dark} isMobile={isMobile} />
-        {roles.slice(0, 4).map(role => (
-          <StatCard key={role} icon={<Users size={24} />} value={stats.parRole[role] || 0} label={role} color="#10B981" dark={dark} isMobile={isMobile} />
+      {/* Stats */}
+      <div
+        style={{
+          display: isMobile ? "flex" : "grid",
+          gridTemplateColumns: isMobile
+            ? undefined
+            : "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: isMobile ? 8 : 12,
+          marginBottom: isMobile ? 12 : 18,
+          overflowX: isMobile ? "auto" : "visible",
+          paddingBottom: isMobile ? 4 : 0,
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+        }}
+      >
+        <StatCard
+          icon={<Users size={16} />}
+          label="Total"
+          value={stats.total}
+          color="#4F46E5"
+          dark={dark}
+          isMobile={isMobile}
+        />
+        <StatCard
+          icon={<Clock size={16} />}
+          label="En attente"
+          value={stats.pending}
+          color="#F59E0B"
+          dark={dark}
+          isMobile={isMobile}
+        />
+        {roles.slice(0, 5).map((role) => (
+          <StatCard
+            key={role}
+            icon={<Users size={16} />}
+            label={role}
+            value={stats.parRole[role] || 0}
+            color="#10B981"
+            dark={dark}
+            isMobile={isMobile}
+          />
         ))}
+        {roles.length > 5 && (
+          <StatCard
+            icon={<Users size={16} />}
+            label={`+${roles.length - 5} autres rôles`}
+            value={roles
+              .slice(5)
+              .reduce((sum, r) => sum + (stats.parRole[r] || 0), 0)}
+            color="#8B5CF6"
+            dark={dark}
+            isMobile={isMobile}
+          />
+        )}
       </div>
 
       {/* Onglets */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${cardBorder}`, marginBottom: headerMargin }}>
+      <div
+        role="tablist"
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: `2px solid ${cardBorder}`,
+          marginBottom: isMobile ? 12 : 18,
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+          scrollbarWidth: "none",
+        }}
+      >
         <button
-          onClick={() => { setTab("actifs"); setCurrentPage(1); }}
+          onClick={() => {
+            setTab("actifs");
+            setCurrentPage(1);
+            setSelectedIds(new Set());
+          }}
+          role="tab"
+          aria-selected={tab === "actifs"}
           style={{
-            padding: tabPadding, border: "none", background: "transparent",
-            color: tab === "actifs" ? buttonPrimary : textSecondary,
-            fontWeight: tab === "actifs" ? 600 : 400,
-            borderBottom: tab === "actifs" ? `3px solid ${buttonPrimary}` : "3px solid transparent",
-            cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
-            transition: "color 0.2s, border-color 0.2s",
-            fontSize: tabFontSize, whiteSpace: "nowrap",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: isMobile ? "12px 14px" : "12px 18px",
+            minHeight: isMobile ? 44 : 42,
+            border: "none",
+            background: "transparent",
+            color: tab === "actifs" ? accent : textSecondary,
+            fontWeight: tab === "actifs" ? 700 : 500,
+            borderBottom:
+              tab === "actifs"
+                ? `3px solid ${accent}`
+                : "3px solid transparent",
+            cursor: "pointer",
+            fontSize: isMobile ? 14 : 15,
+            flexShrink: 0,
+            marginBottom: -2,
           }}
         >
-          <UserCheck size={isMobile ? 16 : 18} /> Comptes actifs
+          <UserCheck size={16} /> Comptes
         </button>
         <button
-          onClick={() => { setTab("pending"); }}
+          onClick={() => {
+            setTab("pending");
+            setSelectedIds(new Set());
+          }}
+          role="tab"
+          aria-selected={tab === "pending"}
           style={{
-            padding: tabPadding, border: "none", background: "transparent",
-            color: tab === "pending" ? buttonPrimary : textSecondary,
-            fontWeight: tab === "pending" ? 600 : 400,
-            borderBottom: tab === "pending" ? `3px solid ${buttonPrimary}` : "3px solid transparent",
-            cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
-            transition: "color 0.2s, border-color 0.2s",
-            fontSize: tabFontSize, whiteSpace: "nowrap",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: isMobile ? "12px 14px" : "12px 18px",
+            minHeight: isMobile ? 44 : 42,
+            border: "none",
+            background: "transparent",
+            color: tab === "pending" ? accent : textSecondary,
+            fontWeight: tab === "pending" ? 700 : 500,
+            borderBottom:
+              tab === "pending"
+                ? `3px solid ${accent}`
+                : "3px solid transparent",
+            cursor: "pointer",
+            fontSize: isMobile ? 14 : 15,
+            flexShrink: 0,
+            marginBottom: -2,
           }}
         >
-          <Clock size={isMobile ? 16 : 18} /> Demandes en attente ({stats.pending})
+          <Clock size={16} /> En attente
+          {stats.pending > 0 && (
+            <span
+              style={{
+                minWidth: 18,
+                height: 18,
+                background: dark ? "#78350F" : "#FEF3C7",
+                color: dark ? "#FBBF24" : "#92400E",
+                borderRadius: 9,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "0 5px",
+              }}
+            >
+              {stats.pending}
+            </span>
+          )}
         </button>
       </div>
 
-      {/* Contenu selon l'onglet */}
+      {/* Contenu */}
       {tab === "actifs" ? (
         <>
-          {/* Barre d'outils */}
-          <div style={{ display: "flex", flexDirection: toolbarFlexDirection, flexWrap: "wrap", gap: toolbarGap, marginBottom: 20, alignItems: isMobile ? "stretch" : "center" }}>
-            <div style={{ display: "flex", alignItems: "center", background: cardBg, borderRadius: 12, padding: toolbarInputPadding, border: `1px solid ${cardBorder}`, flex: 1, minWidth: isMobile ? "100%" : 200 }}>
-              <Search size={isMobile ? 16 : 18} color={textSecondary} />
-              <input
-                placeholder="Rechercher..."
-                value={searchTerm}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                style={{ border: "none", outline: "none", marginLeft: 8, fontSize: toolbarInputFontSize, width: "100%", background: "transparent", color: textPrimary }}
-              />
-            </div>
-
-            <button
-              onClick={() => setShowFilters(prev => !prev)}
+          {/* Barre outils */}
+          {isMobile ? (
+            <div
               style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                padding: toolbarButtonPadding, background: buttonSecondaryBg, color: buttonSecondaryText,
-                border: "none", borderRadius: 12, fontWeight: 500, cursor: "pointer",
-                fontSize: toolbarButtonFontSize, width: isMobile ? "100%" : "auto",
+                display: "flex",
+                gap: 8,
+                marginBottom: 12,
+                alignItems: "stretch",
               }}
             >
-              <Filter size={16} /> Filtres
-            </button>
-
-            <button
-              onClick={() => setViewMode(prev => prev === "table" ? "cards" : "table")}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                padding: toolbarButtonPadding, background: buttonSecondaryBg, color: buttonSecondaryText,
-                border: "none", borderRadius: 12, fontWeight: 500, cursor: "pointer",
-                fontSize: toolbarButtonFontSize, width: isMobile ? "100%" : "auto",
-              }}
-            >
-              {viewMode === "table" ? <LayoutGrid size={16} /> : <ListIcon size={16} />}
-              {viewMode === "table" ? "Cartes" : "Tableau"}
-            </button>
-
-            <button onClick={openCreate} style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              padding: toolbarButtonPadding, background: buttonPrimary, color: "white",
-              border: "none", borderRadius: 12, fontWeight: 500, cursor: "pointer",
-              whiteSpace: "nowrap", fontSize: toolbarButtonFontSize, width: isMobile ? "100%" : "auto",
-            }}>
-              <UserPlus size={18} /> Nouveau compte
-            </button>
-
-            <button onClick={handleExportExcel} disabled={exporting} style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              padding: toolbarButtonPadding, background: buttonSecondaryBg, color: buttonSecondaryText,
-              border: "none", borderRadius: 12, fontWeight: 500, cursor: "pointer",
-              whiteSpace: "nowrap", fontSize: toolbarButtonFontSize, width: isMobile ? "100%" : "auto",
-            }}>
-              {exporting ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}
-              {exporting ? "Export..." : "Exporter Excel"}
-            </button>
-
-            {selectedIds.size > 0 && (
-              <button onClick={deleteSelected} style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                padding: toolbarButtonPadding, background: "#EF4444", color: "white",
-                border: "none", borderRadius: 12, fontWeight: 500, cursor: "pointer",
-                fontSize: toolbarButtonFontSize, width: isMobile ? "100%" : "auto",
-              }}>
-                <Trash2 size={18} /> Supprimer ({selectedIds.size})
-              </button>
-            )}
-          </div>
-
-          {/* Filtres additionnels */}
-          {showFilters && (
-            <div style={{ display: "flex", flexDirection: filterGridDirection, flexWrap: "wrap", gap: 12, marginBottom: 16, padding: 16, background: cardBg, borderRadius: 16, border: `1px solid ${cardBorder}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Filter size={16} color={textSecondary} />
-                <select
-                  value={roleFilter}
-                  onChange={(e) => handleRoleFilterChange(e.target.value)}
-                  style={{ padding: filterSelectPadding, border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: filterSelectFontSize, background: inputBg, color: textPrimary, outline: "none", width: isMobile ? "100%" : "auto" }}
-                >
-                  <option value="">Tous les rôles</option>
-                  {roles.map(r => <option key={r} value={r} style={{ background: dark ? "#1E293B" : "#FFF" }}>{r}</option>)}
-                </select>
+              <div style={{ position: "relative", flex: 1 }}>
+                <Search
+                  size={16}
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: textSecondary,
+                  }}
+                />
+                <input
+                  placeholder="Rechercher…"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "12px 12px 12px 38px",
+                    borderRadius: 12,
+                    border: `1px solid ${cardBorder}`,
+                    background: cardBg,
+                    color: textPrimary,
+                    fontSize: 16,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
               </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Filter size={16} color={textSecondary} />
-                <select
-                  value={classeFilter}
-                  onChange={(e) => handleClasseFilterChange(e.target.value)}
-                  style={{ padding: filterSelectPadding, border: `1px solid ${cardBorder}`, borderRadius: 8, fontSize: filterSelectFontSize, background: inputBg, color: textPrimary, outline: "none", width: isMobile ? "100%" : "auto" }}
-                >
-                  <option value="">Toutes les classes</option>
-                  {classNames.map(c => <option key={c} value={c} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c}</option>)}
-                </select>
-              </div>
-
               <button
-                onClick={() => { setRoleFilter(""); setClasseFilter(""); setSearchTerm(""); setCurrentPage(1); }}
-                style={{ padding: isMobile ? "10px 12px" : "8px 12px", border: `1px solid ${cardBorder}`, borderRadius: 8, background: "transparent", color: textPrimary, cursor: "pointer", fontSize: isMobile ? 14 : 14, width: isMobile ? "100%" : "auto" }}
+                onClick={() => setShowFilters(true)}
+                style={{
+                  position: "relative",
+                  padding: "0 14px",
+                  borderRadius: 12,
+                  border: `1px solid ${
+                    activeFiltersCount > 0 ? accent : cardBorder
+                  }`,
+                  background:
+                    activeFiltersCount > 0
+                      ? dark
+                        ? "#312E81"
+                        : "#EEF2FF"
+                      : cardBg,
+                  color:
+                    activeFiltersCount > 0
+                      ? dark
+                        ? "#C7D2FE"
+                        : "#4F46E5"
+                      : textPrimary,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontWeight: 600,
+                  fontSize: 13,
+                }}
               >
-                Réinitialiser
+                <SlidersHorizontal size={16} />
+                {activeFiltersCount > 0 && (
+                  <span
+                    style={{
+                      background: accent,
+                      color: "#FFF",
+                      borderRadius: 10,
+                      padding: "1px 6px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginBottom: 16,
+                alignItems: "stretch",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
+                <Search
+                  size={16}
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: textSecondary,
+                  }}
+                />
+                <input
+                  placeholder="Rechercher par nom ou login…"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px 10px 38px",
+                    borderRadius: 8,
+                    border: `1px solid ${cardBorder}`,
+                    background: cardBg,
+                    color: textPrimary,
+                    fontSize: 14,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <select
+                value={roleFilter}
+                onChange={(e) => {
+                  setRoleFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: `1px solid ${cardBorder}`,
+                  background: cardBg,
+                  color: textPrimary,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  minWidth: 160,
+                }}
+              >
+                <option value="">Tous les rôles</option>
+                {roles.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={classeFilter}
+                onChange={(e) => {
+                  setClasseFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: `1px solid ${cardBorder}`,
+                  background: cardBg,
+                  color: textPrimary,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  minWidth: 160,
+                }}
+              >
+                <option value="">Toutes les classes</option>
+                {classNames.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 4,
+                  padding: 4,
+                  background: cardBg,
+                  borderRadius: 8,
+                  border: `1px solid ${cardBorder}`,
+                }}
+              >
+                <button
+                  onClick={() => setViewMode("table")}
+                  style={{
+                    padding: 6,
+                    borderRadius: 6,
+                    border: "none",
+                    background:
+                      viewMode === "table"
+                        ? dark
+                          ? "#312E81"
+                          : "#EEF2FF"
+                        : "transparent",
+                    color:
+                      viewMode === "table"
+                        ? dark
+                          ? "#A5B4FC"
+                          : "#4F46E5"
+                        : textSecondary,
+                    cursor: "pointer",
+                  }}
+                  title="Tableau"
+                >
+                  <ListIcon size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode("cards")}
+                  style={{
+                    padding: 6,
+                    borderRadius: 6,
+                    border: "none",
+                    background:
+                      viewMode === "cards"
+                        ? dark
+                          ? "#312E81"
+                          : "#EEF2FF"
+                        : "transparent",
+                    color:
+                      viewMode === "cards"
+                        ? dark
+                          ? "#A5B4FC"
+                          : "#4F46E5"
+                        : textSecondary,
+                    cursor: "pointer",
+                  }}
+                  title="Cartes"
+                >
+                  <LayoutGrid size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Puces filtres actifs */}
+          {activeFiltersCount > 0 && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginBottom: 12,
+              }}
+            >
+              {searchTerm.trim() && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "4px 10px",
+                    background: dark ? "#312E81" : "#EEF2FF",
+                    color: dark ? "#C7D2FE" : "#4F46E5",
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  « {searchTerm} »
+                  <X
+                    size={12}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => setSearchTerm("")}
+                  />
+                </span>
+              )}
+              {roleFilter && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "4px 10px",
+                    background: dark ? "#312E81" : "#EEF2FF",
+                    color: dark ? "#C7D2FE" : "#4F46E5",
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  {roleFilter}
+                  <X
+                    size={12}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => setRoleFilter("")}
+                  />
+                </span>
+              )}
+              {classeFilter && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "4px 10px",
+                    background: dark ? "#312E81" : "#EEF2FF",
+                    color: dark ? "#C7D2FE" : "#4F46E5",
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  {classeFilter}
+                  <X
+                    size={12}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => setClasseFilter("")}
+                  />
+                </span>
+              )}
+              <button
+                onClick={resetFilters}
+                style={{
+                  padding: "4px 10px",
+                  background: "transparent",
+                  border: `1px solid ${cardBorder}`,
+                  color: textSecondary,
+                  borderRadius: 20,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Tout effacer
               </button>
             </div>
           )}
 
-          {/* Affichage tableau ou cartes */}
+          {/* Liste : table desktop / cards mobile */}
           {!isMobile && viewMode === "table" ? (
-            <div style={{ background: cardBg, borderRadius: 20, overflow: "hidden", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-                {/* ... le tableau reste inchangé ... */}
+            <div
+              style={{
+                background: cardBg,
+                borderRadius: 12,
+                overflow: "hidden",
+                boxShadow: dark
+                  ? "0 1px 3px rgba(0,0,0,0.3)"
+                  : "0 1px 3px rgba(0,0,0,0.05)",
+                border: `1px solid ${cardBorder}`,
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 14,
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      background: dark ? "#0F172A" : "#F8FAFC",
+                      borderBottom: `2px solid ${cardBorder}`,
+                    }}
+                  >
+                    <th style={{ padding: "12px 14px", width: 40 }}>
+                      <input
+                        ref={headerCheckboxRef}
+                        type="checkbox"
+                        checked={
+                          paginatedUsers.length > 0 &&
+                          paginatedUsers.every((u) => selectedIds.has(u._id))
+                        }
+                        onChange={() => {
+                          const allSelected = paginatedUsers.every((u) =>
+                            selectedIds.has(u._id)
+                          );
+                          if (allSelected) {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              paginatedUsers.forEach((u) => next.delete(u._id));
+                              return next;
+                            });
+                          } else {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              paginatedUsers.forEach((u) => next.add(u._id));
+                              return next;
+                            });
+                          }
+                        }}
+                        style={{ accentColor: accent }}
+                      />
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px 14px",
+                        textAlign: "left",
+                        color: textSecondary,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                      }}
+                      onClick={() => {
+                        if (sortKey === "nom")
+                          setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                        else {
+                          setSortKey("nom");
+                          setSortDir("asc");
+                        }
+                      }}
+                    >
+                      Nom
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px 14px",
+                        textAlign: "left",
+                        color: textSecondary,
+                        fontWeight: 600,
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      Login
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px 14px",
+                        textAlign: "left",
+                        color: textSecondary,
+                        fontWeight: 600,
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      Rôle
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px 14px",
+                        textAlign: "left",
+                        color: textSecondary,
+                        fontWeight: 600,
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      Classe
+                    </th>
+                    <th
+                      style={{
+                        padding: "12px 14px",
+                        textAlign: "center",
+                        color: textSecondary,
+                        fontWeight: 600,
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedUsers.map((u) => {
+                    const isSelected = selectedIds.has(u._id);
+                    return (
+                      <tr
+                        key={u._id}
+                        style={{
+                          borderBottom: `1px solid ${cardBorder}`,
+                          background: isSelected
+                            ? dark
+                              ? "#2D3748"
+                              : "#F1F5F9"
+                            : "transparent",
+                          cursor: "pointer",
+                        }}
+                        onClick={() => {
+                          if (selectionMode) toggleSelect(u._id);
+                          else setDetailUser(u);
+                        }}
+                      >
+                        <td
+                          style={{ padding: "12px 14px" }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(u._id)}
+                            style={{ accentColor: accent }}
+                          />
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 14px",
+                            color: textPrimary,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {u.nom}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 14px",
+                            color: textSecondary,
+                          }}
+                        >
+                          @{u.login}
+                        </td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <RoleBadge role={u.role} dark={dark} />
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 14px",
+                            color: textSecondary,
+                          }}
+                        >
+                          {u.classe || "—"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 14px",
+                            textAlign: "center",
+                            whiteSpace: "nowrap",
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => setDetailUser(u)}
+                            title="Détails"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: accent,
+                              padding: 6,
+                              marginRight: 4,
+                            }}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            onClick={() => openEdit(u)}
+                            title="Modifier"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "#3B82F6",
+                              padding: 6,
+                              marginRight: 4,
+                            }}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(u._id)}
+                            title="Supprimer"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "#EF4444",
+                              padding: 6,
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {paginatedUsers.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        style={{
+                          padding: 40,
+                          textAlign: "center",
+                          color: textSecondary,
+                        }}
+                      >
+                        Aucun utilisateur trouvé.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
               </table>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: cardsGridCols, gap: 16 }}>
-              {paginatedUsers.map(u => (
-                <div key={u._id} style={{ background: cardBg, borderRadius: 16, padding: 16, border: `1px solid ${cardBorder}`, boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontWeight: 600, fontSize: 16, color: textPrimary }}>{u.nom}</div>
-                    <input type="checkbox" checked={selectedIds.has(u._id)} onChange={() => toggleSelect(u._id)} style={{ accentColor: buttonPrimary }} />
-                  </div>
-                  <div style={{ fontSize: 13, color: textSecondary }}>@{u.login}</div>
-                  <RoleBadge role={u.role} dark={dark} />
-                  <div style={{ fontSize: 13, color: textSecondary }}>{u.classe || "Aucune classe"}</div>
-                  <div style={{ marginTop: "auto", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                    <button onClick={() => setDetailUser(u)} title="Détails" style={{ background: "none", border: "none", cursor: "pointer", color: buttonPrimary }}>
-                      <Eye size={18} />
-                    </button>
-                    <button onClick={() => openEdit(u)} title="Modifier" style={{ background: "none", border: "none", cursor: "pointer", color: buttonPrimary }}>
-                      <Edit2 size={18} />
-                    </button>
-                    <button onClick={() => handleDelete(u._id)} title="Supprimer" style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}>
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile
+                  ? "1fr"
+                  : "repeat(auto-fill, minmax(300px, 1fr))",
+                gap: isMobile ? 8 : 12,
+              }}
+            >
+              {paginatedUsers.map((u) => (
+                <UserCard
+                  key={u._id}
+                  user={u}
+                  dark={dark}
+                  isMobile={isMobile}
+                  selected={selectedIds.has(u._id)}
+                  selectionMode={selectionMode}
+                  onToggleSelect={toggleSelect}
+                  onClick={() => setDetailUser(u)}
+                />
               ))}
               {paginatedUsers.length === 0 && (
-                <div style={{ textAlign: "center", padding: 40, color: textSecondary }}>
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    textAlign: "center",
+                    padding: 40,
+                    color: textSecondary,
+                  }}
+                >
                   Aucun utilisateur trouvé.
                 </div>
               )}
@@ -518,36 +1417,55 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 8,
+                marginTop: 16,
+                flexWrap: "wrap",
+              }}
+            >
               <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                style={{ background: "none", border: `1px solid ${cardBorder}`, borderRadius: 8, padding: isMobile ? "10px 12px" : "6px 12px", cursor: "pointer", color: currentPage === 1 ? "#CBD5E1" : buttonPrimary }}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                style={{
+                  background: "none",
+                  border: `1px solid ${cardBorder}`,
+                  borderRadius: 8,
+                  padding: isMobile ? "10px 12px" : "6px 12px",
+                  cursor: safePage === 1 ? "not-allowed" : "pointer",
+                  color: safePage === 1 ? "#CBD5E1" : accent,
+                  opacity: safePage === 1 ? 0.5 : 1,
+                }}
               >
                 <ChevronLeft size={18} />
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  style={{
-                    padding: isMobile ? "10px 12px" : "6px 12px",
-                    border: "none",
-                    borderRadius: 8,
-                    background: currentPage === page ? buttonPrimary : buttonSecondaryBg,
-                    color: currentPage === page ? "#FFF" : buttonSecondaryText,
-                    cursor: "pointer",
-                    fontWeight: 500,
-                    fontSize: isMobile ? 14 : 14,
-                  }}
-                >
-                  {page}
-                </button>
-              ))}
+              <span
+                style={{
+                  fontSize: 13,
+                  color: textSecondary,
+                  padding: "0 8px",
+                }}
+              >
+                Page {safePage} / {totalPages}
+              </span>
               <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                style={{ background: "none", border: `1px solid ${cardBorder}`, borderRadius: 8, padding: isMobile ? "10px 12px" : "6px 12px", cursor: "pointer", color: currentPage === totalPages ? "#CBD5E1" : buttonPrimary }}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={safePage === totalPages}
+                style={{
+                  background: "none",
+                  border: `1px solid ${cardBorder}`,
+                  borderRadius: 8,
+                  padding: isMobile ? "10px 12px" : "6px 12px",
+                  cursor:
+                    safePage === totalPages ? "not-allowed" : "pointer",
+                  color: safePage === totalPages ? "#CBD5E1" : accent,
+                  opacity: safePage === totalPages ? 0.5 : 1,
+                }}
               >
                 <ChevronRight size={18} />
               </button>
@@ -555,26 +1473,143 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
           )}
         </>
       ) : (
+        /* ============== ONGLET PENDING ============== */
         <div>
           {pendingUsers.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 48, color: textSecondary }}>
-              <CheckCircle size={48} color="#10B981" style={{ marginBottom: 12 }} />
-              <p>Aucune demande en attente.</p>
+            <div
+              style={{
+                textAlign: "center",
+                padding: 48,
+                color: textSecondary,
+              }}
+            >
+              <CheckCircle
+                size={48}
+                color="#10B981"
+                style={{ marginBottom: 12, opacity: 0.6 }}
+              />
+              <p style={{ margin: 0, fontSize: 13.5 }}>
+                Aucune demande en attente.
+              </p>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: 12 }}>
-              {pendingUsers.map(u => (
-                <div key={u._id} style={{ background: cardBg, borderRadius: 16, padding: isMobile ? "12px 14px" : "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", border: `1px solid ${cardBorder}`, flexDirection: isMobile ? "column" : "row", gap: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: textPrimary }}>{u.nom}</div>
-                    <div style={{ fontSize: 13, color: textSecondary }}>@{u.login} · {u.role}</div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile
+                  ? "1fr"
+                  : "repeat(auto-fill, minmax(320px, 1fr))",
+                gap: isMobile ? 8 : 12,
+              }}
+            >
+              {pendingUsers.map((u) => (
+                <div
+                  key={u._id}
+                  style={{
+                    background: cardBg,
+                    borderRadius: 12,
+                    padding: isMobile ? "12px 14px" : "14px 16px",
+                    border: `1px solid ${cardBorder}`,
+                    boxShadow: dark
+                      ? "0 1px 2px rgba(0,0,0,0.25)"
+                      : "0 1px 2px rgba(0,0,0,0.04)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: "50%",
+                        background: dark ? "#78350F" : "#FEF3C7",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: dark ? "#FBBF24" : "#92400E",
+                        fontWeight: 700,
+                        fontSize: 13,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {u.nom?.[0]?.toUpperCase()}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 13.5,
+                          color: textPrimary,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {u.nom}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          color: textSecondary,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginTop: 2,
+                        }}
+                      >
+                        <RoleBadge role={u.role} dark={dark} />
+                        <span>@{u.login}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 8, width: isMobile ? "100%" : "auto", flexDirection: isMobile ? "column" : "row" }}>
-                    <button onClick={() => handleApprove(u._id)} style={{ background: "#10B981", color: "white", border: "none", borderRadius: 10, padding: isMobile ? "12px 14px" : "8px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: isMobile ? 14 : 14 }}>
-                      <UserCheck size={16} /> Approuver
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      marginTop: "auto",
+                    }}
+                  >
+                    <button
+                      onClick={() => handleApprove(u._id)}
+                      style={{
+                        flex: 1,
+                        background: "#10B981",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <UserCheck size={15} /> Approuver
                     </button>
-                    <button onClick={() => handleReject(u._id)} style={{ background: "#EF4444", color: "white", border: "none", borderRadius: 10, padding: isMobile ? "12px 14px" : "8px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: isMobile ? 14 : 14 }}>
-                      <UserX size={16} /> Rejeter
+                    <button
+                      onClick={() => handleReject(u._id)}
+                      style={{
+                        flex: 1,
+                        background: "#EF4444",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <UserX size={15} /> Rejeter
                     </button>
                   </div>
                 </div>
@@ -584,141 +1619,163 @@ export function GestionUtilisateurs({ ecoleId, userId }) {
         </div>
       )}
 
-      {/* Modal formulaire */}
-      {showForm && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: isMobile ? 12 : 16 }}
-          onClick={() => { setShowForm(false); resetForm(); }}>
-          <div style={{ background: modalBg, borderRadius: 24, padding: modalPadding, maxWidth: modalMaxWidth, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)", border: `1px solid ${cardBorder}`, animation: "fadeInZoom 0.3s" }}
-            onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 20, color: textPrimary }}>
-              {editUser ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
-            </h3>
-            <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Nom complet</label>
-                <input value={formData.nom} onChange={e => setFormData({ ...formData, nom: e.target.value })}
-                  style={{ width: "100%", padding: formInputPadding, border: `1px solid ${formErrors.nom ? "#EF4444" : cardBorder}`, borderRadius: 10, fontSize: formInputFontSize, background: inputBg, color: textPrimary }} />
-                {formErrors.nom && <span style={{ color: "#EF4444", fontSize: 12 }}>{formErrors.nom}</span>}
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Login</label>
-                <input value={formData.login} onChange={e => setFormData({ ...formData, login: e.target.value })} disabled={!!editUser}
-                  style={{ width: "100%", padding: formInputPadding, border: `1px solid ${formErrors.login ? "#EF4444" : cardBorder}`, borderRadius: 10, fontSize: formInputFontSize, background: editUser ? dark ? "#334155" : "#F1F5F9" : inputBg, color: textPrimary }} />
-                {formErrors.login && <span style={{ color: "#EF4444", fontSize: 12 }}>{formErrors.login}</span>}
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>
-                  Mot de passe {editUser && "(laisser vide pour ne pas changer)"}
-                </label>
-                <input type="password" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })}
-                  style={{ width: "100%", padding: formInputPadding, border: `1px solid ${formErrors.password ? "#EF4444" : cardBorder}`, borderRadius: 10, fontSize: formInputFontSize, background: inputBg, color: textPrimary }} />
-                {formErrors.password && <span style={{ color: "#EF4444", fontSize: 12 }}>{formErrors.password}</span>}
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Confirmer le mot de passe</label>
-                <input type="password" value={formData.confirmPassword} onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  style={{ width: "100%", padding: formInputPadding, border: `1px solid ${formErrors.confirmPassword ? "#EF4444" : cardBorder}`, borderRadius: 10, fontSize: formInputFontSize, background: inputBg, color: textPrimary }} />
-                {formErrors.confirmPassword && <span style={{ color: "#EF4444", fontSize: 12 }}>{formErrors.confirmPassword}</span>}
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Rôle</label>
-                <select value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}
-                  style={{ width: "100%", padding: formInputPadding, border: `1px solid ${cardBorder}`, borderRadius: 10, fontSize: formInputFontSize, background: inputBg, color: textPrimary }}>
-                  {["admin","directeur","disciplinaire","enseignant","parent","comptable","eleve"].map(r => <option key={r} value={r} style={{ background: dark ? "#1E293B" : "#FFF" }}>{r}</option>)}
-                </select>
-              </div>
-              {formData.role === "enseignant" && (
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: "block", marginBottom: 4, fontWeight: 500, fontSize: isMobile ? 15 : 14, color: textSecondary }}>Classe</label>
-                  <select value={formData.classe} onChange={e => setFormData({ ...formData, classe: e.target.value })}
-                    style={{ width: "100%", padding: formInputPadding, border: `1px solid ${cardBorder}`, borderRadius: 10, fontSize: formInputFontSize, background: inputBg, color: textPrimary }}>
-                    <option value="">Aucune classe</option>
-                    {classNames.map(c => <option key={c} value={c} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c}</option>)}
-                  </select>
-                </div>
-              )}
-              <div style={{ display: "flex", gap: 8, marginTop: 20, flexDirection: isMobile ? "column" : "row" }}>
-                <button type="submit" disabled={submitting}
-                  style={{ background: buttonPrimary, color: "white", border: "none", borderRadius: 12, padding: formButtonPadding, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: formButtonFontSize, flex: isMobile ? "none" : 1 }}>
-                  {submitting ? <Loader size={16} className="animate-spin" /> : null}
-                  {editUser ? "Enregistrer" : "Créer"}
-                </button>
-                <button type="button" onClick={() => { setShowForm(false); resetForm(); }}
-                  style={{ background: buttonSecondaryBg, color: buttonSecondaryText, border: "none", borderRadius: 12, padding: formButtonPadding, fontWeight: 500, cursor: "pointer", fontSize: formButtonFontSize }}>
-                  Annuler
-                </button>
-              </div>
-            </form>
+      {/* Barre actions groupées */}
+      {selectionMode && tab === "actifs" && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: cardBg,
+            borderTop: `1px solid ${cardBorder}`,
+            padding: "10px 14px calc(10px + env(safe-area-inset-bottom))",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            zIndex: 950,
+            boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
+            animation: "gu-slide-up-bar 0.2s ease-out",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                background: dark ? "#312E81" : "#EEF2FF",
+                color: dark ? "#C7D2FE" : "#4F46E5",
+                borderRadius: 20,
+                padding: "4px 10px",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              {selectedIds.size}
+            </div>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              style={{
+                background: "none",
+                border: "none",
+                color: textSecondary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Annuler
+            </button>
           </div>
+          <button
+            onClick={deleteSelected}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 10,
+              border: "none",
+              background: "#DC2626",
+              color: "#FFF",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 600,
+              fontSize: 13,
+            }}
+          >
+            <Trash2 size={16} /> Supprimer
+          </button>
         </div>
       )}
 
-      {/* Modal détails utilisateur */}
+      {/* FAB ajouter (mobile) */}
+      {isMobile && tab === "actifs" && !selectionMode && (
+        <button
+          onClick={openCreate}
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 20,
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: accent,
+            color: "#FFFFFF",
+            border: "none",
+            boxShadow: "0 6px 20px rgba(79,70,229,0.4)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 900,
+            transition: "transform 0.15s ease",
+          }}
+          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.94)")}
+          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          title="Nouveau compte"
+        >
+          <UserPlus size={24} />
+        </button>
+      )}
+
+      {/* Bottom sheet filtres */}
+      <UtilisateursFiltersSheet
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        dark={dark}
+        searchTerm={searchTerm}
+        setSearchTerm={(v) => {
+          setSearchTerm(v);
+          setCurrentPage(1);
+        }}
+        roleFilter={roleFilter}
+        setRoleFilter={(v) => {
+          setRoleFilter(v);
+          setCurrentPage(1);
+        }}
+        classeFilter={classeFilter}
+        setClasseFilter={(v) => {
+          setClasseFilter(v);
+          setCurrentPage(1);
+        }}
+        roles={roles}
+        classNames={classNames}
+        onReset={resetFilters}
+        activeFiltersCount={activeFiltersCount}
+        onImportExcel={handleExportExcel}
+        exporting={exporting}
+      />
+
+      {/* Modale ajout / édition */}
+      <AddUserModal
+        open={showForm}
+        onClose={handleCloseForm}
+        editUser={editUser}
+        addUser={addUser}
+        updateUser={updateUser}
+        ecoleId={ecoleId}
+        userId={userId}
+        classNames={classNames}
+        dark={dark}
+        isMobile={isMobile}
+      />
+
+      {/* Modale détail */}
       {detailUser && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: isMobile ? 12 : 16 }}
-          onClick={() => setDetailUser(null)}>
-          <div style={{ background: modalBg, borderRadius: 24, padding: modalPadding, maxWidth: modalMaxWidth, width: "100%", boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)", border: `1px solid ${cardBorder}`, animation: "fadeInZoom 0.3s" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 600, color: textPrimary }}>Détails de l'utilisateur</h3>
-              <button onClick={() => setDetailUser(null)} style={{ background: "none", border: "none", cursor: "pointer", color: textSecondary }}><X size={20} /></button>
-            </div>
-            <p><strong style={{ color: textPrimary }}>Nom :</strong> {detailUser.nom}</p>
-            <p><strong style={{ color: textPrimary }}>Login :</strong> {detailUser.login}</p>
-            <p><strong style={{ color: textPrimary }}>Rôle :</strong> <RoleBadge role={detailUser.role} dark={dark} /></p>
-            <p><strong style={{ color: textPrimary }}>Classe :</strong> {detailUser.classe || "Aucune"}</p>
-          </div>
-        </div>
+        <DetailUserModal
+          user={detailUser}
+          onClose={() => setDetailUser(null)}
+          onEdit={() => {
+            setDetailUser(null);
+            openEdit(detailUser);
+          }}
+          onDelete={() => handleDelete(detailUser._id)}
+          dark={dark}
+          isMobile={isMobile}
+        />
       )}
 
       <ConfirmDialog {...dialogProps} />
-    </div>
-  );
-}
-
-// Badge de rôle avec couleur (adaptatif)
-function RoleBadge({ role, dark }) {
-  const colors = {
-    admin: { bg: dark ? "#7F1D1D" : "#FEE2E2", color: dark ? "#F87171" : "#B91C1C" },
-    directeur: { bg: dark ? "#064E3B" : "#D1FAE5", color: dark ? "#34D399" : "#065F46" },
-    disciplinaire: { bg: dark ? "#78350F" : "#FEF3C7", color: dark ? "#FBBF24" : "#92400E" },
-    enseignant: { bg: dark ? "#312E81" : "#EEF2FF", color: dark ? "#A5B4FC" : "#4F46E5" },
-    parent: { bg: dark ? "#082F49" : "#E0F2FE", color: dark ? "#38BDF8" : "#0369A1" },
-    comptable: { bg: dark ? "#500724" : "#FCE7F3", color: dark ? "#F472B6" : "#BE185D" },
-    eleve: { bg: dark ? "#2E1065" : "#F3E8FF", color: dark ? "#C084FC" : "#6B21A8" },
-  };
-  const style = colors[role] || { bg: dark ? "#334155" : "#F1F5F9", color: dark ? "#CBD5E1" : "#475569" };
-  return (
-    <span style={{
-      background: style.bg, color: style.color, padding: "2px 10px",
-      borderRadius: 12, fontSize: 13, fontWeight: 500,
-    }}>
-      {role}
-    </span>
-  );
-}
-
-// Carte statistique adaptative
-function StatCard({ icon, value, label, color, dark, isMobile }) {
-  return (
-    <div style={{
-      background: dark ? "#1E293B" : "#FFFFFF",
-      borderRadius: 16,
-      padding: isMobile ? 14 : 16,
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-      transition: "background-color 0.3s",
-    }}>
-      <div style={{ width: isMobile ? 36 : 40, height: isMobile ? 36 : 40, background: `${color}${dark ? "33" : "15"}`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color }}>
-        {icon}
-      </div>
-      <div>
-        <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>{value}</div>
-        <div style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B" }}>{label}</div>
-      </div>
     </div>
   );
 }

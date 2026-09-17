@@ -2,38 +2,73 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line,
 } from "recharts";
 import { School, TrendingUp, BarChart3, Loader } from "lucide-react";
 
-export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
+export function StatistiquesAvancees({
+  ecoleId,
+  anneeId,
+  anneeActive,   // NOUVEAU : permet d'afficher le nom plutôt que l'ID
+  classes,
+  annees,
+  user,          // NOUVEAU : userId requis par toutes les queries
+}) {
   const { dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+  const isMobile = useIsMobile();
 
   const [tab, setTab] = useState("taux");
   const [selectedClasse, setSelectedClasse] = useState("");
   const [seuil, setSeuil] = useState(50);
 
-  // Requêtes
-  const tauxReussite = useQuery(
+  const userId = user?._id;
+
+  // ===== Requêtes (userId obligatoire + pas de ?? [] qui masque le loading) =====
+  const shouldFetchTaux = Boolean(
+    tab === "taux" && selectedClasse && ecoleId && anneeId && userId
+  );
+  const shouldFetchEvo = Boolean(
+    tab === "evolution" && selectedClasse && ecoleId && userId && annees?.length > 0
+  );
+  const shouldFetchComp = Boolean(
+    tab === "comparaison" && ecoleId && anneeId && userId
+  );
+
+  const tauxReussiteRaw = useQuery(
     api.statistiques.getTauxReussiteParMatiere,
-    selectedClasse ? { ecoleId, anneeId, classe: selectedClasse, seuil } : "skip"
-  ) ?? [];
-
-  const evolution = useQuery(
-    api.statistiques.getEvolutionResultats,
-    selectedClasse && annees.length > 0
-      ? { ecoleId, classe: selectedClasse, annees: annees.map((a) => a._id) }
+    shouldFetchTaux
+      ? { ecoleId, anneeId, classe: selectedClasse, seuil, userId }
       : "skip"
-  ) ?? [];
-
-  const comparaison = useQuery(
+  );
+  const evolutionRaw = useQuery(
+    api.statistiques.getEvolutionResultats,
+    shouldFetchEvo
+      ? {
+          ecoleId,
+          classe: selectedClasse,
+          annees: annees.map((a) => a._id),
+          userId,
+        }
+      : "skip"
+  );
+  const comparaisonRaw = useQuery(
     api.statistiques.getComparaisonClasses,
-    anneeId ? { ecoleId, anneeId } : "skip"
-  ) ?? [];
+    shouldFetchComp ? { ecoleId, anneeId, userId } : "skip"
+  );
+
+  // Fallbacks pour le rendu
+  const tauxReussite = tauxReussiteRaw ?? [];
+  const evolution = evolutionRaw ?? [];
+  const comparaison = comparaisonRaw ?? [];
+
+  // ===== Loading correct : undefined = encore en cours =====
+  const isLoading =
+    (shouldFetchTaux && tauxReussiteRaw === undefined) ||
+    (shouldFetchEvo && evolutionRaw === undefined) ||
+    (shouldFetchComp && comparaisonRaw === undefined);
 
   // Couleurs adaptatives
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
@@ -49,16 +84,10 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
   const tooltipBg = dark ? "#0F172A" : "white";
   const tooltipBorder = dark ? "#334155" : "#E2E8F0";
 
-  const isLoading =
-    (tab === "taux" && selectedClasse && tauxReussite === undefined) ||
-    (tab === "evolution" && selectedClasse && evolution === undefined) ||
-    (tab === "comparaison" && comparaison === undefined);
-
   // Styles adaptatifs
   const containerPadding = isMobile ? "16px 12px" : "24px 16px";
   const titleSize = isMobile ? 22 : 28;
   const tabButtonPadding = isMobile ? "8px 12px" : "10px 20px";
-  const tabButtonFontSize = isMobile ? 14 : 14;
   const tabButtonMarginRight = isMobile ? 4 : 8;
   const selectPadding = isMobile ? "10px 12px" : "8px 12px";
   const selectFontSize = isMobile ? 16 : 14;
@@ -67,6 +96,7 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
   const controlsFlexDirection = isMobile ? "column" : "row";
   const controlsAlignItems = isMobile ? "stretch" : "center";
   const controlsGap = isMobile ? 8 : 12;
+
   const tabContainerStyle = {
     display: "flex",
     gap: isMobile ? 4 : 8,
@@ -87,23 +117,25 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
     marginRight: tabButtonMarginRight,
     display: "inline-flex",
     alignItems: "center",
-    fontSize: tabButtonFontSize,
+    fontSize: 14,
     flexShrink: 0,
   });
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
-      <div style={{
-        background: tooltipBg,
-        border: `1px solid ${tooltipBorder}`,
-        borderRadius: 8,
-        padding: "8px 12px",
-        color: textPrimary,
-      }}>
+      <div
+        style={{
+          background: tooltipBg,
+          border: `1px solid ${tooltipBorder}`,
+          borderRadius: 8,
+          padding: "8px 12px",
+          color: textPrimary,
+        }}
+      >
         <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>
-        {payload.map((p, idx) => (
-          <p key={idx} style={{ margin: 0 }}>
+        {payload.map((p) => (
+          <p key={p.dataKey ?? p.name} style={{ margin: 0 }}>
             {p.name} : {p.value}
           </p>
         ))}
@@ -111,11 +143,27 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
     );
   };
 
+  // Titre du panneau "comparaison" : afficher le nom de l'année si dispo
+  const anneeLabel =
+    anneeActive?.nom ??
+    annees?.find((a) => a._id === anneeId)?.nom ??
+    "";
+
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
+      <style>{`
+        @keyframes sxa-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .sxa-animate-spin { animation: sxa-spin 1s linear infinite; }
+      `}</style>
 
-      <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, marginBottom: isMobile ? 16 : 24 }}>
+      <h2
+        style={{
+          fontSize: titleSize,
+          fontWeight: 700,
+          color: textPrimary,
+          marginBottom: isMobile ? 16 : 24,
+        }}
+      >
         Statistiques avancées
       </h2>
 
@@ -134,7 +182,16 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
 
       {/* Sélecteur de classe (sauf comparaison) */}
       {tab !== "comparaison" && (
-        <div style={{ display: "flex", gap: controlsGap, marginBottom: isMobile ? 16 : 24, alignItems: controlsAlignItems, flexWrap: "wrap", flexDirection: controlsFlexDirection }}>
+        <div
+          style={{
+            display: "flex",
+            gap: controlsGap,
+            marginBottom: isMobile ? 16 : 24,
+            alignItems: controlsAlignItems,
+            flexWrap: "wrap",
+            flexDirection: controlsFlexDirection,
+          }}
+        >
           <select
             value={selectedClasse}
             onChange={(e) => setSelectedClasse(e.target.value)}
@@ -152,12 +209,25 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
           >
             <option value="">-- Choisir une classe --</option>
             {classes.map((c) => (
-              <option key={c._id} value={c.nom} style={{ background: dark ? "#1E293B" : "#FFF" }}>{c.nom}</option>
+              <option
+                key={c._id}
+                value={c.nom}
+                style={{ background: dark ? "#1E293B" : "#FFF" }}
+              >
+                {c.nom}
+              </option>
             ))}
           </select>
           {tab === "taux" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, width: isMobile ? "100%" : "auto" }}>
-              <span style={{ color: textSecondary, fontSize: isMobile ? 14 : 14 }}>Seuil (%) :</span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: isMobile ? "100%" : "auto",
+              }}
+            >
+              <span style={{ color: textSecondary, fontSize: 14 }}>Seuil (%) :</span>
               <input
                 type="number"
                 value={seuil}
@@ -182,20 +252,30 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
       {/* Indicateur de chargement */}
       {isLoading && (
         <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-          <Loader size={32} className="animate-spin" style={{ color: accent }} />
+          <Loader size={32} className="sxa-animate-spin" style={{ color: accent }} />
         </div>
       )}
 
       {/* Contenu des onglets */}
       {!isLoading && tab === "taux" && selectedClasse && (
-        <div style={{
-          background: cardBg,
-          borderRadius: 16,
-          padding: cardPadding,
-          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-          border: `1px solid ${cardBorder}`,
-        }}>
-          <h3 style={{ marginBottom: 16, color: textPrimary, fontSize: isMobile ? 16 : 18 }}>
+        <div
+          style={{
+            background: cardBg,
+            borderRadius: 16,
+            padding: cardPadding,
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            border: `1px solid ${cardBorder}`,
+          }}
+        >
+          <h3
+            style={{
+              marginBottom: 16,
+              color: textPrimary,
+              fontSize: isMobile ? 16 : 18,
+            }}
+          >
             Taux de réussite par matière (≥ {seuil}%) – {selectedClasse}
           </h3>
           {tauxReussite.length === 0 ? (
@@ -208,12 +288,29 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
                   <XAxis dataKey="matiere" stroke={axisStroke} />
                   <YAxis unit="%" domain={[0, 100]} stroke={axisStroke} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="tauxReussite" fill={accent} radius={[4, 4, 0, 0]} name="Taux de réussite" />
+                  <Bar
+                    dataKey="tauxReussite"
+                    fill={accent}
+                    radius={[4, 4, 0, 0]}
+                    name="Taux de réussite"
+                  />
                 </BarChart>
               </ResponsiveContainer>
-              {/* Tableau récapitulatif */}
-              <div style={{ overflowX: "auto", marginTop: 20, WebkitOverflowScrolling: "touch" }}>
-                <table style={{ width: "100%", minWidth: isMobile ? 400 : "auto", borderCollapse: "collapse", color: textPrimary }}>
+              <div
+                style={{
+                  overflowX: "auto",
+                  marginTop: 20,
+                  WebkitOverflowScrolling: "touch",
+                }}
+              >
+                <table
+                  style={{
+                    width: "100%",
+                    minWidth: isMobile ? 400 : "auto",
+                    borderCollapse: "collapse",
+                    color: textPrimary,
+                  }}
+                >
                   <thead>
                     <tr style={{ borderBottom: `2px solid ${cardBorder}` }}>
                       <th style={{ textAlign: "left", padding: 8 }}>Matière</th>
@@ -223,10 +320,17 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
                   </thead>
                   <tbody>
                     {tauxReussite.map((item) => (
-                      <tr key={item.matiere} style={{ borderBottom: `1px solid ${cardBorder}` }}>
+                      <tr
+                        key={item.matiere}
+                        style={{ borderBottom: `1px solid ${cardBorder}` }}
+                      >
                         <td style={{ padding: 8 }}>{item.matiere}</td>
-                        <td style={{ textAlign: "center", padding: 8 }}>{item.tauxReussite.toFixed(1)}%</td>
-                        <td style={{ textAlign: "center", padding: 8 }}>{item.nbEleves}</td>
+                        <td style={{ textAlign: "center", padding: 8 }}>
+                          {item.tauxReussite.toFixed(1)}%
+                        </td>
+                        <td style={{ textAlign: "center", padding: 8 }}>
+                          {item.nbEleves}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -238,14 +342,24 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
       )}
 
       {!isLoading && tab === "evolution" && selectedClasse && (
-        <div style={{
-          background: cardBg,
-          borderRadius: 16,
-          padding: cardPadding,
-          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-          border: `1px solid ${cardBorder}`,
-        }}>
-          <h3 style={{ marginBottom: 16, color: textPrimary, fontSize: isMobile ? 16 : 18 }}>
+        <div
+          style={{
+            background: cardBg,
+            borderRadius: 16,
+            padding: cardPadding,
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            border: `1px solid ${cardBorder}`,
+          }}
+        >
+          <h3
+            style={{
+              marginBottom: 16,
+              color: textPrimary,
+              fontSize: isMobile ? 16 : 18,
+            }}
+          >
             Évolution de la moyenne générale – {selectedClasse}
           </h3>
           {evolution.length === 0 ? (
@@ -258,7 +372,13 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
                 <YAxis domain={[0, 100]} stroke={axisStroke} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Line type="monotone" dataKey="moyenne" stroke={accent} strokeWidth={2} name="Moy. générale (%)" />
+                <Line
+                  type="monotone"
+                  dataKey="moyenne"
+                  stroke={accent}
+                  strokeWidth={2}
+                  name="Moy. générale (%)"
+                />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -266,15 +386,25 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
       )}
 
       {!isLoading && tab === "comparaison" && (
-        <div style={{
-          background: cardBg,
-          borderRadius: 16,
-          padding: cardPadding,
-          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-          border: `1px solid ${cardBorder}`,
-        }}>
-          <h3 style={{ marginBottom: 16, color: textPrimary, fontSize: isMobile ? 16 : 18 }}>
-            Comparaison des classes – {anneeId}
+        <div
+          style={{
+            background: cardBg,
+            borderRadius: 16,
+            padding: cardPadding,
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            border: `1px solid ${cardBorder}`,
+          }}
+        >
+          <h3
+            style={{
+              marginBottom: 16,
+              color: textPrimary,
+              fontSize: isMobile ? 16 : 18,
+            }}
+          >
+            Comparaison des classes{anneeLabel ? ` – ${anneeLabel}` : ""}
           </h3>
           {comparaison.length === 0 ? (
             <p style={{ color: textSecondary }}>Aucune donnée.</p>
@@ -285,7 +415,12 @@ export function StatistiquesAvancees({ ecoleId, anneeId, classes, annees }) {
                 <XAxis dataKey="classe" stroke={axisStroke} />
                 <YAxis domain={[0, 100]} stroke={axisStroke} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="moyenne" fill={success} radius={[4, 4, 0, 0]} name="Moy. générale (%)" />
+                <Bar
+                  dataKey="moyenne"
+                  fill={success}
+                  radius={[4, 4, 0, 0]}
+                  name="Moy. générale (%)"
+                />
               </BarChart>
             </ResponsiveContainer>
           )}

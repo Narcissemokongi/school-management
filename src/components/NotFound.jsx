@@ -15,6 +15,12 @@ export function NotFound() {
   const circleBorder = dark ? "#334155" : "#E2E8F0";
   const buttonBg = dark ? "#818CF8" : "#4F46E5";
   const buttonHover = dark ? "#6366F1" : "#4338CA";
+  const buttonShadow = dark
+    ? "0 4px 12px rgba(0,0,0,0.3)"
+    : "0 4px 12px rgba(79,70,229,0.2)";
+  const buttonShadowHover = dark
+    ? "0 6px 16px rgba(0,0,0,0.5)"
+    : "0 6px 16px rgba(79,70,229,0.3)";
 
   // Styles adaptatifs
   const containerPadding = isMobile ? "32px 16px" : "32px 24px";
@@ -26,9 +32,11 @@ export function NotFound() {
   const actionsFlexDirection = isMobile ? "column" : "row";
   const actionButtonPadding = isMobile ? "12px 16px" : "12px 24px";
   const actionButtonWidth = isMobile ? "100%" : "auto";
+  const actionButtonFontSize = isMobile ? 16 : 14;
 
   return (
     <div
+      className="nf-container"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -40,11 +48,12 @@ export function NotFound() {
         background: bg,
         color: textPrimary,
         transition: "background-color 0.3s, color 0.3s",
-        animation: "fadeInZoom 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
+        animation: "nf-fadeInZoom 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
       }}
     >
       {/* Icône principale avec animation */}
       <div
+        className="nf-float"
         style={{
           width: iconContainerSize,
           height: iconContainerSize,
@@ -55,8 +64,10 @@ export function NotFound() {
           alignItems: "center",
           justifyContent: "center",
           marginBottom: isMobile ? 16 : 24,
-          boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.1)",
-          animation: "float 3s ease-in-out infinite",
+          boxShadow: dark
+            ? "0 1px 3px rgba(0,0,0,0.3)"
+            : "0 1px 3px rgba(0,0,0,0.1)",
+          animation: "nf-float 3s ease-in-out infinite",
         }}
       >
         <Search size={iconSize} color={dark ? "#818CF8" : "#4F46E5"} />
@@ -64,6 +75,7 @@ export function NotFound() {
 
       {/* Titre 404 animé */}
       <h1
+        className="nf-pulse"
         style={{
           fontSize: title404,
           fontWeight: 900,
@@ -71,7 +83,7 @@ export function NotFound() {
           margin: "0 0 8px",
           lineHeight: 1,
           letterSpacing: "-2px",
-          animation: "pulse 2s ease-in-out infinite",
+          animation: "nf-pulse 2s ease-in-out infinite",
         }}
       >
         404
@@ -104,14 +116,16 @@ export function NotFound() {
       </p>
 
       {/* Boutons d'action */}
-      <div style={{
-        display: "flex",
-        gap: 12,
-        flexWrap: "wrap",
-        justifyContent: "center",
-        flexDirection: actionsFlexDirection,
-        width: isMobile ? "100%" : "auto",
-      }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          justifyContent: "center",
+          flexDirection: actionsFlexDirection,
+          width: isMobile ? "100%" : "auto",
+        }}
+      >
         <Link
           to="/"
           style={{
@@ -125,23 +139,23 @@ export function NotFound() {
             borderRadius: 12,
             textDecoration: "none",
             fontWeight: 600,
-            fontSize: isMobile ? 16 : 14,
-            boxShadow: dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)",
+            fontSize: actionButtonFontSize,
+            boxShadow: buttonShadow,
             transition: "background 0.2s, transform 0.2s, box-shadow 0.2s",
             width: actionButtonWidth,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = buttonHover;
             e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.boxShadow = dark ? "0 6px 16px rgba(0,0,0,0.5)" : "0 6px 16px rgba(79,70,229,0.3)";
+            e.currentTarget.style.boxShadow = buttonShadowHover;
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = buttonBg;
             e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = dark ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 12px rgba(79,70,229,0.2)";
+            e.currentTarget.style.boxShadow = buttonShadow;
           }}
         >
-          <Home size={isMobile ? 20 : 20} /> Retour à l'accueil
+          <Home size={20} /> Retour à l'accueil
         </Link>
 
         <button
@@ -157,13 +171,15 @@ export function NotFound() {
             border: `1px solid ${circleBorder}`,
             borderRadius: 12,
             fontWeight: 600,
-            fontSize: isMobile ? 16 : 14,
+            fontSize: actionButtonFontSize,
             cursor: "pointer",
             transition: "background 0.2s, transform 0.1s",
             width: actionButtonWidth,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)";
+            e.currentTarget.style.background = dark
+              ? "rgba(255,255,255,0.05)"
+              : "rgba(0,0,0,0.05)";
             e.currentTarget.style.transform = "translateY(-1px)";
           }}
           onMouseLeave={(e) => {
@@ -171,23 +187,30 @@ export function NotFound() {
             e.currentTarget.style.transform = "translateY(0)";
           }}
         >
-          <ArrowLeft size={isMobile ? 18 : 18} /> Page précédente
+          <ArrowLeft size={18} /> Page précédente
         </button>
       </div>
 
-      {/* Animations CSS */}
+      {/* Animations CSS préfixées nf-* + respect reduced-motion */}
       <style>{`
-        @keyframes fadeInZoom {
+        @keyframes nf-fadeInZoom {
           0% { opacity: 0; transform: scale(0.95) translateY(20px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
-        @keyframes float {
+        @keyframes nf-float {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-10px); }
         }
-        @keyframes pulse {
+        @keyframes nf-pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.8; transform: scale(1.05); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .nf-container,
+          .nf-float,
+          .nf-pulse {
+            animation: none !important;
+          }
         }
       `}</style>
     </div>

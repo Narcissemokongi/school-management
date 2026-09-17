@@ -1,119 +1,345 @@
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
+// src/components/messagerie/MessageBubble.jsx
+import { useMemo, useState } from "react";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useStyles } from "@/styles/theme";
 import { Check, CheckCheck, Paperclip } from "lucide-react";
 
-export function MessageBubble({ msg, user, getUserName }) {
-  const { dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
-  const isMine = msg.expediteurId === user?._id;
+// ════════════════════════════════════════════════════════════════════
+// TOKENS
+// ════════════════════════════════════════════════════════════════════
+function buildTokens(dark) {
+  return {
+    // Messages envoyés
+    sentBg: dark ? "#6366F1" : "#4F46E5",
+    sentText: "#FFFFFF",
+    sentTimeColor: "rgba(255,255,255,0.75)",
 
-  // Statut de lecture (true si le message a été lu, sinon false)
-  const isRead = msg.lu ?? msg.read ?? false; // Adaptez selon votre schéma
+    // Messages reçus
+    receivedBg: dark ? "#1E293B" : "#FFFFFF",
+    receivedText: dark ? "#F1F5F9" : "#1E293B",
+    receivedBorder: dark ? "#334155" : "#E2E8F0",
+    receivedTimeColor: dark ? "#94A3B8" : "#64748B",
 
-  // Couleurs WhatsApp clair/sombre
-  const sentBg = dark ? "#005C4B" : "#DCF8C6";
-  const receivedBg = dark ? "#1E2A30" : "#FFFFFF";
-  const sentText = dark ? "#E9EDEF" : "#111B21";
-  const receivedText = dark ? "#E9EDEF" : "#111B21";
-  const timeColor = dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)";
-  const senderColor = dark ? "#00A884" : "#075E54";
-  const attachmentColor = isMine
-    ? dark ? "#A5B4FC" : "#075E54"
-    : dark ? "#00A884" : "#075E54";
+    // Nom de l'expéditeur (groupes)
+    senderColor: dark ? "#A5B4FC" : "#4F46E5",
+    senderBg: dark ? "#312E81" : "#EEF2FF",
 
-  // Formater l'heure et la date complète
-  const messageDate = new Date(msg.date);
-  const timeString = messageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const fullDateString = messageDate.toLocaleString([], {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+    // Pièces jointes
+    attachmentMineColor: "#FFFFFF",
+    attachmentOtherColor: dark ? "#A5B4FC" : "#4F46E5",
 
-  // Ajustements adaptatifs
-  const maxWidth = isMobile ? "85%" : "70%";
-  const contentFontSize = isMobile ? 15 : 14; // 15px sur mobile pour une meilleure lisibilité
-  const senderFontSize = isMobile ? 12 : 12;
-  const timeFontSize = isMobile ? 10 : 11;
-  const attachmentFontSize = isMobile ? 13 : 13;
-  const padding = isMobile ? "6px 10px 8px 10px" : "6px 10px 8px 10px";
+    // Ombres
+    shadow: dark
+      ? "0 1px 2px rgba(0,0,0,0.3)"
+      : "0 1px 3px rgba(0,0,0,0.08)",
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════
+const AVATAR_PALETTE = [
+  "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E",
+  "#F59E0B", "#10B981", "#14B8A6", "#3B82F6",
+];
+
+function getInitials(name) {
+  if (!name) return "?";
+  const parts = String(name).trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (
+    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+  ).toUpperCase();
+}
+
+function getAvatarColor(name) {
+  if (!name) return AVATAR_PALETTE[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+
+// ✅ Rayons selon position dans le groupe
+function getBubbleRadius(isMine, isFirst, isLast) {
+  if (isFirst && isLast) return "16px";
+
+  if (isMine) {
+    if (isFirst) return "16px 16px 4px 16px";
+    if (isLast) return "16px 4px 16px 16px";
+    return "16px 4px 4px 16px";
+  } else {
+    if (isFirst) return "16px 16px 16px 4px";
+    if (isLast) return "4px 16px 16px 16px";
+    return "4px 16px 16px 4px";
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANTS
+// ════════════════════════════════════════════════════════════════════
+
+function SenderAvatar({ name, size = 28 }) {
+  const bg = getAvatarColor(name);
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: bg,
+        color: "#FFFFFF",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700,
+        fontSize: size * 0.42,
+        flexShrink: 0,
+        letterSpacing: "-0.02em",
+        alignSelf: "flex-end",
+        marginBottom: 2,
+      }}
+      aria-hidden="true"
+    >
+      {getInitials(name)}
+    </div>
+  );
+}
+
+function AttachmentLink({ attachment, isMine, tokens, fontSize }) {
+  const [hovered, setHovered] = useState(false);
 
   return (
-    <div style={{
-      display: "flex",
-      justifyContent: isMine ? "flex-end" : "flex-start",
-      marginBottom: 12,
-    }}>
-      <div style={{
-        maxWidth: maxWidth,
-        padding: padding,
-        borderRadius: isMine ? "12px 12px 0 12px" : "12px 12px 12px 0",
-        background: isMine ? sentBg : receivedBg,
-        color: isMine ? sentText : receivedText,
-        boxShadow: "0 1px 1px rgba(0,0,0,0.15)",
-        position: "relative",
-        wordBreak: "break-word",
-      }}>
-        {/* Nom de l'expéditeur (pour les messages reçus dans les groupes) */}
-        {getUserName && !isMine && (
-          <div style={{
-            fontSize: senderFontSize,
-            fontWeight: 700,
-            marginBottom: 2,
-            color: senderColor,
-          }}>
-            {getUserName(msg.expediteurId)}
+    <a
+      href={attachment.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        marginTop: 6,
+        marginRight: 6,
+        padding: "4px 8px",
+        borderRadius: 8,
+        color: isMine
+          ? tokens.attachmentMineColor
+          : tokens.attachmentOtherColor,
+        background: isMine ? "rgba(255,255,255,0.15)" : tokens.senderBg,
+        textDecoration: "none",
+        fontSize,
+        fontWeight: 500,
+        transition: "background 0.15s ease",
+        maxWidth: "100%",
+        opacity: hovered ? 0.9 : 1,
+      }}
+      title={`Télécharger ${attachment.nom}`}
+    >
+      <Paperclip size={13} style={{ flexShrink: 0 }} />
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {attachment.nom}
+      </span>
+    </a>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
+export function MessageBubble({
+  msg,
+  user,
+  getUserName,
+  isFirstInGroup = true,
+  isLastInGroup = true,
+}) {
+  const { dark } = useStyles();
+  const isMobile = useIsMobile();
+
+  const tokens = useMemo(() => buildTokens(dark), [dark]);
+
+  const isMine = msg.expediteurId === user?._id;
+  const isRead = msg.lu ?? msg.read ?? false;
+
+  // ✅ Détection mode groupe (getUserName fourni)
+  const isGroupChat = Boolean(getUserName);
+
+  // ✅ Nom de l'expéditeur (uniquement en mode groupe)
+  const senderName = useMemo(() => {
+    if (isMine || !getUserName) return null;
+    return getUserName(msg.expediteurId);
+  }, [isMine, getUserName, msg.expediteurId]);
+
+  // ✅ Timestamps
+  const { timeString, fullDateString } = useMemo(() => {
+    const d = new Date(msg.date);
+    if (isNaN(d.getTime())) {
+      return { timeString: "", fullDateString: "" };
+    }
+    return {
+      timeString: d.toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      fullDateString: d.toLocaleString("fr-FR", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+  }, [msg.date]);
+
+  const borderRadius = getBubbleRadius(
+    isMine,
+    isFirstInGroup,
+    isLastInGroup
+  );
+
+  // ✅ Espacement vertical
+  const marginBottom = isLastInGroup ? 12 : 2;
+  const paddingTop = isFirstInGroup ? 8 : 4;
+  const paddingBottom = isLastInGroup ? 6 : 4;
+
+  // ✅ Dimensions responsive
+  const maxWidth = isMobile ? "82%" : "68%";
+  const contentFontSize = isMobile ? 14.5 : 14;
+  const senderFontSize = 12;
+  const timeFontSize = 10.5;
+  const attachmentFontSize = 12.5;
+
+  // ✅ Affichage du nom : uniquement en mode groupe, en début de groupe
+  const showSenderName = senderName && isFirstInGroup;
+
+  // ✅ FIX #1 — Avatar uniquement en mode groupe + reçu + dernier du groupe
+  const showSenderAvatar =
+    !isMine && isGroupChat && senderName && isLastInGroup;
+
+  // ✅ FIX #1 — Placeholder uniquement en mode groupe + reçu
+  const showAvatarPlaceholder = !isMine && isGroupChat && !showSenderAvatar;
+
+  const avatarSize = isMobile ? 26 : 28;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: isMine ? "flex-end" : "flex-start",
+        alignItems: "flex-end",
+        gap: 8,
+        marginBottom,
+      }}
+    >
+      {/* ✅ FIX #1 — Avatar/placeholder uniquement en mode groupe */}
+      {showSenderAvatar ? (
+        <SenderAvatar name={senderName} size={avatarSize} />
+      ) : showAvatarPlaceholder ? (
+        <div
+          style={{ width: avatarSize, flexShrink: 0 }}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      {/* Bulle */}
+      <div
+        style={{
+          maxWidth,
+          padding: `${paddingTop}px 12px ${paddingBottom}px 12px`,
+          borderRadius,
+          background: isMine ? tokens.sentBg : tokens.receivedBg,
+          color: isMine ? tokens.sentText : tokens.receivedText,
+          boxShadow: tokens.shadow,
+          border: isMine ? "none" : `1px solid ${tokens.receivedBorder}`,
+          position: "relative",
+          wordBreak: "break-word",
+          minWidth: 60,
+        }}
+      >
+        {/* Nom expéditeur (groupes uniquement) */}
+        {showSenderName && (
+          <div
+            style={{
+              fontSize: senderFontSize,
+              fontWeight: 700,
+              marginBottom: 3,
+              color: tokens.senderColor,
+              lineHeight: 1.2,
+            }}
+          >
+            {senderName}
           </div>
         )}
 
-        {/* Contenu du message */}
-        <div style={{
-          fontSize: contentFontSize,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          lineHeight: 1.4,
-        }}>
-          {msg.contenu}
-        </div>
-
-        {/* Pièces jointes */}
-        {msg.piecesJointes?.map((pj, idx) => (
-          <a
-            key={idx}
-            href={pj.url}
-            target="_blank"
-            rel="noopener noreferrer"
+        {/* Contenu texte */}
+        {msg.contenu && (
+          <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              marginTop: 6,
-              color: attachmentColor,
-              textDecoration: "underline",
-              fontSize: attachmentFontSize,
+              fontSize: contentFontSize,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              lineHeight: 1.4,
             }}
           >
-            <Paperclip size={isMobile ? 16 : 14} />
-            {pj.nom}
-          </a>
-        ))}
+            {msg.contenu}
+          </div>
+        )}
 
-        {/* Heure et statut */}
-        <div style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          gap: 4,
-          marginTop: 4,
-          fontSize: timeFontSize,
-          color: timeColor,
-        }}>
-          <span title={fullDateString}>{timeString}</span>
-          {isMine && (isRead ? <CheckCheck size={isMobile ? 18 : 16} /> : <Check size={isMobile ? 18 : 16} />)}
-        </div>
+        {/* Pièces jointes */}
+        {msg.piecesJointes?.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              marginTop: msg.contenu ? 0 : 4,
+            }}
+          >
+            {msg.piecesJointes.map((pj, idx) => (
+              <AttachmentLink
+                key={`${pj.url}-${idx}`}
+                attachment={pj}
+                isMine={isMine}
+                tokens={tokens}
+                fontSize={attachmentFontSize}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Heure + statut de lecture (fin de groupe) */}
+        {isLastInGroup && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 4,
+              marginTop: 2,
+              fontSize: timeFontSize,
+              color: isMine
+                ? tokens.sentTimeColor
+                : tokens.receivedTimeColor,
+            }}
+          >
+            <span title={fullDateString}>{timeString}</span>
+            {isMine &&
+              (isRead ? (
+                <CheckCheck size={14} aria-label="Lu" style={{ flexShrink: 0 }} />
+              ) : (
+                <Check size={14} aria-label="Envoyé" style={{ flexShrink: 0 }} />
+              ))}
+          </div>
+        )}
       </div>
     </div>
   );
