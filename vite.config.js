@@ -1,14 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import path from 'path'; // <-- Ajout pour l'alias
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// ✅ En ESM, on recrée __dirname manuellement
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   // Alias pour importer depuis "src" avec "@"
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      // Alias pour importer depuis le dossier "convex" à la racine
       '@convex': path.resolve(__dirname, 'convex'),
     },
   },
@@ -23,7 +27,6 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        // Évite l'erreur de cache sur les fichiers trop gros
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       manifest: {
