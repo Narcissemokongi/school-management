@@ -1,10 +1,13 @@
 workflows:
   android-build:
     name: Build Android
+    max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: 20.19
-        JAVA_VERSION: 17   # <-- Changé de 21 à 17
+        NODE_VERSION: "20.19.0"
+        JAVA_VERSION: 17
+      node: 20.19.0
+      java: 17
       groups:
         - app-env
     scripts:
@@ -14,7 +17,7 @@ workflows:
         script: npm run build
       - name: Capacitor sync
         script: npx cap sync android
-      - name: Build APK
+      - name: Build APK (debug)
         script: |
           cd android
           chmod +x gradlew
@@ -28,44 +31,74 @@ workflows:
 
   ios-build:
     name: Build iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      # ✅ À configurer dans Codemagic → Team integrations → Developer Portal
+      app_store_connect: codemagic
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.schoolmanagement.app   # ← TON bundle ID
       vars:
-        NODE_VERSION: 20.19
+        NODE_VERSION: "20.19.0"
         XCODE_VERSION: 15.4
+        XCODE_WORKSPACE: "App.xcworkspace"
+        XCODE_SCHEME: "App"
+      node: 20.19.0
+      xcode: 15.4
+      cocoapods: default
       groups:
         - app-env
     scripts:
       - name: Install dependencies
         script: npm ci
-      - name: Install Capacitor iOS package   # <-- Nouvelle étape
-        script: npm install @capacitor/ios
+      # ❌ RETIRÉ : npm install @capacitor/ios  (déjà dans package.json)
+      # ❌ RETIRÉ : sudo gem install cocoapods  (pré-installé, causait le crash Ruby 4.0.3)
+
       - name: Build web app
         script: npm run build
-      - name: Install CocoaPods
-        script: sudo gem install cocoapods
-      - name: Capacitor sync
+
+      - name: Capacitor sync iOS
         script: npx cap sync ios
+
       - name: Install pods
         script: |
           cd ios/App
           pod install
-      - name: Build IPA
+
+      - name: Setup code signing
+        script: |
+          xcode-project use-profiles
+
+      - name: Build IPA (Release, signé)
         script: |
           cd ios/App
-          xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Debug archive -archivePath $CM_BUILD_DIR/App.xcarchive
-          xcodebuild -exportArchive -archivePath $CM_BUILD_DIR/App.xcarchive -exportPath $CM_BUILD_DIR/output -exportOptionsPlist ../../ios/exportOptions.plist
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
     artifacts:
-      - $CM_BUILD_DIR/output/*.ipa
+      - ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
     publishing:
       email:
         recipients:
           - narcissemokongi@gmail.com
+        notify:
+          success: true
+          failure: true
+      # ✅ Optionnel : upload TestFlight automatique
+      # app_store_connect:
+      #   auth: integration
+      #   submit_to_testflight: true
 
   desktop-build:
     name: Build Desktop
+    max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: 20.19
+        NODE_VERSION: "20.19.0"
+      node: 20.19.0
       groups:
         - app-env
     scripts:
@@ -78,8 +111,13 @@ workflows:
       - name: Package Electron
         script: |
           cd electron
+          npm install
           npm run electron:build
     artifacts:
       - electron/release/*.exe
       - electron/release/*.dmg
       - electron/release/*.AppImage
+    publishing:
+      email:
+        recipients:
+          - narcissemokongi@gmail.com
