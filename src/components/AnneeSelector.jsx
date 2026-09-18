@@ -73,7 +73,7 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
 
     setActivating(true);
     try {
-      await setActive({ anneeId, userId, requesterId: userId });
+      await setActive({ anneeId, userId });
       toast.success("Année activée avec succès.");
       onAnneeChange(anneeId);
     } catch (err) {

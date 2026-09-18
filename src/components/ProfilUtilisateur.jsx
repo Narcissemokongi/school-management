@@ -175,7 +175,7 @@ export function ProfilUtilisateur({ user }) {
   //    Ici on utilise { userId, requesterId }. Incohérence à confirmer.
   const eleve = useQuery(
     api.eleves.getByUserId,
-    isEleve && userId ? { userId, requesterId: userId } : "skip"
+    isEleve && userId ? { userId } : "skip"
   );
 
   // ===== Synchronisation avec les données serveur =====
@@ -278,7 +278,6 @@ export function ProfilUtilisateur({ user }) {
       // ⚠️ Vérifier si updateProfile exige `requesterId` (non documenté dans le rapport)
       await updateProfile({
         userId,
-        requesterId: userId,
         sexe,
         dateNaissance,
         lieuNaissance,

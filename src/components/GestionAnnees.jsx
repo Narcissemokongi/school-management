@@ -160,7 +160,7 @@ export function GestionAnnees({ ecoleId, userId }) {
       setActivating(anneeId);
       try {
         // ✅ requesterId ajouté (cohérent avec AnneeSelector)
-        await setActive({ anneeId, userId, requesterId: userId });
+        await setActive({ anneeId, userId });
         toast.success(`Année ${nom} activée`);
       } catch (err) {
         toast.error(extractErrMsg(err, "Erreur lors de l'activation"));

@@ -182,7 +182,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
 
   const twoFactorRecord = useQuery(
     api.twoFactorEmail.getByUser,
-    userId ? { userId, requesterId: userId } : "skip"
+    userId ? { userId } : "skip"
   );
 
   const setupEmail = useMutation(api.twoFactorEmail.setupEmail);
@@ -227,7 +227,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
     setSending(true);
     try {
-      await setupEmail({ userId, email: email.trim(), requesterId: userId });
+      await setupEmail({ userId, email: email.trim() });
       setIsSettingUp(true);
       toast.success("Code de vérification envoyé à votre email.");
     } catch (err) {
@@ -248,7 +248,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
     setVerifying(true);
     try {
-      await verifyAndEnable({ userId, code, requesterId: userId });
+      await verifyAndEnable({ userId, code });
       toast.success("2FA par email activée !");
       setIsSettingUp(false);
       setCode("");
@@ -263,7 +263,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     if (!userId) return;
     setVerifying(true);
     try {
-      await disableEmail({ userId, requesterId: userId });
+      await disableEmail({ userId });
       toast.success("2FA désactivée.");
     } catch (err) {
       toast.error(err?.message || "Impossible de désactiver la 2FA");
