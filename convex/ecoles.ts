@@ -1,481 +1,400 @@
-// convex/ecoles.ts
-import { query, mutation, MutationCtx, QueryCtx } from "./_generated/server";
+import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
-// ✅ Import uniquement `isSuperAdmin` (large) — accepte tous les superAdmins
-import { isSuperAdmin } from "./helpers/auth";
 
-type AnyCtx = MutationCtx | QueryCtx;
-
-const MAX_ECOLES = 500;
-
-// ════════════════════════════════════════════════════════════════════
-// OUTILS
-// ════════════════════════════════════════════════════════════════════
-
-/**
- * ✅ Tout superAdmin (principal OU secondaire) a toutes les permissions.
- */
-function hasPermission(user: any, permission: string): boolean {
-  if (!user) return false;
-  if (isSuperAdmin(user)) return true;
-  if (user.role !== "superAdmin") return false;
-  return user.permissions?.includes(permission) ?? false;
-}
-
-async function requireAuth(ctx: AnyCtx, userId: string | undefined) {
-  if (!userId) throw new Error("Authentification requise");
-  const user = await ctx.db.get(userId as Id<"users">);
-  if (!user) throw new Error("Utilisateur introuvable");
-  return user;
-}
-
-async function requirePermission(
-  ctx: AnyCtx,
-  userId: string | undefined,
-  permission: string
-) {
-  const user = await requireAuth(ctx, userId);
-  if (!hasPermission(user, permission)) {
-    throw new Error(`Permission insuffisante : ${permission}`);
-  }
-  return user;
-}
-
-/**
- * ✅ FIX — utilise `isSuperAdmin` (large) : TOUT superAdmin
- * (principal OU secondaire) peut lister les écoles, stats, etc.
- */
-async function requireSuperAdmin(ctx: AnyCtx, userId: string | undefined) {
-  const user = await requireAuth(ctx, userId);
-  if (!isSuperAdmin(user)) {
-    throw new Error("Réservé au super-admin.");
-  }
-  return user;
-}
-
-/**
- * ✅ FIX — variable locale renommée `isSuper` pour éviter le shadowing
- * avec l'import `isSuperAdmin`.
- */
-async function requireEcoleAdminOrSuperAdmin(
-  ctx: AnyCtx,
-  userId: string | undefined,
-  ecoleId: string
-) {
-  const user = await requireAuth(ctx, userId);
-
-  const isSuper = isSuperAdmin(user);   // ✅ was: hasPermission(user, "gestion_ecoles")
-  const isEcoleAdmin =
-    (user.role === "admin" || user.role === "directeur") &&
-    user.ecoleId === ecoleId;
-
-  if (!isSuper && !isEcoleAdmin) {
-    throw new Error("Permission insuffisante pour modifier cette école.");
-  }
-  return user;
-}
-
-// ════════════════════════════════════════════════════════════════════
-// QUERIES
-// ════════════════════════════════════════════════════════════════════
-
-export const list = query({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
-    return await ctx.db.query("ecoles").take(MAX_ECOLES);
-  },
-});
-
-export const get = query({
-  args: {
-    ecoleId: v.id("ecoles"),
-    userId: v.optional(v.id("users")),
-  },
-  handler: async (ctx, args) => {
-    if (args.userId) {
-      await requireAuth(ctx, args.userId);
-    }
-    return await ctx.db.get(args.ecoleId);
-  },
-});
-
-export const getByCode = query({
-  args: { code: v.string() },
-  handler: async (ctx, args) => {
-    const ecole = await ctx.db
-      .query("ecoles")
-      .withIndex("by_code", (q) => q.eq("code", args.code.toUpperCase()))
-      .first();
-    if (!ecole) return null;
-    return {
-      _id: ecole._id,
-      nom: ecole.nom,
-      code: ecole.code,
-      statut: ecole.statut ?? "active",
-    };
-  },
-});
-
-export const listWithUserCount = query({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
-    const ecoles = await ctx.db.query("ecoles").take(MAX_ECOLES);
-    return ecoles.map((ecole) => ({
-      ...ecole,
-      userCount: ecole.userCount ?? 0,
-      statut: ecole.statut ?? "active",
-    }));
-  },
-});
-
-export const listRecent = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    if (args.userId) await requireAuth(ctx, args.userId);
-    return await ctx.db.query("ecoles").order("desc").take(5);
-  },
-});
-
-export const count = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    if (args.userId) await requireAuth(ctx, args.userId);
-    const all = await ctx.db.query("ecoles").take(MAX_ECOLES);
-    return all.length;
-  },
-});
-
-export const listWithStats = query({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
-
-    const ecoles = await ctx.db.query("ecoles").take(MAX_ECOLES);
-    const users = await ctx.db.query("users").take(2000);
-    const classes = await ctx.db.query("classes").take(2000);
-    const eleves = await ctx.db.query("eleves").take(2000);
-
-    const countUsers: Record<string, number> = {};
-    for (const u of users)
-      if (u.ecoleId) countUsers[u.ecoleId] = (countUsers[u.ecoleId] || 0) + 1;
-
-    const countClasses: Record<string, number> = {};
-    for (const c of classes)
-      if (c.ecoleId) countClasses[c.ecoleId] = (countClasses[c.ecoleId] || 0) + 1;
-
-    const countEleves: Record<string, number> = {};
-    for (const e of eleves)
-      if (e.ecoleId) countEleves[e.ecoleId] = (countEleves[e.ecoleId] || 0) + 1;
-
-    return ecoles.map((ecole) => ({
-      ...ecole,
-      userCount: countUsers[ecole._id] || 0,
-      classCount: countClasses[ecole._id] || 0,
-      eleveCount: countEleves[ecole._id] || 0,
-    }));
-  },
-});
-
-// ════════════════════════════════════════════════════════════════════
-// MUTATIONS
-// ════════════════════════════════════════════════════════════════════
-
-export const add = mutation({
-  args: { nom: v.string(), userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requirePermission(ctx, args.userId, "gestion_ecoles");
-
-    const existing = await ctx.db
-      .query("ecoles")
-      .filter((q) => q.eq(q.field("nom"), args.nom))
-      .first();
-    if (existing) throw new Error("Une école portant ce nom existe déjà.");
-
-    let code = "";
-    let attempts = 0;
-    while (attempts < 10) {
-      code = generateSchoolCode();
-      const existingCode = await ctx.db
-        .query("ecoles")
-        .withIndex("by_code", (q) => q.eq("code", code))
-        .first();
-      if (!existingCode) break;
-      attempts++;
-    }
-    if (attempts >= 10) {
-      throw new Error("Impossible de générer un code école unique. Réessayez.");
-    }
-
-    const newId = await ctx.db.insert("ecoles", {
-      nom: args.nom,
-      code,
-      userCount: 0,
-      statut: "active",
-    });
-
-    await ctx.db.insert("audit", {
-      userId: args.userId,
-      action: "create_ecole",
-      table: "ecoles",
-      documentId: newId,
-      date: new Date().toISOString(),
-      ecoleId: newId,
-      details: `Création de l'école "${args.nom}" (code: ${code})`,
-    });
-
-    return newId;
-  },
-});
-
-export const remove = mutation({
-  args: { ecoleId: v.id("ecoles"), userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requirePermission(ctx, args.userId, "gestion_ecoles");
-
-    const ecole = await ctx.db.get(args.ecoleId);
-    if (!ecole) throw new Error("École introuvable");
-
-    const tables = [
-      "eleves",
-      "classes",
-      "fautes",
-      "sanctions",
-      "punitions",
-      "messages",
-      "notes",
-      "cours",
-      "absences",
-      "emploiDuTemps",
-      "frais",
-      "audit",
-      "anneesScolaires",
-      "inscriptions",
-      "propositionsPassage",
-      "parentLinkRequests",
-      "examens",
-    ];
-
-    let totalDeleted = 0;
-
-    for (const table of tables) {
-      const BATCH = 100;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const records = await ctx.db
-          .query(table as any)
-          .withIndex("by_ecoleId", (q: any) => q.eq("ecoleId", args.ecoleId))
-          .take(BATCH);
-
-        if (records.length === 0) break;
-
-        for (const record of records) {
-          await ctx.db.delete(record._id);
-          totalDeleted++;
-        }
-
-        if (records.length < BATCH) break;
-      }
-    }
-
-    await ctx.db.delete(args.ecoleId);
-
-    await ctx.db.insert("audit", {
-      userId: args.userId,
-      action: "delete_ecole",
-      table: "ecoles",
-      documentId: args.ecoleId,
-      date: new Date().toISOString(),
-      ecoleId: undefined,
-      details: `Suppression de l'école "${ecole.nom}" (${totalDeleted} enregistrements liés)`,
-    });
-
-    return { success: true, deletedRecords: totalDeleted };
-  },
-});
-
-// ════════════════════════════════════════════════════════════════════
-// MISE À JOUR (admin école ou super admin)
-// ════════════════════════════════════════════════════════════════════
-
-export const update = mutation({
-  args: {
-    ecoleId: v.id("ecoles"),
-    nom: v.optional(v.string()),
-    userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    const ecole = await ctx.db.get(args.ecoleId);
-    if (!ecole) throw new Error("École introuvable");
-    await ctx.db.patch(args.ecoleId, { nom: args.nom ?? ecole.nom });
-    return { success: true };
-  },
-});
-
-export const updateLogo = mutation({
-  args: {
-    ecoleId: v.id("ecoles"),
-    logoUrl: v.string(),
-    userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    await ctx.db.patch(args.ecoleId, { logo: args.logoUrl } as any);
-    return { success: true };
-  },
-});
-
-export const updateDevise = mutation({
-  args: {
-    ecoleId: v.id("ecoles"),
-    devise: v.union(v.literal("CDF"), v.literal("USD")),
-    userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    await ctx.db.patch(args.ecoleId, { devise: args.devise });
-    return { success: true };
-  },
-});
-
-export const updateTypePeriode = mutation({
-  args: {
-    ecoleId: v.id("ecoles"),
-    typePeriode: v.union(v.literal("trimestre"), v.literal("semestre")),
-    userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    await ctx.db.patch(args.ecoleId, { typePeriode: args.typePeriode });
-    return { success: true };
-  },
-});
-
-export const updateBareme = mutation({
-  args: {
-    ecoleId: v.id("ecoles"),
-    bareme: v.number(),
-    userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    await ctx.db.patch(args.ecoleId, { bareme: args.bareme });
-    return { success: true };
-  },
-});
-
-export const updateMentions = mutation({
-  args: {
-    ecoleId: v.id("ecoles"),
+export default defineSchema({
+  // ========== ÉCOLES ==========
+  ecoles: defineTable({
+    nom: v.string(),
+    code: v.optional(v.string()),
+    logo: v.optional(v.string()),
+    devise: v.optional(v.union(v.literal("CDF"), v.literal("USD"))),
+    typePeriode: v.optional(v.union(v.literal("trimestre"), v.literal("semestre"))),
+    userCount: v.optional(v.number()),
+    bareme: v.optional(v.number()),
+    statut: v.optional(v.union(v.literal("active"), v.literal("suspendue"))),
     seuilFelicitations: v.optional(v.number()),
     seuilEncouragement: v.optional(v.number()),
     seuilAvertissement: v.optional(v.number()),
+  }).index("by_code", ["code"]),
+
+  // ========== ANNÉES SCOLAIRES ==========
+  anneesScolaires: defineTable({
+    nom: v.string(),
+    ecoleId: v.id("ecoles"),
+    estActive: v.boolean(),
+    dateLimitePassage: v.optional(v.string()),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_ecoleId_estActive", ["ecoleId", "estActive"]),
+
+  // ========== UTILISATEURS ==========
+  users: defineTable({
+    nom: v.string(),
+    postnom: v.optional(v.string()),
+    prenom: v.optional(v.string()),
+    login: v.string(),
+    password: v.string(),
+    role: v.string(),
+    ecoleId: v.optional(v.id("ecoles")),
+    fcmToken: v.optional(v.string()),
+    classe: v.optional(v.string()),
+    loginAttempts: v.optional(v.number()),
+    lockedUntil: v.optional(v.string()),
+    status: v.optional(
+      v.union(v.literal("pending"), v.literal("active"), v.literal("rejected"))
+    ),
+    approvedBy: v.optional(v.id("users")),
+    rejectionReason: v.optional(v.string()),
+    email: v.optional(v.string()),
+    permissions: v.optional(v.array(v.string())),
+  })
+    .index("by_login", ["login"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_ecoleId_status", ["ecoleId", "status"])
+    .index("by_status", ["status"])
+    .index("by_ecoleId_role", ["ecoleId", "role"]),
+
+  settings: defineTable({
+    appName: v.string(),
+    supportEmail: v.string(),
+    supportPhone: v.optional(v.string()),
+    address: v.optional(v.string()),
+    logoUrl: v.optional(v.string()),
+    slogan: v.optional(v.string()),
+    primaryColor: v.string(),
+  }).index("by_appName", ["appName"]),
+
+  // ========== ÉLÈVES ==========
+  eleves: defineTable({
+    nom: v.string(),
+    postnom: v.string(),
+    prenom: v.optional(v.string()),
+    classe: v.optional(v.string()),
+    code: v.optional(v.string()),
+    codeUtilise: v.optional(v.boolean()),
+    ecoleId: v.id("ecoles"),
+    parentId: v.optional(v.id("users")),
+    userId: v.optional(v.id("users")),
+
+    sexe: v.optional(v.union(v.literal("M"), v.literal("F"))),
+    dateNaissance: v.optional(v.string()),
+    lieuNaissance: v.optional(v.string()),
+    province: v.optional(v.string()),
+    territoire: v.optional(v.string()),
+    secteur: v.optional(v.string()),
+    village: v.optional(v.string()),
+    adresse: v.optional(v.string()),
+    telephone: v.optional(v.string()),
+    nomPere: v.optional(v.string()),
+    nomMere: v.optional(v.string()),
+    tuteurNom: v.optional(v.string()),
+    tuteurTelephone: v.optional(v.string()),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_parentId", ["parentId"])
+    .index("by_userId", ["userId"])
+    .index("by_code", ["code"]),
+
+  // ========== INSCRIPTIONS ==========
+  inscriptions: defineTable({
+    eleveId: v.id("eleves"),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.id("anneesScolaires"),
+    classe: v.string(),
+    statut: v.union(
+      v.literal("inscrit"),
+      v.literal("passant"),
+      v.literal("redoublant"),
+      v.literal("transfere"),
+      v.literal("exclu"),
+      v.literal("diplome")
+    ),
+    dateInscription: v.string(),
+    dateSortie: v.optional(v.string()),
+    decisionConseil: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+  })
+    .index("by_eleveId", ["eleveId"])
+    .index("by_anneeId", ["anneeId"])
+    .index("by_classe_annee", ["classe", "anneeId"])
+    .index("by_ecole_annee", ["ecoleId", "anneeId"])
+    .index("by_eleve_annee", ["eleveId", "anneeId"])
+    .index("by_ecoleId", ["ecoleId"]),
+
+  // ========== PROPOSITIONS DE PASSAGE ==========
+  propositionsPassage: defineTable({
+    eleveId: v.id("eleves"),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.id("anneesScolaires"),
+    enseignantId: v.id("users"),
+    statutPropose: v.union(
+      v.literal("passant"),
+      v.literal("redoublant"),
+      v.literal("transfere"),
+      v.literal("exclu"),
+      v.literal("diplome")
+    ),
+    classeDestinationPropose: v.optional(v.string()),
+    dateSoumission: v.string(),
+    statutValidation: v.optional(v.union(
+      v.literal("soumise"),
+      v.literal("validee"),
+      v.literal("modifiee"),
+      v.literal("rejetee")
+    )),
+    statutFinal: v.optional(v.union(
+      v.literal("passant"),
+      v.literal("redoublant"),
+      v.literal("transfere"),
+      v.literal("exclu"),
+      v.literal("diplome")
+    )),
+    classeDestinationFinale: v.optional(v.string()),
+    commentaireDirecteur: v.optional(v.string()),
+    valideePar: v.optional(v.id("users")),
+    valideeLe: v.optional(v.string()),
+    enConseilDiscipline: v.optional(v.boolean()),
+    derniereModificationEnseignant: v.optional(v.string()),
+  })
+    .index("by_ecole_annee", ["ecoleId", "anneeId"])
+    .index("by_enseignant", ["enseignantId"])
+    .index("by_eleve_annee", ["eleveId", "anneeId"])
+    .index("by_statut_validation", ["statutValidation"])
+    .index("by_ecole_annee_validation", ["ecoleId", "anneeId", "statutValidation"])
+    .index("by_ecoleId", ["ecoleId"]),
+
+  // ========== CLASSES ==========
+  classes: defineTable({
+    nom: v.string(),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_nom_ecole", ["nom", "ecoleId"])
+    .index("by_anneeId", ["anneeId"]),
+
+  // ========== FAUTES ==========
+  fautes: defineTable({
+    libelle: v.string(),
+    gravite: v.union(v.literal("Légère"), v.literal("Moyenne"), v.literal("Grave")),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  }).index("by_ecoleId", ["ecoleId"]),
+
+  // ========== SANCTIONS ==========
+  sanctions: defineTable({
+    libelle: v.string(),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  }).index("by_ecoleId", ["ecoleId"]),
+
+  // ========== PUNITIONS ==========
+  punitions: defineTable({
+    idEleve: v.id("eleves"),
+    idFaute: v.id("fautes"),
+    date: v.string(),
+    commentaire: v.optional(v.string()),
+    sanction: v.string(),
+    disciplinaire: v.string(),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_eleveId", ["idEleve"])
+    .index("by_anneeId", ["anneeId"]),
+
+  // ========== FRAIS ==========
+  frais: defineTable({
+    eleveId: v.id("eleves"),
+    ecoleId: v.id("ecoles"),
+    montantTotal: v.float64(),
+    montantPaye: v.float64(),
+    commentaire: v.optional(v.string()),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  })
+    .index("by_eleveId", ["eleveId"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_anneeId", ["anneeId"]),
+
+  // ========== FRAIS PAR CLASSE ==========
+  fraisClasses: defineTable({
+    classe: v.string(),
+    montantTotal: v.float64(),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  })
+    .index("by_ecole_classe", ["ecoleId", "classe"])
+    .index("by_ecoleId", ["ecoleId"]),
+
+  // ========== NOTES ==========
+  notes: defineTable({
+    eleveId: v.id("eleves"),
+    ecoleId: v.id("ecoles"),
+    matiere: v.string(),
+    note: v.float64(),
+    coefficient: v.float64(),
+    periode: v.string(),
+    appreciation: v.optional(v.string()),
+    categorie: v.optional(v.union(v.literal("devoir"), v.literal("examen"), v.literal("interrogation"), v.literal("exercice"))),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  })
+    .index("by_eleveId", ["eleveId"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_anneeId", ["anneeId"]),
+
+  // ========== COURS ==========
+  cours: defineTable({
+    nom: v.string(),
+    classe: v.string(),
+    coefficient: v.optional(v.float64()),
+    bareme: v.optional(v.float64()),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_classe", ["classe", "ecoleId"])
+    .index("by_anneeId", ["anneeId"]),
+
+  // ========== EXAMENS ==========
+  examens: defineTable({
+    classe: v.string(),
+    matiere: v.string(),
+    date: v.string(),
+    heure: v.optional(v.string()),
+    salle: v.optional(v.string()),
+    duree: v.optional(v.string()),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.id("anneesScolaires"),
+    userId: v.optional(v.id("users")),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_classe", ["classe", "ecoleId"])
+    .index("by_anneeId", ["anneeId"]),
+
+  // ========== ABSENCES ==========
+  absences: defineTable({
+    eleveId: v.id("eleves"),
+    ecoleId: v.id("ecoles"),
+    type: v.union(v.literal("absence"), v.literal("retard")),
+    date: v.string(),
+    commentaire: v.optional(v.string()),
+    signaleurId: v.id("users"),
+    statutJustification: v.optional(v.union(v.literal("en_attente"), v.literal("justifiee"), v.literal("rejetee"))),
+    justificatif: v.optional(v.string()),
+    justifiePar: v.optional(v.id("users")),
+    anneeId: v.optional(v.id("anneesScolaires")),
+  })
+    .index("by_eleveId", ["eleveId"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_anneeId", ["anneeId"]),
+
+  // ========== APPELS ==========
+  appels: defineTable({
+    callerId: v.id("users"),
+    calleeId: v.optional(v.id("users")),
+    channelName: v.string(),
+    status: v.union(
+      v.literal("ringing"),
+      v.literal("accepted"),
+      v.literal("rejected"),
+      v.literal("missed"),
+      v.literal("ended")
+    ),
+    ecoleId: v.id("ecoles"),
+    anneeId: v.optional(v.id("anneesScolaires")),
+    // ✅ FIX — `type` rendu OPTIONNEL pour compatibilité avec les anciens documents
+    type: v.optional(v.union(v.literal("audio"), v.literal("video"))),
+    isGroup: v.optional(v.boolean()),
+    groupId: v.optional(v.string()),
+    participants: v.optional(v.array(v.id("users"))),
+    declinedBy: v.optional(v.array(v.id("users"))),
+    callDirection: v.optional(v.string()),
+    ipMasked: v.optional(v.boolean()),
+    createdAt: v.string(),
+  })
+    .index("by_caller", ["callerId"])
+    .index("by_callee", ["calleeId"])
+    .index("by_channelName", ["channelName"])
+    .index("by_ecoleId", ["ecoleId"]),
+
+  // ========== MESSAGES ==========
+  messages: defineTable({
+    ecoleId: v.id("ecoles"),
+    expediteurId: v.id("users"),
+    destinataireId: v.optional(v.id("users")),
+    contenu: v.string(),
+    date: v.string(),
+    lu: v.boolean(),
+    anneeId: v.optional(v.id("anneesScolaires")),
+    piecesJointes: v.optional(v.array(v.object({
+      nom: v.string(),
+      type: v.string(),
+      url: v.string(),
+    }))),
+    groupeId: v.optional(v.string()),
+  })
+    .index("by_destinataire", ["destinataireId"])
+    .index("by_expediteur", ["expediteurId"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_groupeId", ["groupeId"]),
+
+  // ========== EMPLOI DU TEMPS ==========
+  emploiDuTemps: defineTable({
+    classe: v.string(),
+    ecoleId: v.id("ecoles"),
+    contenu: v.string(),
+    anneeId: v.id("anneesScolaires"),
+  })
+    .index("by_classe_ecole_annee", ["classe", "ecoleId", "anneeId"])
+    .index("by_ecoleId", ["ecoleId"]),
+
+  // ========== RATE LIMITING ==========
+  rateLimits: defineTable({
+    key: v.string(),
+    timestamp: v.float64(),
+    count: v.number(),
+  }).index("by_key", ["key"]),
+
+  // ========== TWO FACTOR EMAIL ==========
+  twoFactorEmail: defineTable({
     userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    const { ecoleId, userId, ...fields } = args;
-    await ctx.db.patch(ecoleId, fields);
-    return { success: true };
-  },
+    email: v.string(),
+    enabled: v.boolean(),
+    code: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    attempts: v.number(),
+    createdAt: v.string(),
+  }).index("by_userId", ["userId"]),
+
+  // ========== AUDIT ==========
+  audit: defineTable({
+    userId: v.id("users"),
+    action: v.string(),
+    table: v.string(),
+    documentId: v.string(),
+    details: v.optional(v.string()),
+    date: v.string(),
+    ecoleId: v.optional(v.id("ecoles")),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_date", ["date"]),
+
+  // ========== DEMANDES DE LIAISON PARENT-ENFANT ==========
+  parentLinkRequests: defineTable({
+    parentId: v.id("users"),
+    eleveId: v.id("eleves"),
+    ecoleId: v.optional(v.id("ecoles")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected")
+    ),
+    createdAt: v.string(),
+    reviewedBy: v.optional(v.id("users")),
+  })
+    .index("by_parentId", ["parentId"])
+    .index("by_eleveId", ["eleveId"])
+    .index("by_status", ["status"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_ecoleId_status", ["ecoleId", "status"]),
 });
-
-export const suspendEcole = mutation({
-  args: { ecoleId: v.id("ecoles"), userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    await ctx.db.patch(args.ecoleId, { statut: "suspendue" });
-
-    await ctx.db.insert("audit", {
-      userId: args.userId,
-      action: "suspend_ecole",
-      table: "ecoles",
-      documentId: args.ecoleId,
-      date: new Date().toISOString(),
-      ecoleId: args.ecoleId,
-      details: `École suspendue`,
-    });
-
-    return { success: true };
-  },
-});
-
-export const reactiverEcole = mutation({
-  args: { ecoleId: v.id("ecoles"), userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    await ctx.db.patch(args.ecoleId, { statut: "active" });
-
-    await ctx.db.insert("audit", {
-      userId: args.userId,
-      action: "reactivate_ecole",
-      table: "ecoles",
-      documentId: args.ecoleId,
-      date: new Date().toISOString(),
-      ecoleId: args.ecoleId,
-      details: `École réactivée`,
-    });
-
-    return { success: true };
-  },
-});
-
-// ════════════════════════════════════════════════════════════════════
-// INITIALISATIONS (admin one-shot)
-// ════════════════════════════════════════════════════════════════════
-
-export const initUserCounts = mutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
-
-    const ecoles = await ctx.db.query("ecoles").take(MAX_ECOLES);
-    const users = await ctx.db.query("users").take(5000);
-
-    const countByEcole: Record<string, number> = {};
-    for (const user of users) {
-      if (user.ecoleId) {
-        countByEcole[user.ecoleId] = (countByEcole[user.ecoleId] || 0) + 1;
-      }
-    }
-
-    for (const ecole of ecoles) {
-      await ctx.db.patch(ecole._id, {
-        userCount: countByEcole[ecole._id] || 0,
-      });
-    }
-
-    return { success: true };
-  },
-});
-
-export const initStatuts = mutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
-
-    const ecoles = await ctx.db.query("ecoles").take(MAX_ECOLES);
-    for (const ecole of ecoles) {
-      if (!ecole.statut) {
-        await ctx.db.patch(ecole._id, { statut: "active" });
-      }
-    }
-    return { success: true };
-  },
-});
-
-// ════════════════════════════════════════════════════════════════════
-// UTILITAIRE
-// ════════════════════════════════════════════════════════════════════
-
-function generateSchoolCode(length = 6): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < length; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}

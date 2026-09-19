@@ -25,7 +25,6 @@ export default defineSchema({
     dateLimitePassage: v.optional(v.string()),
   })
     .index("by_ecoleId", ["ecoleId"])
-    // 🟢 AJOUT : optimise `getActive`
     .index("by_ecoleId_estActive", ["ecoleId", "estActive"]),
 
   // ========== UTILISATEURS ==========
@@ -51,11 +50,8 @@ export default defineSchema({
   })
     .index("by_login", ["login"])
     .index("by_ecoleId", ["ecoleId"])
-    // 🟢 AJOUT : optimise `listPendingUsers` (filtre école + status)
     .index("by_ecoleId_status", ["ecoleId", "status"])
-    // 🟢 AJOUT : optimise `listAllPendingUsers` (tous les pending sans filtre école)
     .index("by_status", ["status"])
-    // 🟢 AJOUT : optimise `listByEcole` par rôle
     .index("by_ecoleId_role", ["ecoleId", "role"]),
 
   settings: defineTable({
@@ -122,7 +118,8 @@ export default defineSchema({
     .index("by_anneeId", ["anneeId"])
     .index("by_classe_annee", ["classe", "anneeId"])
     .index("by_ecole_annee", ["ecoleId", "anneeId"])
-    .index("by_eleve_annee", ["eleveId", "anneeId"]),
+    .index("by_eleve_annee", ["eleveId", "anneeId"])
+    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
 
   // ========== PROPOSITIONS DE PASSAGE ==========
   propositionsPassage: defineTable({
@@ -163,7 +160,8 @@ export default defineSchema({
     .index("by_enseignant", ["enseignantId"])
     .index("by_eleve_annee", ["eleveId", "anneeId"])
     .index("by_statut_validation", ["statutValidation"])
-    .index("by_ecole_annee_validation", ["ecoleId", "anneeId", "statutValidation"]),
+    .index("by_ecole_annee_validation", ["ecoleId", "anneeId", "statutValidation"])
+    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
 
   // ========== CLASSES ==========
   classes: defineTable({
@@ -224,7 +222,9 @@ export default defineSchema({
     montantTotal: v.float64(),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
-  }).index("by_ecole_classe", ["ecoleId", "classe"]),
+  })
+    .index("by_ecole_classe", ["ecoleId", "classe"])
+    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
 
   // ========== NOTES ==========
   notes: defineTable({
@@ -302,17 +302,20 @@ export default defineSchema({
     ),
     ecoleId: v.id("ecoles"),
     anneeId: v.optional(v.id("anneesScolaires")),
-    type: v.union(v.literal("audio"), v.literal("video")),
+    type: v.optional(v.union(v.literal("audio"), v.literal("video"))),
     isGroup: v.optional(v.boolean()),
     groupId: v.optional(v.string()),
     participants: v.optional(v.array(v.id("users"))),
+    declinedBy: v.optional(v.array(v.id("users"))), // ✅ AJOUTÉ — requis par rejectCall/leaveGroupCall
     callDirection: v.optional(v.string()),
     ipMasked: v.optional(v.boolean()),
     createdAt: v.string(),
   })
     .index("by_caller", ["callerId"])
     .index("by_callee", ["calleeId"])
-    .index("by_channelName", ["channelName"]),
+    .index("by_channelName", ["channelName"])
+    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
+
   // ========== MESSAGES ==========
   messages: defineTable({
     ecoleId: v.id("ecoles"),
