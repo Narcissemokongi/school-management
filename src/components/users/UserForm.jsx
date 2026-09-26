@@ -37,7 +37,7 @@ export function UserForm({ initialValues, onSubmit, onCancel }) {
     if (!form.nom.trim()) errs.nom = "Le nom est requis.";
     if (!isEdit && !form.login.trim()) errs.login = "Le login est requis.";
     if (!isEdit && !form.password.trim()) errs.password = "Le mot de passe est requis.";
-    if (form.password && form.password.length < 4) errs.password = "Au moins 4 caractères.";
+    if (form.password && form.password.length < 8) errs.password = "Au moins 8 caractères (majuscule, minuscule, chiffre requis).";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };

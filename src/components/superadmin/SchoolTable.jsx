@@ -4,6 +4,7 @@ import {
   Copy, Trash2, ShieldCheck, ShieldOff, Loader, Edit2, Save, X,
   ChevronUp, ChevronDown, ChevronsUpDown, Search, CheckCircle2, XCircle,
   ChevronLeft, ChevronRight, CheckSquare, Square, Download,
+  Eye, // ✨ NOUVEAU — icône drill-down
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useStyles } from "@/styles/theme";
@@ -144,6 +145,7 @@ function TableSkeleton({ dark }) {
 export function SchoolTable({
   ecoles,
   onSelectEcole,
+  onDrilldown,            // ✨ NOUVEAU — ouvre EcoleDetailPage
   onDelete,
   onToggleStatus,
   onUpdateNom,
@@ -164,7 +166,6 @@ export function SchoolTable({
   const [editingId, setEditingId] = useState(null);
   const [editNom, setEditNom] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  // ✅ FIX — hover via state au lieu de mutation DOM (row hover)
   const [hoveredRowId, setHoveredRowId] = useState(null);
 
   const noMotion = useMemo(() => prefersReducedMotion(), []);
@@ -172,7 +173,7 @@ export function SchoolTable({
   const isLoading = ecoles === undefined;
 
   // ════════════════════════════════════════════════════════════════
-  // Filtrage + tri (✅ guards `nom` / `code`)
+  // Filtrage + tri
   // ════════════════════════════════════════════════════════════════
   const filteredAndSorted = useMemo(() => {
     if (!ecoles) return [];
@@ -187,7 +188,6 @@ export function SchoolTable({
     }
 
     return [...filtered].sort((a, b) => {
-      // ✅ FIX — comparaison uniforme (string vs number)
       let cmp = 0;
       switch (sortConfig.key) {
         case "nom":
@@ -248,7 +248,6 @@ export function SchoolTable({
     });
   }, []);
 
-  // ✅ FIX — fallback execCommand pour contexte non-HTTPS
   const copyCode = useCallback(async (code) => {
     if (!code) return;
     try {
@@ -280,7 +279,6 @@ export function SchoolTable({
     setEditNom("");
   }, []);
 
-  // ✅ FIX — signature alignée sur SchoolsTab : `onUpdateNom(ecoleId, newNom)`
   const handleSaveNom = useCallback(
     async (ecoleId) => {
       const trimmed = editNom.trim();
@@ -299,7 +297,6 @@ export function SchoolTable({
     [editNom, onUpdateNom]
   );
 
-  // ✅ FIX — signature alignée sur SchoolsTab : `onDelete(ecole)` (objet complet)
   const handleDelete = useCallback(
     async (ecole) => {
       setDeletingId(ecole._id);
@@ -326,6 +323,15 @@ export function SchoolTable({
       }
     },
     [onToggleStatus]
+  );
+
+  // ✨ NOUVEAU — Handler drill-down (safe si prop absente)
+  const handleDrilldown = useCallback(
+    (ecoleId, e) => {
+      if (e) e.stopPropagation();
+      if (onDrilldown) onDrilldown(ecoleId);
+    },
+    [onDrilldown]
   );
 
   // ════════════════════════════════════════════════════════════════
@@ -590,7 +596,6 @@ export function SchoolTable({
               const isSelected = selectedIds.has(ecole._id);
               const isHovered = hoveredRowId === ecole._id;
 
-              // ✅ FIX — priorité : sélection > hover > normal
               const rowBg = isSelected ? selectedRowBg : isHovered ? hoverRowBg : baseRowBg;
 
               return (
@@ -781,6 +786,26 @@ export function SchoolTable({
                         flexWrap: "wrap",
                       }}
                     >
+                      {/* ✨ NOUVEAU — Bouton Détails (drill-down) */}
+                      {onDrilldown && editingId !== ecole._id && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDrilldown(ecole._id, e)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            color: dark ? "#818CF8" : "#4F46E5",
+                            padding: 4,
+                            borderRadius: 8,
+                          }}
+                          title="Voir le détail"
+                          aria-label="Voir le détail de l'école"
+                        >
+                          <Eye size={actionIconSize} />
+                        </button>
+                      )}
+
                       {editingId !== ecole._id && (
                         <button
                           type="button"

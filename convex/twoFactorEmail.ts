@@ -1,7 +1,9 @@
+// convex/twoFactorEmail.ts
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { api, internal } from "./_generated/api";
+import { sendEmail, render2FACodeHtml } from "./helpers/email";
 
 const CODE_EXPIRATION_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_ATTEMPTS = 5;
@@ -31,43 +33,6 @@ function generateCode(): string {
   const arr = new Uint32Array(1);
   crypto.getRandomValues(arr);
   return (100000 + (arr[0] % 900000)).toString();
-}
-
-/**
- * 🟡 FIX : timeout de 8s sur l'appel Resend pour éviter de bloquer la mutation.
- */
-async function sendEmail(to: string, code: string) {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  if (!resendApiKey) throw new Error("Clé API Resend non configurée.");
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${resendApiKey}`,
-      },
-      body: JSON.stringify({
-        from: "EduDiscipline <no-reply@yourdomain.com>",
-        to: [to],
-        subject: "Votre code de sécurité EduDiscipline",
-        html: `<p>Votre code de connexion est : <strong>${code}</strong></p>
-               <p>Ce code expire dans 10 minutes.</p>`,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("[twoFactorEmail] Resend error:", error);
-      throw new Error("Erreur d'envoi d'email");
-    }
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 /**
@@ -106,9 +71,6 @@ async function assertCanManage2FA(
 
 // ========== QUERY ==========
 
-/**
- * 🔴 FIX : `requesterId` REQUIS + vérif que l'appelant a le droit.
- */
 export const getByUser = query({
   args: {
     userId: v.id("users"),
@@ -132,9 +94,6 @@ export const getByUser = query({
 
 // ========== MUTATIONS ==========
 
-/**
- * 🟡 FIX : `requesterId` REQUIS + vérif + `internal.rateLimit`.
- */
 export const setupEmail = mutation({
   args: {
     userId: v.id("users"),
@@ -144,7 +103,7 @@ export const setupEmail = mutation({
   handler: async (ctx, args) => {
     await assertCanManage2FA(ctx, args.requesterId, args.userId);
 
-    // 🟢 FIX : validation basique de l'email
+    // 🟢 Validation email
     const email = args.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new Error("Adresse email invalide.");
@@ -198,7 +157,13 @@ export const setupEmail = mutation({
       });
     }
 
-    await sendEmail(email, code);
+    // ✅ Utilisation du helper partagé
+    await sendEmail({
+      to: email,
+      subject: "Votre code de sécurité EduDiscipline",
+      html: render2FACodeHtml(code),
+      throwOnError: true,
+    });
 
     // 🟡 Audit
     await ctx.db.insert("audit", {
@@ -215,9 +180,6 @@ export const setupEmail = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `requesterId` REQUIS + vérif.
- */
 export const verifyAndEnableEmail = mutation({
   args: {
     userId: v.id("users"),
@@ -268,9 +230,6 @@ export const verifyAndEnableEmail = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `requesterId` REQUIS + vérif + audit.
- */
 export const disableEmail = mutation({
   args: {
     userId: v.id("users"),
@@ -303,14 +262,6 @@ export const disableEmail = mutation({
   },
 });
 
-/**
- * ⚠️ NOTE : `sendLoginCode` est redondant avec la logique de `users.login`
- * qui envoie déjà le code directement. Cette fonction peut être :
- *  - soit supprimée si le front ne l'utilise plus
- *  - soit conservée pour un "renvoyer le code" côté client
- *
- * 🟡 FIX : `requesterId` REQUIS + `internal.rateLimit`.
- */
 export const sendLoginCode = mutation({
   args: {
     userId: v.id("users"),
@@ -351,16 +302,18 @@ export const sendLoginCode = mutation({
       attempts: 0,
     });
 
-    await sendEmail(record.email, code);
+    // ✅ Utilisation du helper partagé
+    await sendEmail({
+      to: record.email,
+      subject: "Votre code de sécurité EduDiscipline",
+      html: render2FACodeHtml(code),
+      throwOnError: true,
+    });
+
     return { success: true };
   },
 });
 
-/**
- * 🟡 FIX : `requesterId` REQUIS + retour explicite quand 2FA off.
- * ⚠️ NOTE : `users.verify2FACode` fait déjà ce travail dans le flux login.
- * Cette fonction est conservée pour compatibilité si le front l'appelle encore.
- */
 export const verifyLoginCode = mutation({
   args: {
     userId: v.id("users"),
@@ -375,7 +328,7 @@ export const verifyLoginCode = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .first();
 
-    // 🟢 FIX : retour explicite si pas de 2FA active
+    // 🟢 Retour explicite si pas de 2FA active
     if (!record || !record.enabled) {
       return { success: true, skipped: true, reason: "2FA non activée" };
     }

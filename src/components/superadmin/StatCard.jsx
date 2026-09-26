@@ -7,11 +7,12 @@ import {
   Loader,
   AlertCircle,
 } from "lucide-react";
-import { useStyles } from "@/styles/theme";
+import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { hexToRgba } from "@/utils/colors";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES (JSX module-level — réutilisé tel quel, pas recréé)
+// KEYFRAMES (module-level)
 // ════════════════════════════════════════════════════════════════════
 const StatCardKeyframes = (
   <style>{`
@@ -40,33 +41,10 @@ const StatCardKeyframes = (
 // ════════════════════════════════════════════════════════════════════
 // HELPERS
 // ════════════════════════════════════════════════════════════════════
-function hexToRgba(hex, alpha) {
-  if (!hex) return `rgba(0, 0, 0, ${alpha})`;
-  let clean = hex.replace(/^#/, "");
-
-  // #FFF → #FFFFFF
-  if (clean.length === 3) {
-    clean = clean
-      .split("")
-      .map((c) => c + c)
-      .join("");
-  }
-
-  if (!/^[0-9A-F]{6}$/i.test(clean)) {
-    return `rgba(0, 0, 0, ${alpha})`;
-  }
-
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-// Dimensions par taille
 const DIMENSIONS = {
   small: {
     padding: 10,
@@ -107,13 +85,11 @@ export function StatCard({
   disabled = false,
   renderValue,
 }) {
-  const { dark } = useStyles();
+  const t = useTokens();
   const isMobile = useIsMobile();
-  // ✅ FIX — hover via state (pilote transform + boxShadow ensemble)
+
   const [isHovered, setIsHovered] = useState(false);
-  // ✅ FIX — focus via state (pas de mutation DOM)
   const [isCardFocused, setIsCardFocused] = useState(false);
-  const [isIconFocused, setIsIconFocused] = useState(false);
 
   const noMotion = useMemo(() => prefersReducedMotion(), []);
 
@@ -125,15 +101,18 @@ export function StatCard({
 
   const dim = useMemo(
     () => ({
-      padding: isMobile && baseDim.paddingDesktop
-        ? baseDim.padding
-        : baseDim.paddingDesktop || baseDim.padding,
-      fontSize: isMobile && baseDim.fontSizeDesktop
-        ? baseDim.fontSize
-        : baseDim.fontSizeDesktop || baseDim.fontSize,
-      iconBox: isMobile && baseDim.iconBoxDesktop
-        ? baseDim.iconBox
-        : baseDim.iconBoxDesktop || baseDim.iconBox,
+      padding:
+        isMobile && baseDim.paddingDesktop
+          ? baseDim.padding
+          : baseDim.paddingDesktop || baseDim.padding,
+      fontSize:
+        isMobile && baseDim.fontSizeDesktop
+          ? baseDim.fontSize
+          : baseDim.fontSizeDesktop || baseDim.fontSize,
+      iconBox:
+        isMobile && baseDim.iconBoxDesktop
+          ? baseDim.iconBox
+          : baseDim.iconBoxDesktop || baseDim.iconBox,
     }),
     [isMobile, baseDim]
   );
@@ -141,54 +120,41 @@ export function StatCard({
   const effectiveIconSize =
     isMobile && effectiveSize === "small" ? Math.min(iconSize, 20) : iconSize;
 
-  // ✅ FIX — hexToRgba mémoïsé
+  // ✅ Couleurs dérivées
   const iconBg = useMemo(
-    () => hexToRgba(color, dark ? 0.2 : 0.08),
-    [color, dark]
-  );
-  const outlineBorder = useMemo(
-    () => hexToRgba(color, dark ? 0.4 : 0.2),
-    [color, dark]
-  );
-  const filledBg = useMemo(
-    () => hexToRgba(color, dark ? 0.2 : 0.08),
-    [color, dark]
-  );
-  const filledBorder = useMemo(
-    () => hexToRgba(color, dark ? 0.5 : 0.3),
-    [color, dark]
+    () => hexToRgba(color, t.surface.page === "#0F172A" ? 0.2 : 0.08),
+    [color, t.surface.page]
   );
 
   const styleVariant = useMemo(() => {
+    const isDark = t.surface.page === "#0F172A";
     const variants = {
       default: {
-        background: dark ? "#1E293B" : "#FFFFFF",
-        border: `1px solid ${
-          dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"
-        }`,
+        background: t.surface.default,
+        border: `1px solid ${t.border.subtle}`,
       },
       outlined: {
         background: "transparent",
-        border: `1px solid ${outlineBorder}`,
+        border: `1px solid ${hexToRgba(color, isDark ? 0.4 : 0.2)}`,
       },
       filled: {
-        background: filledBg,
-        border: `1px solid ${filledBorder}`,
+        background: hexToRgba(color, isDark ? 0.2 : 0.08),
+        border: `1px solid ${hexToRgba(color, isDark ? 0.5 : 0.3)}`,
       },
     };
     return variants[variant] || variants.default;
-  }, [variant, dark, outlineBorder, filledBg, filledBorder]);
+  }, [variant, color, t]);
 
   const trendColor =
     trend?.direction === "up"
       ? "#10B981"
       : trend?.direction === "down"
       ? "#EF4444"
-      : dark
-      ? "#94A3B8"
-      : "#64748B";
+      : t.text.muted;
 
-  // ✅ FIX — handlers stables
+  // ────────────────────────────────────────────────────────────
+  // Handlers
+  // ────────────────────────────────────────────────────────────
   const handleKeyDown = useCallback(
     (e) => {
       if (isClickable && (e.key === "Enter" || e.key === " ")) {
@@ -217,7 +183,6 @@ export function StatCard({
     [isIconClickable, onIconClick]
   );
 
-  // ✅ FIX — transform + boxShadow pilotés par state
   const transform = useMemo(() => {
     if (active) return "scale(1.02)";
     if (isHovered && isClickable && !noMotion) return "translateY(-2px)";
@@ -225,20 +190,14 @@ export function StatCard({
   }, [active, isHovered, isClickable, noMotion]);
 
   const boxShadow = useMemo(() => {
-    if (isHovered && isClickable) {
-      return dark
-        ? "0 4px 12px rgba(0,0,0,0.4)"
-        : "0 4px 12px rgba(0,0,0,0.1)";
-    }
-    return dark
-      ? "0 1px 3px rgba(0,0,0,0.3)"
-      : "0 1px 3px rgba(0,0,0,0.05)";
-  }, [isHovered, isClickable, dark]);
+    if (isHovered && isClickable) return t.shadow.md;
+    return t.shadow.sm;
+  }, [isHovered, isClickable, t]);
 
-  // ════════════════════════════════════════════════════════════════
-  // Sous-rendus
-  // ════════════════════════════════════════════════════════════════
-  const renderTrend = () => {
+  // ────────────────────────────────────────────────────────────
+  // Sous-rendus (mémoïsés)
+  // ────────────────────────────────────────────────────────────
+  const renderTrend = useCallback(() => {
     if (loading) {
       return (
         <div
@@ -246,7 +205,7 @@ export function StatCard({
           style={{
             width: 60,
             height: 12,
-            background: dark ? "#334155" : "#E2E8F0",
+            background: t.border.default,
             borderRadius: 4,
             animation: noMotion
               ? "none"
@@ -257,12 +216,14 @@ export function StatCard({
       );
     }
     if (!trend) return null;
+
     const TrendIcon =
       trend.direction === "up"
         ? TrendingUp
         : trend.direction === "down"
         ? TrendingDown
         : null;
+
     return (
       <div
         style={{
@@ -279,9 +240,9 @@ export function StatCard({
         {trend.value}
       </div>
     );
-  };
+  }, [loading, trend, trendColor, noMotion, t]);
 
-  const renderValueContent = () => {
+  const renderValueContent = useCallback(() => {
     if (loading) {
       return (
         <div
@@ -289,7 +250,7 @@ export function StatCard({
           style={{
             width: 60,
             height: dim.fontSize,
-            background: dark ? "#334155" : "#E2E8F0",
+            background: t.border.default,
             borderRadius: 4,
             animation: noMotion
               ? "none"
@@ -313,16 +274,15 @@ export function StatCard({
         </span>
       );
     }
-    if (renderValue) {
-      return renderValue();
-    }
+    if (renderValue) return renderValue();
+
     return (
       <>
         {valuePrefix && (
           <span
             style={{
               fontSize: dim.fontSize * 0.6,
-              color: dark ? "#94A3B8" : "#64748B",
+              color: t.text.muted,
             }}
           >
             {valuePrefix}
@@ -335,7 +295,7 @@ export function StatCard({
           <span
             style={{
               fontSize: dim.fontSize * 0.6,
-              color: dark ? "#94A3B8" : "#64748B",
+              color: t.text.muted,
             }}
           >
             {valueSuffix}
@@ -343,9 +303,9 @@ export function StatCard({
         )}
       </>
     );
-  };
+  }, [loading, error, errorMessage, renderValue, value, valuePrefix, valueSuffix, dim, noMotion, t]);
 
-  const renderLabel = () => {
+  const renderLabel = useCallback(() => {
     if (loading) {
       return (
         <div
@@ -353,7 +313,7 @@ export function StatCard({
           style={{
             width: 80,
             height: 14,
-            background: dark ? "#334155" : "#E2E8F0",
+            background: t.border.default,
             borderRadius: 4,
             animation: noMotion
               ? "none"
@@ -364,11 +324,11 @@ export function StatCard({
       );
     }
     return label;
-  };
+  }, [loading, label, noMotion, t]);
 
-  // ════════════════════════════════════════════════════════════════
-  // RENDU
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
+  // Rendu
+  // ────────────────────────────────────────────────────────────
   return (
     <>
       {StatCardKeyframes}
@@ -387,15 +347,15 @@ export function StatCard({
         onBlur={() => setIsCardFocused(false)}
         style={{
           ...styleVariant,
-          borderRadius: 16,
+          borderRadius: t.radius.lg,
           padding: dim.padding,
           display: "flex",
           alignItems: "center",
           gap: isMobile ? 10 : 16,
           boxShadow,
           transition: noMotion
-            ? "background-color 0.3s, border-color 0.3s"
-            : "transform 0.2s, box-shadow 0.2s, background-color 0.3s, border-color 0.3s",
+            ? `background-color ${t.transition.slow}, border-color ${t.transition.slow}`
+            : `transform ${t.transition.normal}, box-shadow ${t.transition.normal}, background-color ${t.transition.slow}, border-color ${t.transition.slow}`,
           cursor: isClickable
             ? "pointer"
             : disabled && !loading
@@ -411,7 +371,7 @@ export function StatCard({
           flexWrap: "nowrap",
         }}
       >
-        {/* Icône avec gestionnaire séparé */}
+        {/* ═══ Icône ═══ */}
         <div
           onClick={isIconClickable ? handleIconClick : undefined}
           onKeyDown={handleIconKeyDown}
@@ -419,21 +379,18 @@ export function StatCard({
           tabIndex={isIconClickable ? 0 : undefined}
           title={isIconClickable ? "Action sur l'icône" : undefined}
           aria-label={isIconClickable ? `Action sur ${label}` : undefined}
-          onFocus={() => isIconClickable && setIsIconFocused(true)}
-          onBlur={() => setIsIconFocused(false)}
           style={{
             width: dim.iconBox,
             height: dim.iconBox,
             background: iconBg,
-            borderRadius: 12,
+            borderRadius: t.radius.md,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: color,
             flexShrink: 0,
             cursor: isIconClickable ? "pointer" : "default",
-            outline: isIconFocused ? `2px solid ${color}` : "none",
-            outlineOffset: isIconFocused ? 2 : 0,
+            outline: "none",
           }}
         >
           {loading ? (
@@ -445,13 +402,13 @@ export function StatCard({
           )}
         </div>
 
-        {/* Contenu texte */}
+        {/* ═══ Contenu ═══ */}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
               fontSize: dim.fontSize,
               fontWeight: 700,
-              color: dark ? "#F1F5F9" : "#1E293B",
+              color: t.text.primary,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -465,7 +422,7 @@ export function StatCard({
           <div
             style={{
               fontSize: isMobile ? 12 : 14,
-              color: dark ? "#94A3B8" : "#64748B",
+              color: t.text.muted,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -477,7 +434,7 @@ export function StatCard({
             <div
               style={{
                 fontSize: isMobile ? 11 : 12,
-                color: subValueColor || (dark ? "#A5B4FC" : "#4F46E5"),
+                color: subValueColor || t.accent.primary,
                 marginTop: 2,
                 fontWeight: 500,
                 whiteSpace: "nowrap",
@@ -494,11 +451,7 @@ export function StatCard({
         {isClickable && showArrow && (
           <ChevronRight
             size={isMobile ? 16 : 18}
-            style={{
-              color: dark ? "#94A3B8" : "#64748B",
-              flexShrink: 0,
-              marginLeft: 4,
-            }}
+            style={{ color: t.text.muted, flexShrink: 0, marginLeft: 4 }}
           />
         )}
       </div>

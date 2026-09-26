@@ -6,23 +6,8 @@ import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useAppStore } from "@/store/appStore";
 import {
-  User,
-  Building,
-  Shield,
-  Save,
-  Upload,
-  Eye,
-  EyeOff,
-  Calendar,
-  Loader,
-  AlertCircle,
-  ShieldCheck,
-  Mail,
-  Trash2,
-  Lock,
-  Check,
-  BookOpen,
-  TrendingUp,
+  User, Building, Shield, Save, Upload, Eye, EyeOff, Calendar, Loader,
+  AlertCircle, ShieldCheck, Mail, Trash2, Lock, Check, BookOpen, TrendingUp,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Skeleton } from "./Skeleton";
@@ -30,9 +15,6 @@ import { GestionAnnees } from "./GestionAnnees";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-// ════════════════════════════════════════════════════════════════════
-// CONSTANTES
-// ════════════════════════════════════════════════════════════════════
 const MIN_PASSWORD_LENGTH = 8;
 
 // ════════════════════════════════════════════════════════════════════
@@ -94,13 +76,7 @@ function PasswordStrengthBar({ password, dark }) {
 // CARTE DE SECTION RÉUTILISABLE
 // ════════════════════════════════════════════════════════════════════
 function SectionCard({
-  icon,
-  title,
-  subtitle,
-  children,
-  dark,
-  isMobile,
-  iconColor,
+  icon, title, subtitle, children, dark, isMobile, iconColor,
 }) {
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
@@ -170,7 +146,7 @@ function SectionCard({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// 2FA EMAIL
+// 2FA EMAIL — ✅ CORRIGÉ : ajout de `requesterId: userId` sur les 4 appels
 // ════════════════════════════════════════════════════════════════════
 function TwoFactorEmailSettings({ userId, isMobile }) {
   const { dark } = useStyles();
@@ -180,9 +156,10 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
+  // ✅ FIX — backend exige `requesterId` sur cette query
   const twoFactorRecord = useQuery(
     api.twoFactorEmail.getByUser,
-    userId ? { userId } : "skip"
+    userId ? { userId, requesterId: userId } : "skip"
   );
 
   const setupEmail = useMutation(api.twoFactorEmail.setupEmail);
@@ -212,6 +189,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     fontFamily: "inherit",
   };
 
+  // ✅ FIX — ajout de `requesterId`
   const handleSendCode = async () => {
     if (!userId) {
       toast.error("Session invalide.");
@@ -227,7 +205,11 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
     setSending(true);
     try {
-      await setupEmail({ userId, email: email.trim() });
+      await setupEmail({
+        userId,
+        email: email.trim(),
+        requesterId: userId, // ✅ OBLIGATOIRE côté backend
+      });
       setIsSettingUp(true);
       toast.success("Code de vérification envoyé à votre email.");
     } catch (err) {
@@ -240,6 +222,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
   };
 
+  // ✅ FIX — ajout de `requesterId`
   const handleVerifyCode = async () => {
     if (!userId) return;
     if (code.length !== 6) {
@@ -248,7 +231,11 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
     setVerifying(true);
     try {
-      await verifyAndEnable({ userId, code });
+      await verifyAndEnable({
+        userId,
+        code,
+        requesterId: userId, // ✅ OBLIGATOIRE côté backend
+      });
       toast.success("2FA par email activée !");
       setIsSettingUp(false);
       setCode("");
@@ -259,11 +246,15 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
   };
 
+  // ✅ FIX — ajout de `requesterId`
   const handleDisable = async () => {
     if (!userId) return;
     setVerifying(true);
     try {
-      await disableEmail({ userId });
+      await disableEmail({
+        userId,
+        requesterId: userId, // ✅ OBLIGATOIRE côté backend
+      });
       toast.success("2FA désactivée.");
     } catch (err) {
       toast.error(err?.message || "Impossible de désactiver la 2FA");
@@ -421,7 +412,8 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
               borderRadius: 10,
               fontWeight: 700,
               fontSize: 13.5,
-              cursor: verifying || code.length !== 6 ? "not-allowed" : "pointer",
+              cursor:
+                verifying || code.length !== 6 ? "not-allowed" : "pointer",
               flex: isMobile ? "none" : 1,
             }}
           >
@@ -527,7 +519,6 @@ export function Parametres({ ecoleId, user }) {
 
   const userId = user?._id;
 
-  // ✅ Queries avec userId
   const ecole = useQuery(
     api.ecoles.get,
     ecoleId && userId ? { ecoleId, userId } : "skip"
@@ -538,7 +529,6 @@ export function Parametres({ ecoleId, user }) {
   );
   const users = useMemo(() => usersRaw ?? [], [usersRaw]);
 
-  // Mutations
   const changePassword = useMutation(api.users.changePassword);
   const updateEcole = useMutation(api.ecoles.update);
   const updateLogo = useMutation(api.ecoles.updateLogo);
@@ -548,7 +538,6 @@ export function Parametres({ ecoleId, user }) {
   const updateBareme = useMutation(api.ecoles.updateBareme);
   const updateMentions = useMutation(api.ecoles.updateMentions);
 
-  // === État mot de passe ===
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
@@ -557,7 +546,6 @@ export function Parametres({ ecoleId, user }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [changingPwd, setChangingPwd] = useState(false);
 
-  // === État école ===
   const [nomEcole, setNomEcole] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [devise, setDevise] = useState("CDF");
@@ -569,7 +557,6 @@ export function Parametres({ ecoleId, user }) {
   const [updating, setUpdating] = useState({});
   const [logoError, setLogoError] = useState("");
 
-  // Synchronisation
   useEffect(() => {
     if (!ecole) return;
     setNomEcole(ecole.nom || "");
@@ -582,9 +569,6 @@ export function Parametres({ ecoleId, user }) {
     setSeuilA(ecole.seuilAvertissement ?? 50);
   }, [ecole]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // HANDLERS
-  // ════════════════════════════════════════════════════════════════════
   const handleChangePassword = useCallback(async () => {
     if (changingPwd) return;
     if (!userId) {
@@ -618,7 +602,6 @@ export function Parametres({ ecoleId, user }) {
 
     setChangingPwd(true);
     try {
-      // ✅ FIX — Retiré `requesterId` (non accepté par le backend)
       await changePassword({
         userId,
         currentPassword: oldPwd,
@@ -769,7 +752,6 @@ export function Parametres({ ecoleId, user }) {
     );
     if (!ok) return;
     try {
-      // ✅ FIX — Retiré `requesterId` (non accepté par le backend)
       await updateRole({
         userId: targetUserId,
         newRole,
@@ -781,18 +763,9 @@ export function Parametres({ ecoleId, user }) {
     }
   };
 
-  // ════════════════════════════════════════════════════════════════════
-  // RENDU PRÉCOCE : user non chargé
-  // ════════════════════════════════════════════════════════════════════
   if (!user || !userId) {
     return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          padding: 40,
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
         <style>{`
           @keyframes pg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
           .pg-spin { animation: pg-spin 1s linear infinite; }
@@ -809,19 +782,11 @@ export function Parametres({ ecoleId, user }) {
     );
   }
 
-  // ════════════════════════════════════════════════════════════════════
-  // RENDU PRÉCOCE : école non chargée
-  // ════════════════════════════════════════════════════════════════════
   if (!ecole) return <Skeleton height={200} />;
 
   const roles = [
-    "admin",
-    "directeur",
-    "disciplinaire",
-    "enseignant",
-    "parent",
-    "comptable",
-    "eleve",
+    "admin", "directeur", "disciplinaire", "enseignant",
+    "parent", "comptable", "eleve",
   ];
 
   const tabs = [
@@ -832,7 +797,6 @@ export function Parametres({ ecoleId, user }) {
     { id: "annees", label: "Années", icon: <Calendar size={16} /> },
   ];
 
-  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
@@ -903,7 +867,6 @@ export function Parametres({ ecoleId, user }) {
         boxSizing: "border-box",
       }}
     >
-      {/* Keyframes préfixés pg-* */}
       <style>{`
         @keyframes pg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .pg-spin { animation: pg-spin 1s linear infinite; }
@@ -912,7 +875,6 @@ export function Parametres({ ecoleId, user }) {
         }
       `}</style>
 
-      {/* En-tête */}
       <div style={{ marginBottom: isMobile ? 12 : 20 }}>
         <h2
           style={{
@@ -937,7 +899,6 @@ export function Parametres({ ecoleId, user }) {
         </p>
       </div>
 
-      {/* Tabs */}
       <div
         role="tablist"
         style={{
@@ -985,7 +946,6 @@ export function Parametres({ ecoleId, user }) {
         })}
       </div>
 
-      {/* ════════════════════ PROFIL ════════════════════ */}
       {tab === "profil" && (
         <div role="tabpanel">
           <SectionCard
@@ -1016,13 +976,7 @@ export function Parametres({ ecoleId, user }) {
                 >
                   Nom complet
                 </div>
-                <div
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 600,
-                    color: textPrimary,
-                  }}
-                >
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: textPrimary }}>
                   {user.nom} {user.postnom || ""}
                 </div>
               </div>
@@ -1257,7 +1211,6 @@ export function Parametres({ ecoleId, user }) {
         </div>
       )}
 
-      {/* ════════════════════ SÉCURITÉ ════════════════════ */}
       {tab === "securite" && (
         <div role="tabpanel">
           <SectionCard
@@ -1273,7 +1226,6 @@ export function Parametres({ ecoleId, user }) {
         </div>
       )}
 
-      {/* ════════════════════ ÉCOLE ════════════════════ */}
       {tab === "ecole" && (
         <div role="tabpanel">
           <SectionCard
@@ -1556,7 +1508,6 @@ export function Parametres({ ecoleId, user }) {
         </div>
       )}
 
-      {/* ════════════════════ RÔLES ════════════════════ */}
       {tab === "roles" && (
         <div role="tabpanel">
           <SectionCard
@@ -1667,7 +1618,6 @@ export function Parametres({ ecoleId, user }) {
         </div>
       )}
 
-      {/* ════════════════════ ANNÉES ════════════════════ */}
       {tab === "annees" && (
         <div role="tabpanel">
           <GestionAnnees ecoleId={ecoleId} userId={userId} />

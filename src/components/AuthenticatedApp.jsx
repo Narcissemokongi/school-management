@@ -7,7 +7,7 @@ import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { useStyles } from "@/styles/theme";
 import { NotifBanner } from "./NotifBanner";
-import { SuperAdminDashboard } from "./superadmin/SuperAdminDashboard";
+import { SuperAdminDashboardV2 as SuperAdminDashboard } from "../components/SuperAdmin/SuperAdminDashboardV2";
 import { DisciplinaireApp } from "./DisciplinaireApp";
 import { DirecteurApp } from "./DirecteurApp";
 import { AdminApp } from "./AdminApp";
@@ -22,6 +22,11 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { NotificationsManager } from "./NotificationsManager";
 import toast from "react-hot-toast";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { ArrowLeft, School as SchoolIcon } from "lucide-react";
+// ✨ NOUVEAU — Impersonation
+import { useImpersonationStore } from "@/store/impersonationStore";
+import { ImpersonationBanner } from "./ImpersonationBanner";
+import { useActivityPing } from "@/hooks/useActivityPing";
 
 // ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level
@@ -40,7 +45,7 @@ const AuthenticatedAppKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// CHEMINS PAR DÉFAUT PAR RÔLE — Redirection initiale
+// CHEMINS PAR DÉFAUT PAR RÔLE
 // ════════════════════════════════════════════════════════════════════
 const ROLE_DEFAULT_PATHS = {
   superAdmin: "/super-admin/overview",
@@ -60,38 +65,73 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const userId = user?._id;
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ IMPERSONATION — Restauration + user effectif
+  // ════════════════════════════════════════════════════════════════════
+  const impersonationSession = useImpersonationStore((s) => s.session);
+  const restoreImpersonation = useImpersonationStore((s) => s.restore);
 
-  // ✅ SuperAdmin : rôle + admin sans école
+  useEffect(() => {
+    restoreImpersonation();
+  }, [restoreImpersonation]);
+
+  const isImpersonating = !!impersonationSession;
+  // effectiveUser : target pendant impersonation, sinon user réel
+  const effectiveUser = impersonationSession?.targetUser ?? user;
+
+  // ════════════════════════════════════════════════════════════════════
+  // userId = acting user (target si impersonation, sinon owner)
+  // ════════════════════════════════════════════════════════════════════
+  const userId = effectiveUser?._id;
+
+  // ✨ Ping de présence pour les sessions actives
+  useActivityPing(userId);
+
+  // ✅ SuperAdmin : rôle + admin sans école (SUR effectiveUser)
   const isSuperAdmin = useMemo(
     () =>
-      user?.role === "superAdmin" ||
-      (user?.role === "admin" && !user?.ecoleId),
-    [user?.role, user?.ecoleId]
+      effectiveUser?.role === "superAdmin" ||
+      (effectiveUser?.role === "admin" && !effectiveUser?.ecoleId),
+    [effectiveUser?.role, effectiveUser?.ecoleId]
   );
 
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX MAJEUR — Navigation 100% URL
+  // ✅ École ouverte par le super admin
+  // ════════════════════════════════════════════════════════════════════
+  const [openedEcoleId, setOpenedEcoleId] = useState(null);
+
+  // Reset quand l'utilisateur effectif change (logout/login/impersonation)
+  useEffect(() => {
+    setOpenedEcoleId(null);
+  }, [userId]);
+
+  // Charger les infos de l'école ouverte
+  const openedEcoleArgs = useMemo(
+    () =>
+      isSuperAdmin && openedEcoleId && userId
+        ? { ecoleId: openedEcoleId, userId }
+        : "skip",
+    [isSuperAdmin, openedEcoleId, userId]
+  );
+
+  const openedEcoleRaw = useQuery(api.ecoles.get, openedEcoleArgs);
+  const openedEcole = openedEcoleRaw ?? null;
+
+  // ════════════════════════════════════════════════════════════════════
+  // Navigation 100% URL
   // ════════════════════════════════════════════════════════════════════
   const screenConfig = useMemo(() => {
-    const path = location.pathname;
-
     if (isSuperAdmin) {
-      // Super admin : toujours dans SuperAdminDashboard (URL /super-admin/*)
-      // Le sous-écran est géré par SuperAdminDashboard elle-même.
       return { screen: "superadmin", ecoleId: null };
     }
-
-    // Non-superadmin → toujours l'écran école de leur propre école
-    return { screen: "ecole", ecoleId: user?.ecoleId || null };
-  }, [location.pathname, user?.ecoleId, isSuperAdmin]);
+    return { screen: "ecole", ecoleId: effectiveUser?.ecoleId || null };
+  }, [isSuperAdmin, effectiveUser?.ecoleId]);
 
   const currentScreen = screenConfig.screen;
-  const selectedEcoleId = screenConfig.ecoleId;
+  const screenEcoleId = screenConfig.ecoleId;
 
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX #3 — Redirection initiale selon rôle (une seule fois)
-  // Évite le flash visuel au premier render + boucle perdue
+  // Redirection initiale selon rôle
   // ════════════════════════════════════════════════════════════════════
   const hasInitialRedirectRef = useRef(false);
   useEffect(() => {
@@ -99,44 +139,48 @@ export function AuthenticatedApp({ user, handleLogout }) {
     if (!userId) return;
 
     const path = location.pathname;
-
-    // Si l'URL est déjà valide (pas racine), ne rien faire
     if (path && path !== "/" && path !== "") return;
 
     hasInitialRedirectRef.current = true;
 
-    // Détermine le chemin par défaut
     const defaultPath = isSuperAdmin
       ? "/super-admin/overview"
-      : ROLE_DEFAULT_PATHS[user?.role];
+      : ROLE_DEFAULT_PATHS[effectiveUser?.role];
 
     if (defaultPath) {
       navigate(defaultPath, { replace: true });
     }
-  }, [userId, location.pathname, isSuperAdmin, user?.role, navigate]);
+  }, [userId, location.pathname, isSuperAdmin, effectiveUser?.role, navigate]);
 
   // ✅ Support Android back button (Capacitor)
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = App.addListener("backButton", () => {
+      if (isSuperAdmin && openedEcoleId) {
+        setOpenedEcoleId(null);
+        return;
+      }
       if (currentScreen === "superadmin" && isSuperAdmin) {
-        // Super admin sur le dashboard → quitter l'app
         if (window.confirm("Voulez-vous quitter l'application ?")) {
           App.exitApp();
         }
       } else {
-        // Autres rôles → laisser React Router gérer
         navigate(-1);
       }
     });
     return () => listener.remove();
-  }, [currentScreen, isSuperAdmin, navigate]);
+  }, [currentScreen, isSuperAdmin, openedEcoleId, navigate]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // École effective
+  // ════════════════════════════════════════════════════════════════════
+  const ecoleId = isSuperAdmin
+    ? openedEcoleId || null
+    : screenEcoleId || effectiveUser?.ecoleId || null;
 
   // ════════════════════════════════════════════════════════════════════
   // ANNÉE ACTIVE
   // ════════════════════════════════════════════════════════════════════
-  const ecoleId = selectedEcoleId || user?.ecoleId;
-
   const anneeActiveArgs = useMemo(
     () => (ecoleId && userId ? { ecoleId, userId } : "skip"),
     [ecoleId, userId]
@@ -157,10 +201,13 @@ export function AuthenticatedApp({ user, handleLogout }) {
     }
   }, [selectedAnneeId, anneeId]);
 
-  const dataAnneeId = user?.role === "admin" ? selectedAnneeId : anneeId;
+  const dataAnneeId =
+    isSuperAdmin || effectiveUser?.role === "admin"
+      ? selectedAnneeId
+      : anneeId;
 
   // ════════════════════════════════════════════════════════════════════
-  // APPELS — args stables
+  // APPELS
   // ════════════════════════════════════════════════════════════════════
   const callArgs = useMemo(
     () => (userId ? { userId } : "skip"),
@@ -203,7 +250,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
   }, [outgoingCall, userId, endCall]);
 
   // ════════════════════════════════════════════════════════════════════
-  // QUERIES PRINCIPALES — args stables
+  // QUERIES PRINCIPALES
   // ════════════════════════════════════════════════════════════════════
   const ecoleAnneeArgs = useMemo(
     () =>
@@ -239,10 +286,10 @@ export function AuthenticatedApp({ user, handleLogout }) {
   // ════════════════════════════════════════════════════════════════════
   const enfantsArgs = useMemo(
     () =>
-      user?.role === "parent" && userId && anneeId
+      effectiveUser?.role === "parent" && userId && anneeId
         ? { parentId: userId, anneeId, userId }
         : "skip",
-    [user?.role, userId, anneeId]
+    [effectiveUser?.role, userId, anneeId]
   );
 
   const enfantsRaw = useQuery(api.eleves.listByParent, enfantsArgs);
@@ -252,10 +299,13 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
   const punitionsEnfantsArgs = useMemo(
     () =>
-      user?.role === "parent" && userId && anneeId && eleveIds.length > 0
+      effectiveUser?.role === "parent" &&
+      userId &&
+      anneeId &&
+      eleveIds.length > 0
         ? { eleveIds, anneeId, userId }
         : "skip",
-    [user?.role, userId, anneeId, eleveIds]
+    [effectiveUser?.role, userId, anneeId, eleveIds]
   );
 
   const punitionsEnfantsRaw = useQuery(
@@ -298,7 +348,8 @@ export function AuthenticatedApp({ user, handleLogout }) {
   // Notifications punitions graves (parent)
   const prevPunitionsEnfantsRef = useRef([]);
   useEffect(() => {
-    if (user?.role !== "parent" || punitionsEnfants.length === 0) return;
+    if (effectiveUser?.role !== "parent" || punitionsEnfants.length === 0)
+      return;
     const prev = prevPunitionsEnfantsRef.current;
     const prevIds = new Set(prev.map((p) => p._id));
 
@@ -308,7 +359,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
     for (const p of punitionsEnfants) {
       if (prevIds.has(p._id)) continue;
       const eleve = enfantsById.get(p.idEleve);
-      const faute = fautesById.get(p.idFaute);
+      const faute = fautesById.get(p.fauteId ?? p.idFaute);
       if (faute?.gravite === "Grave") {
         notify(
           `Nouvelle punition grave pour ${eleve?.nom} ${eleve?.postnom} : ${faute.libelle}`
@@ -316,7 +367,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
       }
     }
     prevPunitionsEnfantsRef.current = punitionsEnfants;
-  }, [punitionsEnfants, user?.role, enfants, fautes, notify]);
+  }, [punitionsEnfants, effectiveUser?.role, enfants, fautes, notify]);
 
   // ════════════════════════════════════════════════════════════════════
   // APPEL ACTIF
@@ -334,54 +385,190 @@ export function AuthenticatedApp({ user, handleLogout }) {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // ÉCRAN SUPERADMIN — toujours rendu pour un super admin
+  // ✅ SUPER ADMIN — DANS UNE ÉCOLE (vue AdminApp)
+  // ════════════════════════════════════════════════════════════════════
+  if (isSuperAdmin && openedEcoleId) {
+    const ecoleUser = {
+      ...effectiveUser,
+      role: "admin",
+      ecoleId: openedEcoleId,
+      _superAdminView: true,
+    };
+
+    return (
+      <>
+        {AuthenticatedAppKeyframes}
+        <NotifBanner notifs={notifs} />
+
+        {/* ═══════════ Barre retour au Super Admin ═══════════ */}
+        <div
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 200,
+            background: dark ? "#0F172A" : "#FFFFFF",
+            borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+            padding: isMobile ? "10px 12px" : "12px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setOpenedEcoleId(null)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: isMobile ? "8px 12px" : "6px 14px",
+                borderRadius: 8,
+                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                background: "transparent",
+                color: dark ? "#F1F5F9" : "#1E293B",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: 13,
+                fontFamily: "inherit",
+                flexShrink: 0,
+              }}
+              aria-label="Retour au dashboard Super Admin"
+            >
+              <ArrowLeft size={16} />
+              {!isMobile && "Retour"}
+            </button>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: dark ? "#312E81" : "#EEF2FF",
+                  color: dark ? "#A5B4FC" : "#4F46E5",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <SchoolIcon size={16} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: isMobile ? 13 : 14,
+                    fontWeight: 700,
+                    color: dark ? "#F1F5F9" : "#1E293B",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {openedEcole?.nom ?? "École"}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: dark ? "#94A3B8" : "#64748B",
+                  }}
+                >
+                  Code : {openedEcole?.code ?? "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              fontSize: 11,
+              padding: "4px 10px",
+              borderRadius: 20,
+              background: dark ? "#78350F" : "#FEF3C7",
+              color: dark ? "#FBBF24" : "#92400E",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: 0.3,
+              flexShrink: 0,
+            }}
+          >
+            Mode Super Admin
+          </div>
+        </div>
+
+        {/* ═══════════ Rendu AdminApp ═══════════ */}
+        <AdminApp
+          user={ecoleUser}
+          ecoleId={openedEcoleId}
+          eleves={eleves}
+          addEleve={addEleve}
+          removeEleve={removeEleve}
+          importEleves={importEleves}
+          classes={classes}
+          addClasse={addClasse}
+          removeClasse={removeClasse}
+          fautes={fautes}
+          addFaute={addFaute}
+          updateFaute={updateFaute}
+          removeFaute={removeFaute}
+          sanctions={sanctions}
+          users={users}
+          frais={frais}
+          anneeActive={anneeActive}
+          anneeId={dataAnneeId}
+          onAnneeChange={setSelectedAnneeId}
+          dark={dark}
+          toggle={toggle}
+          handleLogout={handleLogout}
+        />
+
+        {openedEcoleId && (
+          <NotificationsManager
+            user={ecoleUser}
+            ecoleId={openedEcoleId}
+            enfants={enfants}
+            punitionsEnfants={punitionsEnfants}
+            fautes={fautes}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // SUPER ADMIN — DASHBOARD V2
   // ════════════════════════════════════════════════════════════════════
   if (isSuperAdmin) {
     return (
       <>
         {AuthenticatedAppKeyframes}
         <NotifBanner notifs={notifs} />
-        <div
-          style={{
-            width: "100%",
-            minHeight: "100vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              padding: isMobile ? "12px 16px" : "12px 24px",
-              background: dark ? "#0F172A" : "#FFFFFF",
-              borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              boxSizing: "border-box",
-            }}
-          >
-            <div style={{ ...S.navbarBrand, fontSize: isMobile ? 16 : 18 }}>
-              School Management
-            </div>
-            <div
-              style={{
-                fontWeight: 600,
-                color: S.textMuted,
-                fontSize: isMobile ? 13 : 14,
-              }}
-            >
-              Super Admin
-            </div>
-          </div>
-
-          <div style={{ flex: 1, width: "100%", overflow: "hidden" }}>
-            <SuperAdminDashboard
-              user={user}
-              onLogout={handleLogout}
-            />
-          </div>
-        </div>
+        <SuperAdminDashboard
+          user={effectiveUser}
+          onLogout={handleLogout}
+          onSelectEcole={setOpenedEcoleId}
+        />
       </>
     );
   }
@@ -392,11 +579,15 @@ export function AuthenticatedApp({ user, handleLogout }) {
   return (
     <>
       {AuthenticatedAppKeyframes}
+
+      {/* ✨ Bandeau impersonation — sticky top */}
+      {isImpersonating && <ImpersonationBanner />}
+
       <NotifBanner notifs={notifs} />
 
       {ecoleId && (
         <NotificationsManager
-          user={user}
+          user={effectiveUser}
           ecoleId={ecoleId}
           enfants={enfants}
           punitionsEnfants={punitionsEnfants}
@@ -412,9 +603,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {user?.role === "disciplinaire" && (
+      {effectiveUser?.role === "disciplinaire" && (
         <DisciplinaireApp
-          user={user}
+          user={effectiveUser}
           ecoleId={ecoleId}
           punitions={punitions}
           eleves={eleves}
@@ -429,9 +620,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {user?.role === "directeur" && (
+      {effectiveUser?.role === "directeur" && (
         <DirecteurApp
-          user={user}
+          user={effectiveUser}
           punitions={punitions}
           eleves={eleves}
           classes={classes}
@@ -445,9 +636,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {user?.role === "admin" && (
+      {effectiveUser?.role === "admin" && (
         <AdminApp
-          user={user}
+          user={effectiveUser}
           ecoleId={ecoleId}
           eleves={eleves}
           addEleve={addEleve}
@@ -472,9 +663,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {user?.role === "parent" && (
+      {effectiveUser?.role === "parent" && (
         <ParentApp
-          user={user}
+          user={effectiveUser}
           ecoleId={ecoleId}
           eleves={enfants}
           punitions={punitionsEnfants}
@@ -487,9 +678,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {user?.role === "enseignant" && (
+      {effectiveUser?.role === "enseignant" && (
         <EnseignantApp
-          user={user}
+          user={effectiveUser}
           ecoleId={ecoleId}
           eleves={eleves}
           classes={classes}
@@ -501,9 +692,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {user?.role === "comptable" && (
+      {effectiveUser?.role === "comptable" && (
         <ComptableApp
-          user={user}
+          user={effectiveUser}
           ecoleId={ecoleId}
           eleves={eleves}
           anneeActive={anneeActive}
@@ -514,9 +705,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {user?.role === "eleve" && (
+      {effectiveUser?.role === "eleve" && (
         <EleveApp
-          user={user}
+          user={effectiveUser}
           ecoleId={ecoleId}
           anneeActive={anneeActive}
           anneeId={anneeId}

@@ -47,12 +47,20 @@ export default defineSchema({
     rejectionReason: v.optional(v.string()),
     email: v.optional(v.string()),
     permissions: v.optional(v.array(v.string())),
+    isOwner: v.optional(v.boolean()),
+    isActive: v.optional(v.boolean()),
+    // ✨ NOUVEAU — Sessions
+    lastActivityAt: v.optional(v.number()),           // timestamp ms
+    lastActivityUserAgent: v.optional(v.string()),
+    sessionStartedAt: v.optional(v.number()),
   })
     .index("by_login", ["login"])
     .index("by_ecoleId", ["ecoleId"])
     .index("by_ecoleId_status", ["ecoleId", "status"])
     .index("by_status", ["status"])
-    .index("by_ecoleId_role", ["ecoleId", "role"]),
+    .index("by_ecoleId_role", ["ecoleId", "role"])
+    .index("by_isOwner", ["isOwner"])
+    .index("by_role_isOwner", ["role", "isOwner"]),
 
   settings: defineTable({
     appName: v.string(),
@@ -75,7 +83,6 @@ export default defineSchema({
     ecoleId: v.id("ecoles"),
     parentId: v.optional(v.id("users")),
     userId: v.optional(v.id("users")),
-
     sexe: v.optional(v.union(v.literal("M"), v.literal("F"))),
     dateNaissance: v.optional(v.string()),
     lieuNaissance: v.optional(v.string()),
@@ -119,7 +126,7 @@ export default defineSchema({
     .index("by_classe_annee", ["classe", "anneeId"])
     .index("by_ecole_annee", ["ecoleId", "anneeId"])
     .index("by_eleve_annee", ["eleveId", "anneeId"])
-    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
+    .index("by_ecoleId", ["ecoleId"]),
 
   // ========== PROPOSITIONS DE PASSAGE ==========
   propositionsPassage: defineTable({
@@ -161,7 +168,7 @@ export default defineSchema({
     .index("by_eleve_annee", ["eleveId", "anneeId"])
     .index("by_statut_validation", ["statutValidation"])
     .index("by_ecole_annee_validation", ["ecoleId", "anneeId", "statutValidation"])
-    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
+    .index("by_ecoleId", ["ecoleId"]),
 
   // ========== CLASSES ==========
   classes: defineTable({
@@ -224,7 +231,7 @@ export default defineSchema({
     anneeId: v.optional(v.id("anneesScolaires")),
   })
     .index("by_ecole_classe", ["ecoleId", "classe"])
-    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
+    .index("by_ecoleId", ["ecoleId"]),
 
   // ========== NOTES ==========
   notes: defineTable({
@@ -306,7 +313,7 @@ export default defineSchema({
     isGroup: v.optional(v.boolean()),
     groupId: v.optional(v.string()),
     participants: v.optional(v.array(v.id("users"))),
-    declinedBy: v.optional(v.array(v.id("users"))), // ✅ AJOUTÉ — requis par rejectCall/leaveGroupCall
+    declinedBy: v.optional(v.array(v.id("users"))),
     callDirection: v.optional(v.string()),
     ipMasked: v.optional(v.boolean()),
     createdAt: v.string(),
@@ -314,7 +321,7 @@ export default defineSchema({
     .index("by_caller", ["callerId"])
     .index("by_callee", ["calleeId"])
     .index("by_channelName", ["channelName"])
-    .index("by_ecoleId", ["ecoleId"]), // ✅ AJOUTÉ — requis par ecoles.remove
+    .index("by_ecoleId", ["ecoleId"]),
 
   // ========== MESSAGES ==========
   messages: defineTable({
@@ -396,4 +403,147 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_ecoleId", ["ecoleId"])
     .index("by_ecoleId_status", ["ecoleId", "status"]),
+
+  // ════════════════════════════════════════════════════════════════════
+  // ═══ ABONNEMENTS LITE ═══════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+
+  abonnements: defineTable({
+    ecoleId: v.id("ecoles"),
+    statut: v.union(
+      v.literal("actif"),
+      v.literal("grace"),
+      v.literal("suspendu"),
+      v.literal("expire")
+    ),
+    formule: v.string(),
+    nombreUtilisateurs: v.number(),
+    montantMensuel: v.number(),
+    dateDebut: v.string(),
+    dateExpiration: v.string(),
+    prochaineEcheance: v.string(),
+    delaiGraceJours: v.number(),
+    dernierPaiementDate: v.optional(v.string()),
+    dernierPaiementMontant: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_statut", ["statut"])
+    .index("by_prochaineEcheance", ["prochaineEcheance"]),
+
+  paiementsAbonnement: defineTable({
+    ecoleId: v.id("ecoles"),
+    abonnementId: v.id("abonnements"),
+    montant: v.number(),
+    devise: v.union(v.literal("USD"), v.literal("CDF")),
+    datePaiement: v.string(),
+    methodePaiement: v.optional(v.string()),
+    reference: v.optional(v.string()),
+    periodeDebut: v.string(),
+    periodeFin: v.string(),
+    enregistrePar: v.id("users"),
+    notes: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_abonnementId", ["abonnementId"])
+    .index("by_datePaiement", ["datePaiement"]),
+
+  parametresAbonnement: defineTable({
+    cle: v.string(),
+    valeur: v.string(),
+    updatedAt: v.string(),
+    updatedBy: v.id("users"),
+  }).index("by_cle", ["cle"]),
+
+    /**
+   * ✨ Historique des relances envoyées aux écoles.
+   */
+  relancesAbonnement: defineTable({
+    abonnementId: v.id("abonnements"),
+    ecoleId: v.id("ecoles"),
+    template: v.union(
+      v.literal("amiable"),
+      v.literal("ferme"),
+      v.literal("mise_en_demeure")
+    ),
+    destinataireEmail: v.string(),
+    destinataireNom: v.string(),
+    envoyePar: v.id("users"),
+    envoyeParNom: v.string(),
+    dateEnvoi: v.string(),
+    statut: v.union(v.literal("envoye"), v.literal("echec")),
+    motifEchec: v.optional(v.string()),
+    joursRetardAuMoment: v.number(),
+    montantDuAuMoment: v.number(),
+  })
+    .index("by_abonnementId", ["abonnementId"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_dateEnvoi", ["dateEnvoi"]),
+
+  // ─────────────────────────────────────────────────────────────
+  // ANNONCES GLOBALES
+  // ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+  // ANNONCES GLOBALES
+  // ─────────────────────────────────────────────────────────────
+  annonces: defineTable({
+    titre: v.string(),
+    message: v.string(),
+    type: v.union(
+      v.literal("info"),
+      v.literal("warning"),
+      v.literal("maintenance"),
+      v.literal("success")
+    ),
+    cible: v.union(
+      v.literal("toutes"),
+      v.literal("ecole"),
+      v.literal("role")
+    ),
+    ecoleId: v.optional(v.id("ecoles")),
+    role: v.optional(v.string()),
+    dateDebut: v.number(),
+    dateFin: v.number(),
+    actif: v.boolean(),
+    epinglee: v.optional(v.boolean()),       // Vague 1
+    brouillon: v.optional(v.boolean()),      // ✨ V2 #15
+    piecesJointes: v.optional(               // ✨ V2 #9
+      v.array(
+        v.object({
+          nom: v.string(),
+          type: v.string(),
+          url: v.string(),
+          taille: v.optional(v.number()),
+        })
+      )
+    ),
+    recurrence: v.optional(                  // ✨ V3 #10
+      v.union(
+        v.literal("unique"),
+        v.literal("hebdo"),
+        v.literal("mensuel"),
+        v.literal("trimestriel")
+      )
+    ),
+    recurrenceFin: v.optional(v.number()),   // ✨ V3
+    parentId: v.optional(v.id("annonces")),  // ✨ V3 — si généré par récurrence
+    auteurId: v.id("users"),
+    auteurNom: v.string(),
+  })
+    .index("by_actif", ["actif"])
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_dateFin", ["dateFin"])
+    .index("by_recurrence", ["recurrence"]),  // ✨ V3
+
+  annoncesLectures: defineTable({
+    annonceId: v.id("annonces"),
+    userId: v.id("users"),
+    dateLecture: v.optional(v.string()),      // ✨ V2 #13
+  })
+    .index("by_annonce_user", ["annonceId", "userId"])
+    .index("by_user", ["userId"])
+    .index("by_annonce", ["annonceId"]),
 });

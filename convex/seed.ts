@@ -6,8 +6,21 @@ import { hashPassword } from "./utils/crypto";
  * (users, fautes, ecoles) puis recrée un jeu de démo.
  *
  * À utiliser UNIQUEMENT en développement.
+ *
+ * ✅ FIX SÉCURITÉ : bloqué en production
+ * Les identifiants ci-dessous (root/Demo1234, admin1/Demo1234, etc.)
+ * sont visibles dans le code source public. NE JAMAIS exécuter ce seed
+ * en production. La garde ci-dessous l'empêche.
  */
 export default internalMutation(async (ctx) => {
+  // ✅ FIX SÉCURITÉ : blocage explicite en production
+  if (process.env.CONVEX_CLOUD_URL?.includes(".convex.cloud") &&
+      !process.env.ALLOW_SEED_IN_PROD) {
+    throw new Error(
+      "❌ SEED BLOQUÉ : Ce seed ne doit jamais tourner en production. " +
+      "Définissez ALLOW_SEED_IN_PROD=true uniquement en développement."
+    );
+  }
   // ─────────────────────────────────────────────────────────────
   // 1. Nettoyage (avec `.take()` pour éviter les timeouts)
   // ─────────────────────────────────────────────────────────────

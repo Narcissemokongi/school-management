@@ -2,17 +2,21 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { useStyles } from "@/styles/theme";
+import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { Button } from "@/components/ui";
 import toast from "react-hot-toast";
-import { Loader, Save, Key, Eye, EyeOff } from "lucide-react";
+import { Loader, Save, Key, Eye, EyeOff, Info } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES (module-level)
+// KEYFRAMES (module-level, préfixés `st-*`)
 // ════════════════════════════════════════════════════════════════════
 const SettingsTabKeyframes = (
   <style>{`
-    @keyframes st-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes st-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
     .st-spin { animation: st-spin 1s linear infinite; }
     @media (prefers-reduced-motion: reduce) {
       .st-spin { animation: none !important; }
@@ -21,28 +25,23 @@ const SettingsTabKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// VALIDATION MOT DE PASSE (alignée sur le backend)
+// VALIDATION MOT DE PASSE (alignée backend)
 // ════════════════════════════════════════════════════════════════════
 const MIN_PASSWORD_LENGTH = 8;
 
 function validatePasswordStrength(password) {
   if (!password || password.length < MIN_PASSWORD_LENGTH) {
-    return `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères`;
+    return `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`;
   }
-  if (
-    !/[A-Z]/.test(password) ||
-    !/[a-z]/.test(password) ||
-    !/[0-9]/.test(password)
-  ) {
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
     return "Le mot de passe doit contenir majuscule, minuscule et chiffre.";
   }
   return null;
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ✅ FIX CRITIQUE — PasswordField EXTRAIT du composant principal.
-// Défini hors de SettingsTab pour que React ne remonte PAS l'input à
-// chaque keystroke (= perte de focus).
+// PasswordField — extrait du composant principal
+// (évite le remontage de l'input à chaque keystroke = perte de focus)
 // ════════════════════════════════════════════════════════════════════
 function PasswordField({
   id,
@@ -52,14 +51,23 @@ function PasswordField({
   show,
   onToggle,
   autoComplete,
-  inputStyle,
-  labelStyle,
-  eyeIconSize,
-  dark,
+  t,
+  isMobile,
 }) {
   return (
     <div>
-      <label htmlFor={id} style={labelStyle}>
+      <label
+        htmlFor={id}
+        style={{
+          display: "block",
+          fontSize: 12,
+          fontWeight: 600,
+          color: t.text.muted,
+          marginBottom: 6,
+          textTransform: "uppercase",
+          letterSpacing: 0.3,
+        }}
+      >
         {label}
       </label>
       <div style={{ position: "relative" }}>
@@ -68,10 +76,21 @@ function PasswordField({
           type={show ? "text" : "password"}
           value={value}
           onChange={onChange}
-          style={{ ...inputStyle, paddingRight: 40 }}
-          autoComplete={autoComplete}
           required
           minLength={MIN_PASSWORD_LENGTH}
+          autoComplete={autoComplete}
+          style={{
+            width: "100%",
+            padding: isMobile ? "12px 44px 12px 14px" : "10px 44px 10px 14px",
+            border: `1px solid ${t.border.default}`,
+            borderRadius: t.radius.sm,
+            background: t.surface.input,
+            color: t.text.primary,
+            outline: "none",
+            fontSize: isMobile ? 16 : 14,
+            fontFamily: t.font.family,
+            boxSizing: "border-box",
+          }}
         />
         <button
           type="button"
@@ -84,15 +103,15 @@ function PasswordField({
             background: "none",
             border: "none",
             cursor: "pointer",
-            color: dark ? "#94A3B8" : "#64748B",
+            color: t.text.muted,
             padding: 4,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
-          aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+          aria-label={show ? "Masquer" : "Afficher"}
         >
-          {show ? <EyeOff size={eyeIconSize} /> : <Eye size={eyeIconSize} />}
+          {show ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
         </button>
       </div>
     </div>
@@ -103,14 +122,22 @@ function PasswordField({
 // COMPOSANT PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
 export function SettingsTab({ user }) {
-  const { dark } = useStyles();
+  const t = useTokens();
   const isMobile = useIsMobile();
 
   const userId = user?._id;
+  const isOwner =
+    (user?.role === "admin" && !user?.ecoleId) ||
+    (user?.role === "superAdmin" && user?.isOwner === true);
 
-  // ⚠️ Cette query n'exige pas `userId` côté backend.
-  //    Si le backend a été patché depuis → ajouter `userId ? { userId } : "skip"`.
+  // ⚠️ Cette query n'exige pas `userId` côté backend actuellement.
+  //    Si le backend est patché pour exiger userId, décommenter le fallback.
   const settingsRaw = useQuery(api.settings.getGlobalSettings);
+  // const settingsRaw = useQuery(
+  //   api.settings.getGlobalSettings,
+  //   userId ? { userId } : "skip"
+  // );
+
   const settings = useMemo(() => settingsRaw ?? null, [settingsRaw]);
   const isLoadingSettings = settingsRaw === undefined;
 
@@ -118,9 +145,9 @@ export function SettingsTab({ user }) {
   const updateSettings = useMutation(api.settings.updateGlobalSettings);
   const changePassword = useMutation(api.users.changePassword);
 
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   // États
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   const [settingsForm, setSettingsForm] = useState({
     appName: "",
     supportEmail: "",
@@ -142,7 +169,7 @@ export function SettingsTab({ user }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
-  // Synchroniser le formulaire avec les paramètres chargés
+  // Sync form avec settings chargés
   useEffect(() => {
     if (!settings) return;
     setSettingsForm({
@@ -156,7 +183,7 @@ export function SettingsTab({ user }) {
     });
   }, [settings]);
 
-  // ✅ FIX — setter fonctionnel (safe si plusieurs champs modifiés en rafale)
+  // Setters fonctionnels (safe en rafale)
   const updateSettingsField = useCallback((field, value) => {
     setSettingsForm((prev) => ({ ...prev, [field]: value }));
   }, []);
@@ -165,9 +192,9 @@ export function SettingsTab({ user }) {
     setPasswordForm((prev) => ({ ...prev, [field]: value }));
   }, []);
 
-  // ════════════════════════════════════════════════════════════════
-  // Sauvegarde des paramètres
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
+  // Save settings
+  // ────────────────────────────────────────────────────────────
   const handleSaveSettings = useCallback(
     async (e) => {
       e.preventDefault();
@@ -177,10 +204,15 @@ export function SettingsTab({ user }) {
         toast.error("Session invalide.");
         return;
       }
+
+      // ✅ Guard owner-only
+      if (!isOwner) {
+        toast.error("Seul le propriétaire peut modifier les paramètres globaux.");
+        return;
+      }
+
       if (!settingsForm.appName.trim() || !settingsForm.supportEmail.trim()) {
-        toast.error(
-          "Le nom de l'application et l'email de support sont obligatoires."
-        );
+        toast.error("Le nom de l'application et l'email de support sont obligatoires.");
         return;
       }
 
@@ -195,23 +227,20 @@ export function SettingsTab({ user }) {
           slogan: settingsForm.slogan.trim(),
           primaryColor: settingsForm.primaryColor,
           adminId: userId,
-          // Note : si le backend exige `requesterId`, ajoute-le ici
         });
         toast.success("Paramètres enregistrés avec succès");
       } catch (err) {
-        toast.error(
-          "Impossible d'enregistrer : " + (err?.message || "erreur inconnue")
-        );
+        toast.error("Impossible d'enregistrer : " + (err?.message || "erreur inconnue"));
       } finally {
         setSavingSettings(false);
       }
     },
-    [savingSettings, userId, settingsForm, updateSettings]
+    [savingSettings, userId, isOwner, settingsForm, updateSettings]
   );
 
-  // ════════════════════════════════════════════════════════════════
-  // Changement de mot de passe
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
+  // Change password
+  // ────────────────────────────────────────────────────────────
   const handleChangePassword = useCallback(
     async (e) => {
       e.preventDefault();
@@ -228,13 +257,11 @@ export function SettingsTab({ user }) {
       }
 
       if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-        toast.error("Les nouveaux mots de passe ne correspondent pas");
+        toast.error("Les nouveaux mots de passe ne correspondent pas.");
         return;
       }
 
-      const validationError = validatePasswordStrength(
-        passwordForm.newPassword
-      );
+      const validationError = validatePasswordStrength(passwordForm.newPassword);
       if (validationError) {
         toast.error(validationError);
         return;
@@ -242,9 +269,7 @@ export function SettingsTab({ user }) {
 
       setChangingPassword(true);
       try {
-        // ✅ FIX — retiré `requesterId` : la mutation backend
-        // `users.changePassword` n'accepte QUE { userId, currentPassword, newPassword }.
-        // L'envoyer causait `ArgumentValidationError` (extra field).
+        // ✅ Pas de `requesterId` (backend refuse — cf. rapport §13.4)
         await changePassword({
           userId,
           currentPassword: passwordForm.currentPassword,
@@ -271,51 +296,54 @@ export function SettingsTab({ user }) {
     [changingPassword, userId, passwordForm, changePassword]
   );
 
-  // ════════════════════════════════════════════════════════════════
-  // Styles adaptatifs
-  // ════════════════════════════════════════════════════════════════
-  const inputStyle = useMemo(
-    () => ({
-      width: "100%",
-      padding: isMobile ? "12px 14px" : "10px 14px",
-      border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-      borderRadius: 8,
-      background: dark ? "#0F172A" : "#F9FAFB",
-      color: dark ? "#F1F5F9" : "#1E293B",
-      outline: "none",
-      fontSize: isMobile ? 16 : 14,
-      boxSizing: "border-box",
-    }),
-    [dark, isMobile]
-  );
+  // ────────────────────────────────────────────────────────────
+  // Styles partagés
+  // ────────────────────────────────────────────────────────────
+  const cardStyle = {
+    background: t.surface.default,
+    borderRadius: t.radius.lg,
+    padding: isMobile ? 16 : 24,
+    boxShadow: t.shadow.sm,
+    border: `1px solid ${t.border.default}`,
+  };
 
-  const labelStyle = useMemo(
-    () => ({
-      display: "block",
-      marginBottom: 4,
-      color: dark ? "#CBD5E1" : "#374151",
-      fontSize: isMobile ? 15 : 14,
-    }),
-    [dark, isMobile]
-  );
+  const cardTitleStyle = {
+    fontSize: isMobile ? 16 : 18,
+    fontWeight: 700,
+    color: t.text.primary,
+    marginBottom: isMobile ? 16 : 20,
+    margin: 0,
+  };
 
-  const cardPadding = isMobile ? 16 : 24;
-  const cardTitleSize = isMobile ? 16 : 18;
-  const gridColumns = isMobile
-    ? "1fr"
-    : "repeat(auto-fit, minmax(250px, 1fr))";
-  const buttonPadding = isMobile ? "12px 16px" : "10px 24px";
-  const buttonFontSize = isMobile ? 16 : 14;
-  const buttonFullWidth = isMobile ? "100%" : "auto";
+  const inputStyle = {
+    width: "100%",
+    padding: isMobile ? "12px 14px" : "10px 14px",
+    border: `1px solid ${t.border.default}`,
+    borderRadius: t.radius.sm,
+    background: t.surface.input,
+    color: t.text.primary,
+    outline: "none",
+    fontSize: isMobile ? 16 : 14,
+    fontFamily: t.font.family,
+    boxSizing: "border-box",
+  };
+
+  const labelStyle = {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 600,
+    color: t.text.muted,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  };
+
+  const gridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(250px, 1fr))";
   const formGap = isMobile ? 12 : 16;
-  const eyeIconSize = isMobile ? 20 : 18;
 
-  const disabledBg = dark ? "#475569" : "#94A3B8";
-  const disabledCursor = "not-allowed";
-
-  // ════════════════════════════════════════════════════════════════
-  // RENDU
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
+  // Rendu
+  // ────────────────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -327,35 +355,39 @@ export function SettingsTab({ user }) {
     >
       {SettingsTabKeyframes}
 
-      {/* ════════════════ Carte Paramètres généraux ════════════════ */}
-      <div
-        style={{
-          background: dark ? "#1E293B" : "#FFFFFF",
-          borderRadius: 16,
-          padding: cardPadding,
-          boxShadow: dark
-            ? "0 1px 3px rgba(0,0,0,0.3)"
-            : "0 1px 3px rgba(0,0,0,0.05)",
-          border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-        }}
-      >
-        <h3
+      {/* ═══════════ Bandeau informatif pour les secondaires ═══════════ */}
+      {!isOwner && (
+        <div
           style={{
-            fontSize: cardTitleSize,
-            fontWeight: 600,
-            color: dark ? "#F1F5F9" : "#1E293B",
-            marginBottom: isMobile ? 16 : 20,
+            display: "flex",
+            gap: 12,
+            alignItems: "flex-start",
+            padding: 12,
+            borderRadius: t.radius.md,
+            background: t.status.info.bg,
+            color: t.status.info.fg,
+            fontSize: 13.5,
+            lineHeight: 1.5,
           }}
         >
-          Paramètres généraux
-        </h3>
+          <Info size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            Vous pouvez modifier <strong>votre mot de passe</strong>, mais seul le
+            propriétaire de la plateforme peut modifier les paramètres globaux.
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ Carte Paramètres généraux ═══════════ */}
+      <div style={cardStyle}>
+        <h3 style={cardTitleStyle}>Paramètres généraux</h3>
 
         {isLoadingSettings ? (
           <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
             <Loader
               size={24}
               className="st-spin"
-              style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+              style={{ color: t.accent.primary }}
             />
           </div>
         ) : (
@@ -364,180 +396,153 @@ export function SettingsTab({ user }) {
             noValidate
             style={{ display: "grid", gap: formGap }}
           >
-            <div
+            <fieldset
+              disabled={!isOwner}
               style={{
+                border: "none",
+                padding: 0,
+                margin: 0,
                 display: "grid",
-                gridTemplateColumns: gridColumns,
                 gap: formGap,
+                opacity: isOwner ? 1 : 0.6,
               }}
             >
-              <div>
-                <label htmlFor="settings-appName" style={labelStyle}>
-                  Nom de l'application *
-                </label>
-                <input
-                  id="settings-appName"
-                  value={settingsForm.appName}
-                  onChange={(e) => updateSettingsField("appName", e.target.value)}
-                  style={inputStyle}
-                  required
-                  autoComplete="organization"
-                />
-              </div>
-              <div>
-                <label htmlFor="settings-supportEmail" style={labelStyle}>
-                  Email de support *
-                </label>
-                <input
-                  id="settings-supportEmail"
-                  type="email"
-                  value={settingsForm.supportEmail}
-                  onChange={(e) =>
-                    updateSettingsField("supportEmail", e.target.value)
-                  }
-                  style={inputStyle}
-                  required
-                  autoComplete="email"
-                />
-              </div>
-              <div>
-                <label htmlFor="settings-supportPhone" style={labelStyle}>
-                  Téléphone
-                </label>
-                <input
-                  id="settings-supportPhone"
-                  type="tel"
-                  inputMode="tel"
-                  value={settingsForm.supportPhone}
-                  onChange={(e) =>
-                    updateSettingsField("supportPhone", e.target.value)
-                  }
-                  style={inputStyle}
-                  autoComplete="tel"
-                />
-              </div>
-              <div>
-                <label htmlFor="settings-address" style={labelStyle}>
-                  Adresse
-                </label>
-                <input
-                  id="settings-address"
-                  value={settingsForm.address}
-                  onChange={(e) => updateSettingsField("address", e.target.value)}
-                  style={inputStyle}
-                  autoComplete="street-address"
-                />
-              </div>
-              <div>
-                <label htmlFor="settings-logoUrl" style={labelStyle}>
-                  URL du logo
-                </label>
-                <input
-                  id="settings-logoUrl"
-                  type="url"
-                  value={settingsForm.logoUrl}
-                  onChange={(e) => updateSettingsField("logoUrl", e.target.value)}
-                  placeholder="https://exemple.com/logo.png"
-                  style={inputStyle}
-                  autoComplete="url"
-                />
-              </div>
-              <div>
-                <label htmlFor="settings-slogan" style={labelStyle}>
-                  Slogan
-                </label>
-                <input
-                  id="settings-slogan"
-                  value={settingsForm.slogan}
-                  onChange={(e) => updateSettingsField("slogan", e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label htmlFor="settings-primaryColor" style={labelStyle}>
-                  Couleur principale
-                </label>
-                <input
-                  id="settings-primaryColor"
-                  type="color"
-                  value={settingsForm.primaryColor}
-                  onChange={(e) =>
-                    updateSettingsField("primaryColor", e.target.value)
-                  }
-                  style={{
-                    ...inputStyle,
-                    height: isMobile ? 44 : 40,
-                    padding: 4,
-                    cursor: "pointer",
-                  }}
-                />
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: isMobile ? "center" : "flex-end",
-              }}
-            >
-              <button
-                type="submit"
-                disabled={savingSettings}
+              <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  padding: buttonPadding,
-                  background: savingSettings
-                    ? disabledBg
-                    : dark
-                    ? "#818CF8"
-                    : "#4F46E5",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  cursor: savingSettings ? disabledCursor : "pointer",
-                  fontSize: buttonFontSize,
-                  width: buttonFullWidth,
-                  transition: "background 0.2s, opacity 0.2s",
+                  display: "grid",
+                  gridTemplateColumns: gridColumns,
+                  gap: formGap,
                 }}
               >
-                {savingSettings ? (
-                  <Loader size={16} className="st-spin" />
-                ) : (
-                  <Save size={16} />
-                )}
-                {savingSettings ? "Enregistrement..." : "Enregistrer"}
-              </button>
-            </div>
+                <div>
+                  <label htmlFor="settings-appName" style={labelStyle}>
+                    Nom de l'application *
+                  </label>
+                  <input
+                    id="settings-appName"
+                    value={settingsForm.appName}
+                    onChange={(e) => updateSettingsField("appName", e.target.value)}
+                    style={inputStyle}
+                    required
+                    autoComplete="organization"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="settings-supportEmail" style={labelStyle}>
+                    Email de support *
+                  </label>
+                  <input
+                    id="settings-supportEmail"
+                    type="email"
+                    value={settingsForm.supportEmail}
+                    onChange={(e) =>
+                      updateSettingsField("supportEmail", e.target.value)
+                    }
+                    style={inputStyle}
+                    required
+                    autoComplete="email"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="settings-supportPhone" style={labelStyle}>
+                    Téléphone
+                  </label>
+                  <input
+                    id="settings-supportPhone"
+                    type="tel"
+                    inputMode="tel"
+                    value={settingsForm.supportPhone}
+                    onChange={(e) =>
+                      updateSettingsField("supportPhone", e.target.value)
+                    }
+                    style={inputStyle}
+                    autoComplete="tel"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="settings-address" style={labelStyle}>
+                    Adresse
+                  </label>
+                  <input
+                    id="settings-address"
+                    value={settingsForm.address}
+                    onChange={(e) => updateSettingsField("address", e.target.value)}
+                    style={inputStyle}
+                    autoComplete="street-address"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="settings-logoUrl" style={labelStyle}>
+                    URL du logo
+                  </label>
+                  <input
+                    id="settings-logoUrl"
+                    type="url"
+                    value={settingsForm.logoUrl}
+                    onChange={(e) => updateSettingsField("logoUrl", e.target.value)}
+                    placeholder="https://exemple.com/logo.png"
+                    style={inputStyle}
+                    autoComplete="url"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="settings-slogan" style={labelStyle}>
+                    Slogan
+                  </label>
+                  <input
+                    id="settings-slogan"
+                    value={settingsForm.slogan}
+                    onChange={(e) => updateSettingsField("slogan", e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="settings-primaryColor" style={labelStyle}>
+                    Couleur principale
+                  </label>
+                  <input
+                    id="settings-primaryColor"
+                    type="color"
+                    value={settingsForm.primaryColor}
+                    onChange={(e) =>
+                      updateSettingsField("primaryColor", e.target.value)
+                    }
+                    style={{
+                      ...inputStyle,
+                      height: isMobile ? 44 : 40,
+                      padding: 4,
+                      cursor: "pointer",
+                    }}
+                  />
+                </div>
+              </div>
+            </fieldset>
+
+            {isOwner && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: isMobile ? "center" : "flex-end",
+                }}
+              >
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={savingSettings}
+                  icon={!savingSettings ? <Save size={16} /> : undefined}
+                  fullWidth={isMobile}
+                >
+                  {savingSettings ? "Enregistrement…" : "Enregistrer"}
+                </Button>
+              </div>
+            )}
           </form>
         )}
       </div>
 
-      {/* ════════════════ Carte Changement de mot de passe ════════════════ */}
-      <div
-        style={{
-          background: dark ? "#1E293B" : "#FFFFFF",
-          borderRadius: 16,
-          padding: cardPadding,
-          boxShadow: dark
-            ? "0 1px 3px rgba(0,0,0,0.3)"
-            : "0 1px 3px rgba(0,0,0,0.05)",
-          border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-        }}
-      >
-        <h3
-          style={{
-            fontSize: cardTitleSize,
-            fontWeight: 600,
-            color: dark ? "#F1F5F9" : "#1E293B",
-            marginBottom: isMobile ? 16 : 20,
-          }}
-        >
-          Changer le mot de passe
-        </h3>
+      {/* ═══════════ Carte Changement de mot de passe ═══════════ */}
+      <div style={cardStyle}>
+        <h3 style={cardTitleStyle}>Changer le mot de passe</h3>
 
         <form
           onSubmit={handleChangePassword}
@@ -554,10 +559,8 @@ export function SettingsTab({ user }) {
             show={showCurrentPassword}
             onToggle={() => setShowCurrentPassword((s) => !s)}
             autoComplete="current-password"
-            inputStyle={inputStyle}
-            labelStyle={labelStyle}
-            eyeIconSize={eyeIconSize}
-            dark={dark}
+            t={t}
+            isMobile={isMobile}
           />
 
           <PasswordField
@@ -568,10 +571,8 @@ export function SettingsTab({ user }) {
             show={showNewPassword}
             onToggle={() => setShowNewPassword((s) => !s)}
             autoComplete="new-password"
-            inputStyle={inputStyle}
-            labelStyle={labelStyle}
-            eyeIconSize={eyeIconSize}
-            dark={dark}
+            t={t}
+            isMobile={isMobile}
           />
 
           <PasswordField
@@ -584,33 +585,32 @@ export function SettingsTab({ user }) {
             show={showConfirmPassword}
             onToggle={() => setShowConfirmPassword((s) => !s)}
             autoComplete="new-password"
-            inputStyle={inputStyle}
-            labelStyle={labelStyle}
-            eyeIconSize={eyeIconSize}
-            dark={dark}
+            t={t}
+            isMobile={isMobile}
           />
 
-          {/* Indicateur visuel si les mots de passe ne correspondent pas */}
+          {/* Erreur : mots de passe différents */}
           {passwordForm.confirmPassword &&
             passwordForm.newPassword !== passwordForm.confirmPassword && (
               <div
+                role="alert"
                 style={{
-                  color: "#EF4444",
+                  color: t.status.danger.fg,
                   fontSize: 12,
                   marginTop: -6,
                 }}
-                role="alert"
               >
                 Les mots de passe ne correspondent pas.
               </div>
             )}
 
-          {/* Hint longueur */}
+          {/* Erreur : mot de passe faible */}
           {passwordForm.newPassword &&
             validatePasswordStrength(passwordForm.newPassword) && (
               <div
+                role="alert"
                 style={{
-                  color: "#F59E0B",
+                  color: t.status.warning.fg,
                   fontSize: 12,
                   marginTop: -6,
                 }}
@@ -625,33 +625,15 @@ export function SettingsTab({ user }) {
               justifyContent: isMobile ? "center" : "flex-end",
             }}
           >
-            <button
+            <Button
               type="submit"
-              disabled={changingPassword}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                padding: buttonPadding,
-                background: changingPassword ? disabledBg : "#EF4444",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                fontWeight: 600,
-                cursor: changingPassword ? disabledCursor : "pointer",
-                fontSize: buttonFontSize,
-                width: buttonFullWidth,
-                transition: "background 0.2s, opacity 0.2s",
-              }}
+              variant="danger"
+              loading={changingPassword}
+              icon={!changingPassword ? <Key size={16} /> : undefined}
+              fullWidth={isMobile}
             >
-              {changingPassword ? (
-                <Loader size={16} className="st-spin" />
-              ) : (
-                <Key size={16} />
-              )}
-              {changingPassword ? "Modification..." : "Modifier le mot de passe"}
-            </button>
+              {changingPassword ? "Modification…" : "Modifier le mot de passe"}
+            </Button>
           </div>
         </form>
       </div>

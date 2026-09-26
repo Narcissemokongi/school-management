@@ -1,7 +1,6 @@
 // src/components/Sidebar.jsx
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useState, useMemo, useCallback } from "react";
 import {
@@ -162,7 +161,6 @@ export function Sidebar({
   collapsed = false,
   onToggleCollapse,
 }) {
-  const { S } = useStyles();
   const isMobile = useIsMobile();
 
   const ecoleId = user?.ecoleId;
@@ -222,7 +220,7 @@ export function Sidebar({
     [handleTabClick]
   );
 
-  // ✅ Filtre mémoïsé (au lieu de recalculer à chaque render)
+  // ✅ Filtre mémoïsé
   const visibleMenu = useMemo(
     () =>
       menu.filter(
@@ -231,22 +229,18 @@ export function Sidebar({
     [menu]
   );
 
-  // ✅ Early return AVANT les hooks non conditionnels terminés ?
-  // Non — tous les hooks sont appelés AVANT ce return. OK.
   const visible = isMobile ? isOpen : true;
   if (!visible) return null;
 
   const isCollapsedDesktop = collapsed && !isMobile;
   const sidebarWidth = isMobile ? "85%" : collapsed ? 72 : 260;
 
-  // ✅ Détection du label du bouton bascule
   const toggleLabel = isMobile
     ? "Fermer le menu"
     : collapsed
     ? "Agrandir"
     : "Réduire";
 
-  // ✅ Détection du label du bouton collapse (pour aria-label)
   const userInitial = user?.nom?.charAt(0)?.toUpperCase() || "?";
   const ecoleInitial = ecole?.nom?.charAt(0) || "S";
 
@@ -279,14 +273,12 @@ export function Sidebar({
         style={{
           width: sidebarWidth,
           maxWidth: isMobile ? 320 : undefined,
-          // ✅ FIX — `100dvh` au lieu de `100vh` (iOS Safari)
           height: "100dvh",
           background: tokens.bg,
           color: tokens.text,
           position: "fixed",
           left: 0,
           top: 0,
-          // ✅ Padding safe-area haut + bas
           paddingTop: "env(safe-area-inset-top, 0px)",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
           transition:
@@ -305,11 +297,10 @@ export function Sidebar({
               ? "translateX(0)"
               : "translateX(-100%)"
             : "translateX(0)",
-          // ✅ Empêche tout débordement horizontal
           boxSizing: "border-box",
         }}
       >
-        {/* ═══════════ Bouton de basculement / fermeture ═══════════ */}
+        {/* Bouton de basculement / fermeture */}
         <button
           type="button"
           onClick={handleCollapseToggle}
@@ -345,7 +336,7 @@ export function Sidebar({
           )}
         </button>
 
-        {/* ═══════════ Titre / Logo ═══════════ */}
+        {/* Titre / Logo */}
         <div
           style={{
             padding: isCollapsedDesktop ? "8px 0" : "8px 20px",
@@ -409,7 +400,7 @@ export function Sidebar({
           )}
         </div>
 
-        {/* ═══════════ Menu principal ═══════════ */}
+        {/* Menu principal */}
         <nav
           style={{
             flex: 1,
@@ -435,7 +426,7 @@ export function Sidebar({
           ))}
         </nav>
 
-        {/* ═══════════ Bas de la sidebar ═══════════ */}
+        {/* Bas de la sidebar */}
         <div
           style={{
             marginTop: "auto",
@@ -567,7 +558,7 @@ export function Sidebar({
             </div>
           )}
 
-          {/* ═══════════ Utilisateur connecté ═══════════ */}
+          {/* Utilisateur connecté */}
           {user && (
             <div
               style={{

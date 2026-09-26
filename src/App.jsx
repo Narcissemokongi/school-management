@@ -17,6 +17,9 @@ import { Loader } from "lucide-react";
 import logo from "../resources/icon.png";
 import { useTheme } from "../src/components/ThemeProvider";
 
+// ⚠️ IMPORT TEMPORAIRE — À RETIRER après validation du design system
+import { UIShowcase } from "./components/UIShowcase";
+
 // ════════════════════════════════════════════════════════════════════
 // CONSTANTES MODULE-LEVEL
 // ════════════════════════════════════════════════════════════════════
@@ -119,25 +122,14 @@ function SessionLoader({ message = "Vérification de votre session..." }) {
 
 // ════════════════════════════════════════════════════════════════════
 // ✅ FIX PERF MAJEUR — ProtectedRoute au MODULE-LEVEL
-//
-// Avant : défini DANS AppRoutes → nouvelle fonction à chaque render
-//         → React voit un "nouveau composant" → démonte/remonte
-//         tout l'arbre AuthenticatedApp → tous les useQuery Convex
-//         re-fetch → spinner infini → LENTEUR.
-//
-// Après : composant stable → React réutilise le sous-arbre
-//         → queries en cache → navigation instantanée.
 // ════════════════════════════════════════════════════════════════════
 function ProtectedRoute({ user, sessionChecked, children }) {
-  // Session pas encore vérifiée → loader
   if (!sessionChecked) {
     return <SessionLoader />;
   }
-  // Session vérifiée et user null → login
   if (user === null) {
     return <Navigate to="/login" replace />;
   }
-  // Session OK → contenu
   return children;
 }
 
@@ -147,32 +139,24 @@ function ProtectedRoute({ user, sessionChecked, children }) {
 function AppRoutes() {
   const navigate = useNavigate();
 
-  // ✅ FIX PERF — `savedUser` lu UNE SEULE FOIS au mount (pas à chaque render)
-  // Avant : `localStorage.getItem` sur chaque render + `useMemo` inutile
-  //         + `parsedUser` nouvelle référence → boucle infinie dans useEffect
   const [savedUser] = useState(readSavedUser);
   const savedUserId = savedUser?._id ?? null;
 
   const [user, setUser] = useState(null);
   const [sessionChecked, setSessionChecked] = useState(false);
 
-  // ✅ Query session — args stables
   const sessionArgs = useMemo(
     () => (savedUserId ? { userId: savedUserId } : "skip"),
     [savedUserId]
   );
   const sessionQuery = useQuery(api.users.get, sessionArgs);
 
-  // ✅ FIX PERF — Dépendances stables
-  // Avant : dep `parsedUser` (nouvelle ref) + `savedUser` (nouvelle string)
-  //         → effect tournait à chaque render → setUser → boucle
-  // Après : deps stables → effect tourne 1-2 fois max
   useEffect(() => {
     if (!savedUserId) {
       setSessionChecked(true);
       return;
     }
-    if (sessionQuery === undefined) return; // attente Convex
+    if (sessionQuery === undefined) return;
 
     const isValid =
       sessionQuery &&
@@ -182,7 +166,6 @@ function AppRoutes() {
     if (isValid) {
       setUser(savedUser);
     } else {
-      // Session invalide → on nettoie
       try {
         localStorage.removeItem(STORAGE_KEY);
       } catch {}
@@ -191,9 +174,6 @@ function AppRoutes() {
     setSessionChecked(true);
   }, [savedUserId, sessionQuery, savedUser]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // HANDLERS (stables)
-  // ════════════════════════════════════════════════════════════════════
   const handleLogin = useCallback(
     (userData) => {
       if (!userData || !userData._id) return;
@@ -202,7 +182,6 @@ function AppRoutes() {
       } catch {}
       setUser(userData);
 
-      // ✅ Redirection selon rôle — une seule navigation
       const role = userData?.role;
       if (role === "superAdmin" || (role === "admin" && !userData.ecoleId)) {
         navigate("/super-admin/overview");
@@ -221,15 +200,14 @@ function AppRoutes() {
     navigate("/login");
   }, [navigate]);
 
-  // ✅ Handlers de navigation stables (évite re-création à chaque render)
   const goToRegister = useCallback(() => navigate("/register"), [navigate]);
   const goToLogin = useCallback(() => navigate("/login"), [navigate]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // RENDU
-  // ════════════════════════════════════════════════════════════════════
   return (
     <Routes>
+      {/* ⚠️ ROUTE TEMPORAIRE — Design System Showcase (à retirer après validation) */}
+      <Route path="/ui-showcase" element={<UIShowcase />} />
+
       {/* ═══════════ AUTH ═══════════ */}
       <Route
         path="/login"

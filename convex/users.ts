@@ -4,6 +4,12 @@ import { v } from "convex/values";
 import { Id, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { hashPassword, verifyPassword } from "./utils/crypto";
+import {
+  PERMISSION_MODULES,
+  PERMISSION_PRESETS,
+  sanitizePermissions,
+  isOwnerStrict,
+} from "./helpers/permissions";
 
 type AnyCtx = MutationCtx | QueryCtx;
 
@@ -133,10 +139,26 @@ function validatePasswordStrength(pwd: string) {
   if (!pwd || pwd.length < 8) {
     throw new Error("Le mot de passe doit contenir au moins 8 caractères.");
   }
+  if (pwd.length > 128) {
+    throw new Error("Le mot de passe ne peut pas dépasser 128 caractères.");
+  }
   if (!/[A-Z]/.test(pwd) || !/[a-z]/.test(pwd) || !/[0-9]/.test(pwd)) {
     throw new Error(
       "Le mot de passe doit contenir majuscule, minuscule et chiffre."
     );
+  }
+}
+
+// ✅ FIX SÉCURITÉ : validation des longueurs pour éviter le DoS et les injections
+function validateInputLengths(args: { nom?: string; login?: string }) {
+  if (args.nom && args.nom.length > 100) {
+    throw new Error("Le nom ne peut pas dépasser 100 caractères.");
+  }
+  if (args.login && args.login.length > 50) {
+    throw new Error("L'identifiant ne peut pas dépasser 50 caractères.");
+  }
+  if (args.login && !/^[a-zA-Z0-9._@-]+$/.test(args.login)) {
+    throw new Error("L'identifiant ne peut contenir que des lettres, chiffres et . _ @ -");
   }
 }
 
@@ -190,6 +212,9 @@ async function sendEmail(to: string, code: string) {
 export const login = mutation({
   args: { login: v.string(), password: v.string() },
   handler: async (ctx, args) => {
+    // ✅ FIX SÉCURITÉ : validation longueur avant tout traitement
+    validateInputLengths({ login: args.login });
+
     const rateKey = `login:${args.login}`;
     const { allowed } = await ctx.runMutation(internal.rateLimit.checkRateLimit, {
       key: rateKey,
@@ -217,7 +242,7 @@ export const login = mutation({
     const storedPassword = user.password;
     let passwordMatch = false;
 
-    const isHashed = /^\d+:[0-9a-fA-F]+:[0-9a-fA-F]+$/.test(storedPassword);
+    const isHashed = /^(v\d+:)?\d+:[0-9a-fA-F]+:[0-9a-fA-F]+$/.test(storedPassword);
 
     if (!isHashed) {
       if (args.password === storedPassword) {
@@ -390,6 +415,8 @@ export const register = mutation({
       );
     }
 
+    // ✅ FIX SÉCURITÉ : validation longueur
+    validateInputLengths({ nom: args.nom, login: args.login });
     validatePasswordStrength(args.password);
 
     const ecole = await ctx.db
@@ -502,6 +529,76 @@ export const listSuperAdmins = query({
   },
 });
 
+/**
+ * ✅ NOUVEAU — Liste TOUS les super admins (OWNER + secondaires).
+ * Utilisé par l'écran GestionSuperAdmins.
+ *
+ * Différence avec `listSuperAdmins` :
+ * - `listSuperAdmins` → secondaires uniquement (filtre permissions > 0)
+ * - `listOwners`      → TOUS (inclut l'OWNER avec flag `isOwner`)
+ *
+ * 🔒 Réservé à l'OWNER strict (isSuperAdminPrincipal).
+ */
+export const listOwners = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller) throw new Error("Utilisateur introuvable");
+
+    // 🔒 Accès strict owner
+    if (!isSuperAdminPrincipal(caller)) {
+      throw new Error(
+        "Réservé au propriétaire de la plateforme."
+      );
+    }
+
+    // Tous les super admins (via index by_role_isOwner)
+    const superAdmins = await ctx.db
+      .query("users")
+      .withIndex("by_role_isOwner", (q) => q.eq("role", "superAdmin"))
+      .take(200);
+
+    // + les "admin legacy" sans école (owners avant migration)
+    const adminsLegacy = await ctx.db
+      .query("users")
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", undefined))
+      .filter((q) => q.eq(q.field("role"), "admin"))
+      .take(50);
+
+    // Fusion + déduplication
+    const uniqueMap = new Map();
+    for (const u of superAdmins) uniqueMap.set(u._id, u);
+    for (const u of adminsLegacy) uniqueMap.set(u._id, u);
+
+    // Tri : OWNER en premier, puis par date de création
+    const sorted = Array.from(uniqueMap.values()).sort((a, b) => {
+      const aOwner =
+        a.isOwner === true || (a.role === "admin" && !a.ecoleId);
+      const bOwner =
+        b.isOwner === true || (b.role === "admin" && !b.ecoleId);
+      if (aOwner !== bOwner) return aOwner ? -1 : 1;
+      return a._creationTime - b._creationTime;
+    });
+
+    return sorted.map((u) => ({
+      _id: u._id,
+      nom: u.nom,
+      prenom: u.prenom ?? "",
+      postnom: u.postnom ?? "",
+      login: u.login,
+      email: u.email ?? "",
+      role: u.role,
+      // ✅ Flags clés pour le frontend
+      isOwner: u.isOwner === true || (u.role === "admin" && !u.ecoleId),
+      isActive: u.isActive !== false, // défaut = true si absent
+      permissions: u.permissions ?? [],
+      // ✅ Métadonnées
+      status: u.status ?? "active",
+      _creationTime: u._creationTime,
+    }));
+  },
+});
+
 export const createSuperAdmin = mutation({
   args: {
     nom: v.string(),
@@ -561,21 +658,16 @@ export const updateSuperAdminPermissions = mutation({
   },
   handler: async (ctx, args) => {
     const caller = await ctx.db.get(args.adminId);
-    // ✅ FIX MAJEUR — refuse un secondaire
     if (!caller || !isSuperAdminPrincipal(caller)) {
       throw new Error(
         "Seul le super admin principal peut modifier les permissions."
       );
     }
 
-    // ✅ Empêche le principal de modifier ses propres permissions (escalade)
     if (args.userId === args.adminId) {
-      throw new Error(
-        "Vous ne pouvez pas modifier vos propres permissions."
-      );
+      throw new Error("Vous ne pouvez pas modifier vos propres permissions.");
     }
 
-    // ✅ Vérifie que la cible est bien un superAdmin secondaire
     const target = await ctx.db.get(args.userId);
     if (!target || target.role !== "superAdmin") {
       throw new Error("Utilisateur introuvable ou n'est pas un super admin.");
@@ -584,7 +676,10 @@ export const updateSuperAdminPermissions = mutation({
       throw new Error("Impossible de modifier un super admin principal.");
     }
 
-    await ctx.db.patch(args.userId, { permissions: args.permissions });
+    // ✨ NOUVEAU — Sanitize
+    const cleanPerms = sanitizePermissions(args.permissions);
+
+    await ctx.db.patch(args.userId, { permissions: cleanPerms });
 
     await ctx.db.insert("audit", {
       userId: args.adminId,
@@ -593,13 +688,12 @@ export const updateSuperAdminPermissions = mutation({
       documentId: args.userId,
       date: new Date().toISOString(),
       ecoleId: undefined,
-      details: `Permissions mises à jour (${args.permissions.length})`,
+      details: `Permissions mises à jour (${cleanPerms.length}) : ${cleanPerms.slice(0, 3).join(", ")}${cleanPerms.length > 3 ? "…" : ""}`,
     });
 
     return { success: true };
   },
 });
-
 export const removeSuperAdmin = mutation({
   args: {
     userId: v.id("users"),
@@ -725,10 +819,10 @@ export const rejectUser = mutation({
 export const listPendingUsers = query({
   args: {
     ecoleId: v.id("ecoles"),
-    userId: v.optional(v.id("users")),
+    userId: v.id("users"), // ✅ FIX SÉCURITÉ : userId obligatoire (était optionnel → fuite de données)
   },
   handler: async (ctx, args) => {
-    if (args.userId) {
+    {
       const caller = await ctx.db.get(args.userId);
       if (!caller) throw new Error("Authentification requise");
       assertSameEcole(caller, args.ecoleId);
@@ -1156,7 +1250,7 @@ export const changePassword = mutation({
     const storedPassword = user.password;
     let isCurrentValid = false;
 
-    const isHashed = /^\d+:[0-9a-fA-F]+:[0-9a-fA-F]+$/.test(storedPassword);
+    const isHashed = /^(v\d+:)?\d+:[0-9a-fA-F]+:[0-9a-fA-F]+$/.test(storedPassword);
     if (!isHashed) {
       if (args.currentPassword === storedPassword) isCurrentValid = true;
     } else {
@@ -1251,8 +1345,22 @@ export const get = query({
 });
 
 export const getById = query({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    callerId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
+    // ✅ FIX SÉCURITÉ : un utilisateur ne peut consulter que son propre profil
+    // sauf les admins/superAdmins qui peuvent consulter n'importe qui
+    if (args.callerId) {
+      const caller = await ctx.db.get(args.callerId);
+      if (!caller) throw new Error("Authentification requise");
+      const isSelfQuery = args.callerId === args.userId;
+      const isAdminOrSuper = isSuperAdmin(caller) || caller.role === "admin" || caller.role === "directeur" || caller.role === "disciplinaire" || caller.role === "comptable";
+      if (!isSelfQuery && !isAdminOrSuper) {
+        throw new Error("Accès refusé");
+      }
+    }
     const user = await ctx.db.get(args.userId);
     if (!user) return null;
     return stripSensitive(user);
@@ -1281,14 +1389,210 @@ export const listRecent = query({
 // ════════════════════════════════════════════════════════════════════
 
 export const getByIds = query({
-  args: { ids: v.array(v.id("users")) },
+  args: {
+    ids: v.array(v.id("users")),
+    callerId: v.id("users"),
+  },
   handler: async (ctx, args) => {
+    // ✅ FIX SÉCURITÉ : authentification obligatoire
+    const caller = await ctx.db.get(args.callerId);
+    if (!caller) throw new Error("Authentification requise");
+
     if (args.ids.length > 200) {
       throw new Error("Trop d'IDs demandés (max 200).");
     }
+
+    // ✅ FIX SÉCURITÉ : cloisonnement par école (sauf superAdmin)
     const users = await Promise.all(args.ids.map((id) => ctx.db.get(id)));
-    return users
+    const filtered = users
       .filter((u): u is NonNullable<typeof u> => u !== null)
-      .map(stripSensitive);
+      .filter((u) => {
+        if (isSuperAdmin(caller)) return true;
+        return u.ecoleId === caller.ecoleId;
+      });
+    return filtered.map(stripSensitive);
+  },
+});
+// ════════════════════════════════════════════════════════════════════
+// ✨ PERMISSIONS GRANULAIRES — Super Admins
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * ✨ Retourne le catalogue des modules/actions/presets.
+ * 🔒 OWNER strict.
+ */
+export const getPermissionsCatalog = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller || !isOwnerStrict(caller)) {
+      throw new Error("Réservé au propriétaire de la plateforme.");
+    }
+
+    return {
+      modules: PERMISSION_MODULES,
+      presets: PERMISSION_PRESETS,
+    };
+  },
+});
+
+// ════════════════════════════════════════════════════════════════════
+// ✨ SESSIONS ACTIVES
+// ════════════════════════════════════════════════════════════════════
+
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
+
+/**
+ * ✨ Ping de présence — appelé par le client à chaque navigation.
+ * Met à jour lastActivityAt du user.
+ */
+export const pingActivity = mutation({
+  args: {
+    userId: v.id("users"),
+    userAgent: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return { ok: false };
+
+    await ctx.db.patch(args.userId, {
+      lastActivityAt: Date.now(),
+      lastActivityUserAgent: args.userAgent,
+    });
+
+    return { ok: true };
+  },
+});
+
+/**
+ * ✨ Liste les super admins actifs (dernières 15 min).
+ * 🔒 OWNER strict.
+ */
+export const listActiveSessions = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller || !isOwnerStrict(caller)) {
+      throw new Error("Réservé au propriétaire de la plateforme.");
+    }
+
+    const threshold = Date.now() - SESSION_TIMEOUT_MS;
+    const allUsers = await ctx.db.query("users").take(2000);
+
+    // Filtrer : super admins, non désactivés, actifs récemment
+    const activeUsers = allUsers.filter(
+      (u) =>
+        (u.role === "superAdmin" ||
+          (u.role === "admin" && !u.ecoleId)) &&
+        u.isActive !== false &&
+        (u.lastActivityAt ?? 0) >= threshold
+    );
+
+    // Enrichir
+    return activeUsers.map((u) => ({
+      _id: u._id,
+      nom: u.nom,
+      login: u.login,
+      email: u.email ?? "",
+      role: u.role,
+      isOwner: isOwnerStrict(u),
+      permissions: u.permissions ?? [],
+      lastActivityAt: u.lastActivityAt ?? 0,
+      lastActivityUserAgent: u.lastActivityUserAgent ?? "",
+      sessionStartedAt: u.sessionStartedAt ?? u.lastActivityAt ?? 0,
+      isCurrentSession: u._id === args.userId,
+    }));
+  },
+});
+
+/**
+ * ✨ Force la déconnexion d'un super admin.
+ * On met `lastActivityAt` à 0 → il ne sera plus dans la liste active.
+ * 🔒 OWNER strict.
+ */
+export const forceLogoutUser = mutation({
+  args: {
+    userId: v.id("users"),
+    targetId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller || !isOwnerStrict(caller)) {
+      throw new Error("Réservé au propriétaire de la plateforme.");
+    }
+
+    if (args.userId === args.targetId) {
+      throw new Error("Vous ne pouvez pas vous déconnecter vous-même.");
+    }
+
+    const target = await ctx.db.get(args.targetId);
+    if (!target) throw new Error("Utilisateur introuvable");
+
+    if (isOwnerStrict(target)) {
+      throw new Error("Impossible de déconnecter un propriétaire.");
+    }
+
+    await ctx.db.patch(args.targetId, {
+      lastActivityAt: 0,
+      sessionStartedAt: undefined,
+    });
+
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "force_logout",
+      table: "users",
+      documentId: args.targetId,
+      date: new Date().toISOString(),
+      ecoleId: undefined,
+      details: `Déconnexion forcée de ${target.nom} (${target.login})`,
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * ✨ Force la déconnexion de TOUS les autres super admins.
+ * 🔒 OWNER strict.
+ */
+export const forceLogoutAll = mutation({
+  args: {
+    userId: v.id("users"),
+    excludeCurrent: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller || !isOwnerStrict(caller)) {
+      throw new Error("Réservé au propriétaire de la plateforme.");
+    }
+
+    const allUsers = await ctx.db.query("users").take(2000);
+    const targets = allUsers.filter(
+      (u) =>
+        (u.role === "superAdmin" ||
+          (u.role === "admin" && !u.ecoleId)) &&
+        !isOwnerStrict(u) &&
+        u.isActive !== false &&
+        (args.excludeCurrent !== false ? u._id !== args.userId : true)
+    );
+
+    for (const u of targets) {
+      await ctx.db.patch(u._id, {
+        lastActivityAt: 0,
+        sessionStartedAt: undefined,
+      });
+    }
+
+    await ctx.db.insert("audit", {
+      userId: args.userId,
+      action: "force_logout_all",
+      table: "users",
+      documentId: "all",
+      date: new Date().toISOString(),
+      ecoleId: undefined,
+      details: `Déconnexion forcée de ${targets.length} super admin(s)`,
+    });
+
+    return { success: true, count: targets.length };
   },
 });

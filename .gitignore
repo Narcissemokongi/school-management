@@ -69,3 +69,6 @@ Desktop.ini
 *.jks
 google-services.json
 GoogleService-Info.plist
+# Fichiers sensibles committés par erreur — NE PLUS JAMAIS
+clé
+android/app/google-service.json

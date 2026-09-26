@@ -1,6 +1,8 @@
+// convex/stats.ts
 import { query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
+import { requireGranularPermission } from "./helpers/permissions";
 
 type AnyCtx = QueryCtx;
 
@@ -12,40 +14,13 @@ const MAX_NOTES = 20000;
 const MAX_PUNITIONS = 10000;
 const MAX_COURS = 5000;
 
-/**
- * 🔴 FIX GLOBAL : tout superAdmin passe désormais.
- */
-function isSuperAdmin(user: any): boolean {
-  if (!user) return false;
-  return (
-    user.role === "superAdmin" ||
-    (user.role === "admin" && !user.ecoleId)
-  );
-}
-
-/**
- * 🔴 FIX : ces stats sont réservées au super-admin (toutes écoles).
- */
-async function requireSuperAdmin(ctx: AnyCtx, userId: Id<"users">) {
-  const user = await ctx.db.get(userId);
-  if (!user) throw new Error("Authentification requise");
-  if (!isSuperAdmin(user)) {
-    throw new Error("Réservé au super-admin.");
-  }
-  return user;
-}
-
-// ----- STATISTIQUES GLOBALES (pour le tableau de bord super admin) -----
-/**
- * 🔴 FIX : `userId` REQUIS + superAdmin only.
- * 🟢 FIX : `.take()` sur chaque table + parallélisation des lectures.
- */
+// ----- STATISTIQUES GLOBALES -----
 export const globalStats = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
+    // ✨ Permission granulaire : stats.read
+    await requireGranularPermission(ctx, args.userId, "stats.read");
 
-    // 🟢 FIX : lectures parallèles + limites
     const [ecoles, users, eleves, classes, punitions] = await Promise.all([
       ctx.db.query("ecoles").take(MAX_ECOLES),
       ctx.db.query("users").take(MAX_USERS),
@@ -64,28 +39,23 @@ export const globalStats = query({
   },
 });
 
-// ----- TAUX DE RÉUSSITE PAR MATIÈRE (toutes écoles confondues) -----
-/**
- * 🔴 FIX : `userId` REQUIS + superAdmin only.
- * 🟢 FIX : Map au lieu de `filter()` dans la boucle (O(n) → O(1)).
- */
+// ----- TAUX DE RÉUSSITE PAR MATIÈRE -----
 export const tauxReussiteParMatiere = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
+    // ✨ Permission granulaire : stats.read
+    await requireGranularPermission(ctx, args.userId, "stats.read");
 
     const [notes, cours] = await Promise.all([
       ctx.db.query("notes").take(MAX_NOTES),
       ctx.db.query("cours").take(MAX_COURS),
     ]);
 
-    // 🟢 FIX : Map cours par nom (O(n) au lieu de find() en boucle)
     const coursMap = new Map<string, any>();
     for (const c of cours) {
       if (!coursMap.has(c.nom)) coursMap.set(c.nom, c);
     }
 
-    // 🟢 FIX : regrouper les notes par matière en une passe
     const notesByMatiere = new Map<string, any[]>();
     for (const n of notes) {
       if (!n.matiere) continue;
@@ -118,15 +88,12 @@ export const tauxReussiteParMatiere = query({
   },
 });
 
-// ----- TAUX DE RÉUSSITE PAR CLASSE (toutes écoles confondues) -----
-/**
- * 🔴 FIX : `userId` REQUIS + superAdmin only.
- * 🟢 FIX : 3 Maps + Set → O(n) au lieu de O(n³).
- */
+// ----- TAUX DE RÉUSSITE PAR CLASSE -----
 export const tauxReussiteParClasse = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
+    // ✨ Permission granulaire : stats.read
+    await requireGranularPermission(ctx, args.userId, "stats.read");
 
     const [notes, eleves, cours] = await Promise.all([
       ctx.db.query("notes").take(MAX_NOTES),
@@ -134,7 +101,6 @@ export const tauxReussiteParClasse = query({
       ctx.db.query("cours").take(MAX_COURS),
     ]);
 
-    // 🟢 FIX : Map eleveId → classe
     const eleveClasseMap = new Map<string, string>();
     const classesSet = new Set<string>();
     for (const e of eleves) {
@@ -144,13 +110,11 @@ export const tauxReussiteParClasse = query({
       }
     }
 
-    // 🟢 FIX : Map (nom|classe) → cours
     const coursMap = new Map<string, any>();
     for (const c of cours) {
       coursMap.set(`${c.nom}|${c.classe}`, c);
     }
 
-    // 🟢 FIX : regrouper les notes par classe en une passe
     const notesByClasse = new Map<string, any[]>();
     for (const n of notes) {
       if (!n.matiere) continue;
@@ -165,7 +129,6 @@ export const tauxReussiteParClasse = query({
     for (const [classe, notesClasse] of notesByClasse.entries()) {
       if (notesClasse.length === 0) continue;
 
-      // Regrouper par matière
       const notesByMatiere = new Map<string, any[]>();
       for (const n of notesClasse) {
         if (!notesByMatiere.has(n.matiere)) notesByMatiere.set(n.matiere, []);
@@ -201,27 +164,22 @@ export const tauxReussiteParClasse = query({
 });
 
 // ----- ÉVOLUTION DES RÉSULTATS GLOBAUX PAR PÉRIODE -----
-/**
- * 🔴 FIX : `userId` REQUIS + superAdmin only.
- * 🟢 FIX : 2 Maps → O(n).
- */
 export const evolutionResultats = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    await requireSuperAdmin(ctx, args.userId);
+    // ✨ Permission granulaire : stats.read
+    await requireGranularPermission(ctx, args.userId, "stats.read");
 
     const [notes, cours] = await Promise.all([
       ctx.db.query("notes").take(MAX_NOTES),
       ctx.db.query("cours").take(MAX_COURS),
     ]);
 
-    // 🟢 FIX : Map cours par nom
     const coursMap = new Map<string, any>();
     for (const c of cours) {
       if (!coursMap.has(c.nom)) coursMap.set(c.nom, c);
     }
 
-    // 🟢 FIX : regrouper les notes par période en une passe
     const notesByPeriode = new Map<string, any[]>();
     for (const n of notes) {
       if (!n.periode || !n.matiere) continue;
@@ -232,7 +190,6 @@ export const evolutionResultats = query({
     const result: { periode: string; taux: number }[] = [];
 
     for (const [periode, notesPeriode] of notesByPeriode.entries()) {
-      // Regrouper par matière
       const notesByMatiere = new Map<string, any[]>();
       for (const n of notesPeriode) {
         if (!notesByMatiere.has(n.matiere)) notesByMatiere.set(n.matiere, []);

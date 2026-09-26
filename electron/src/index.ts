@@ -157,14 +157,19 @@ export class ElectronCapacitorApp {
 
 // Set a Content Security Policy for the application.
 export function setupContentSecurityPolicy(customScheme: string): void {
+  // ✅ FIX SÉCURITÉ : suppression unsafe-eval et unsafe-inline de script-src
+  // Ces directives permettaient l'exécution de code arbitraire via eval()
+  // et les gestionnaires d'événements inline — vecteur XSS critique en Electron
   const cspRules = [
-    `default-src 'self' ${customScheme}://* 'unsafe-inline' 'unsafe-eval' data:`,
+    `default-src 'self' ${customScheme}://*`,
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
-    `font-src 'self' https://fonts.gstatic.com`,
-    `script-src 'self' 'unsafe-eval' 'unsafe-inline'`,
-    `connect-src 'self' https://*.convex.cloud https://*.convex.site https://*.agora.io https://*.sd-rtn.com https://*.vercel.app`,
-    `img-src 'self' data: https:`,
+    `font-src 'self' data: https://fonts.gstatic.com`,
+    `script-src 'self'`,
+    `connect-src 'self' ${customScheme}://* https://*.convex.cloud https://*.convex.site https://*.agora.io https://*.sd-rtn.com https://*.vercel.app`,
+    `img-src 'self' ${customScheme}://* data: https:`,
     `media-src 'self' blob:`,
+    `worker-src 'self' blob:`,
+    `object-src 'none'`,
   ];
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {

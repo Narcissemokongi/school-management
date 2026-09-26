@@ -1,1372 +1,920 @@
-// src/components/GestionSuperAdmins.jsx
-import { useState, useMemo, useRef, useCallback } from "react";
+// src/components/SuperAdmin/GestionSuperAdmins.jsx
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { useStyles } from "@/styles/theme";
+import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
-import { ConfirmDialog } from "../ConfirmDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button, Badge, Modal } from "@/components/ui";
 import toast from "react-hot-toast";
 import {
-  Plus, Trash2, Edit2, Save, X, ShieldCheck, Loader, Search,
-  ChevronDown, ChevronUp, Lock, Unlock, Download, Upload,
-  ChevronLeft, ChevronRight,
+  Plus, Trash2, Edit2, Save, ShieldCheck, Loader,
+  Crown, UserCheck, UserX, ArrowUpCircle, ArrowDownCircle,
+  AlertCircle, Info, Users, Monitor,
 } from "lucide-react";
+// ✨ NOUVEAU
+import { PermissionsEditor } from "./GestionSuperAdmins/PermissionsEditor";
+import { SessionsPanel } from "./GestionSuperAdmins/SessionsPanel";
+import { CreateSuperAdminModal } from "./GestionSuperAdmins/CreateSuperAdminModal";
 
-const PERMISSIONS_LIST = [
-  { id: "gestion_ecoles", label: "Gérer les écoles" },
-  { id: "gestion_demandes", label: "Approuver / rejeter les demandes" },
-  { id: "gestion_statistiques", label: "Voir les statistiques globales" },
-  { id: "gestion_utilisateurs", label: "Gérer les utilisateurs" },
-  { id: "gestion_superadmins", label: "Gérer les super admins" },
-  { id: "gestion_parametres", label: "Gérer les paramètres globaux" },
+// ════════════════════════════════════════════════════════════════════
+// ONGLETS
+// ════════════════════════════════════════════════════════════════════
+const TABS = [
+  { id: "users", label: "Super Admins", icon: Users },
+  { id: "sessions", label: "Sessions actives", icon: Monitor },
 ];
 
-const PERMISSION_LABEL_TO_ID = Object.fromEntries(
-  PERMISSIONS_LIST.map((p) => [p.label.toLowerCase(), p.id])
-);
-
-// ✅ Constantes module-level
-const PAGE_SIZE = 5;
-const TOTAL_PERMISSIONS = PERMISSIONS_LIST.length;
-const MIN_PASSWORD_LENGTH = 8;
-
-// ════════════════════════════════════════════════════════════════════
-// KEYFRAMES (module-level, injectés UNE SEULE FOIS)
-// ════════════════════════════════════════════════════════════════════
-const GsaKeyframes = (
-  <style>{`
-    @keyframes gsa-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .gsa-spin { animation: gsa-spin 1s linear infinite; }
-    @media (prefers-reduced-motion: reduce) {
-      .gsa-spin { animation: none !important; }
-    }
-  `}</style>
-);
-
-// ════════════════════════════════════════════════════════════════════
-// BADGE PERMISSION
-// ════════════════════════════════════════════════════════════════════
-function PermissionBadge({ label, dark }) {
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 10px",
-        borderRadius: 20,
-        fontSize: 12,
-        fontWeight: 500,
-        background: dark ? "#312E81" : "#EEF2FF",
-        color: dark ? "#A5B4FC" : "#4F46E5",
-        marginRight: 4,
-        marginBottom: 4,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// COMPOSANT PRINCIPAL
-// ════════════════════════════════════════════════════════════════════
 export function GestionSuperAdmins({ user }) {
-  const { dark } = useStyles();
+  const t = useTokens();
   const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
   const userId = user?._id;
 
-  // ✅ SOLUTION C — détection du rôle Principal
-  const isPrincipal =
+  // Guards
+  const isSuperAdmin =
+    user?.role === "superAdmin" ||
+    (user?.role === "admin" && !user?.ecoleId);
+
+  const isOwner =
     (user?.role === "admin" && !user?.ecoleId) ||
-    (user?.role === "superAdmin" &&
-      (!user?.permissions || user.permissions.length === 0));
+    (user?.role === "superAdmin" && user?.isOwner === true);
 
-  // ✅ Query avec userId + garde
-  const superAdminsRaw = useQuery(
+  // ✨ Onglet actif
+  const [activeTab, setActiveTab] = useState("users");
+
+  // ✨ Catalogue des permissions (chargé depuis le backend)
+  const catalogRaw = useQuery(
+    api.users.getPermissionsCatalog,
+    userId && isOwner ? { userId } : "skip"
+  );
+  // ✨ Référence stable pour éviter les re-renders inutiles
+  const catalog = useMemo(
+    () => catalogRaw ?? { modules: {}, presets: {} },
+    [catalogRaw]
+  );
+
+  // Queries
+  const ownersRaw = useQuery(
+    api.users.listOwners,
+    userId && isSuperAdmin ? { userId } : "skip"
+  );
+  const adminsRaw = useQuery(
     api.users.listSuperAdmins,
-    userId ? { userId } : "skip"
+    userId && isSuperAdmin ? { userId } : "skip"
   );
-  const superAdmins = useMemo(() => superAdminsRaw ?? [], [superAdminsRaw]);
 
-  const createSuperAdmin = useMutation(api.users.createSuperAdmin);
-  const updatePermissions = useMutation(api.users.updateSuperAdminPermissions);
-  const removeSuperAdmin = useMutation(api.users.removeSuperAdmin);
+  const owners = useMemo(() => ownersRaw ?? [], [ownersRaw]);
+  const admins = useMemo(() => adminsRaw ?? [], [adminsRaw]);
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [form, setForm] = useState({
-    nom: "",
-    login: "",
-    password: "",
-    permissions: [],
-  });
-  const [creating, setCreating] = useState(false);
+  const isLoading =
+    isSuperAdmin &&
+    (ownersRaw === undefined ||
+      adminsRaw === undefined ||
+      (isOwner && catalogRaw === undefined));
+
+  // Mutations (les autres restent — la création est déléguée au modal)
+  const updatePermsM = useMutation(api.users.updateSuperAdminPermissions);
+  const reactiverM = useMutation(api.users.reactiverSuperAdmin);
+  const removeM = useMutation(api.users.removeSuperAdmin);
+  const promoteM = useMutation(api.users.promoteToOwner);
+  const demoteM = useMutation(api.users.demoteOwner);
+
+  // ✨ État du modal création (juste un booléen — state isolé dans le modal)
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // État édition
   const [editingId, setEditingId] = useState(null);
-  const [editPermissions, setEditPermissions] = useState([]);
-  const [savingPermissions, setSavingPermissions] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const fileInputRef = useRef(null);
+  const [editPerms, setEditPerms] = useState([]);
+  const [editMode, setEditMode] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState("nom");
-  const [sortOrder, setSortOrder] = useState("asc");
+  // État rétrogradation
+  const [demoteTarget, setDemoteTarget] = useState(null);
+  const [demotePerms, setDemotePerms] = useState([]);
 
-  // ════════════════════════════════════════════════════════════════
-  // TRI + FILTRAGE
-  // ════════════════════════════════════════════════════════════════
-  const filteredAdmins = useMemo(() => {
-    let result = superAdmins;
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      result = result.filter(
-        (a) =>
-          (a.nom ?? "").toLowerCase().includes(q) ||
-          (a.login ?? "").toLowerCase().includes(q) ||
-          (a.permissions || []).some((p) => {
-            const label =
-              PERMISSIONS_LIST.find((perm) => perm.id === p)?.label || p;
-            return label.toLowerCase().includes(q);
-          })
-      );
-    }
-    return [...result].sort((a, b) => {
-      if (sortBy === "nom") {
-        const an = (a.nom ?? "").toLowerCase();
-        const bn = (b.nom ?? "").toLowerCase();
-        return sortOrder === "asc" ? an.localeCompare(bn) : bn.localeCompare(an);
-      }
-      if (sortBy === "login") {
-        const al = (a.login ?? "").toLowerCase();
-        const bl = (b.login ?? "").toLowerCase();
-        return sortOrder === "asc" ? al.localeCompare(bl) : bl.localeCompare(al);
-      }
-      if (sortBy === "permissions") {
-        const aCount = a.permissions?.length || 0;
-        const bCount = b.permissions?.length || 0;
-        return sortOrder === "asc" ? aCount - bCount : bCount - aCount;
-      }
-      return 0;
-    });
-  }, [superAdmins, searchTerm, sortBy, sortOrder]);
-
-  const totalPages = Math.ceil(filteredAdmins.length / PAGE_SIZE);
-  const safeCurrentPage = Math.min(currentPage, totalPages || 1);
-  const paginatedAdmins = useMemo(
-    () =>
-      filteredAdmins.slice(
-        (safeCurrentPage - 1) * PAGE_SIZE,
-        safeCurrentPage * PAGE_SIZE
-      ),
-    [filteredAdmins, safeCurrentPage]
-  );
-
-  const toggleSort = useCallback((field) => {
-    setCurrentPage(1);
-    if (sortBy === field) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(field);
-      setSortOrder("asc");
-    }
-  }, [sortBy]);
-
-  const togglePermission = useCallback((permId) => {
-    setForm((prev) => ({
-      ...prev,
-      permissions: prev.permissions.includes(permId)
-        ? prev.permissions.filter((p) => p !== permId)
-        : [...prev.permissions, permId],
-    }));
-  }, []);
-
-  // ════════════════════════════════════════════════════════════════
-  // EXPORT EXCEL
-  // ════════════════════════════════════════════════════════════════
-  const handleExportExcel = useCallback(async () => {
-    try {
-      const XLSX = await import("xlsx");
-      const data = filteredAdmins.map((a) => ({
-        Nom: a.nom,
-        Login: a.login,
-        Permissions: (a.permissions || [])
-          .map((p) => PERMISSIONS_LIST.find((perm) => perm.id === p)?.label || p)
-          .join(", "),
-      }));
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Super Admins");
-      XLSX.writeFile(workbook, "super_admins.xlsx");
-      toast.success("Export Excel réussi");
-    } catch (err) {
-      toast.error(
-        "Impossible de générer l'export : " +
-          (err?.message || "erreur inconnue")
-      );
-    }
-  }, [filteredAdmins]);
-
-  // ════════════════════════════════════════════════════════════════
-  // IMPORT EXCEL
-  // ════════════════════════════════════════════════════════════════
-  const handleImportExcel = useCallback(
-    async (e) => {
-      // ✅ DOUBLE SÉCURITÉ — refuse même si le bouton est masqué
-      if (!isPrincipal) {
-        toast.error("Seul le super admin principal peut importer.");
-        return;
-      }
-
-      const file = e.target.files?.[0];
-      if (!file) return;
-      if (!userId) {
-        toast.error("Session invalide.");
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-      setImporting(true);
-
-      try {
-        const XLSX = await import("xlsx");
-        const data = new Uint8Array(await file.arrayBuffer());
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-        if (rows.length < 2) {
-          toast.error("Fichier vide");
-          return;
-        }
-
-        const headers = rows[0].map((h) => h.toString().toLowerCase().trim());
-        const nomIdx = headers.indexOf("nom");
-        const loginIdx = headers.indexOf("login");
-        const passwordIdx = headers.indexOf("password");
-        const permsIdx = headers.indexOf("permissions");
-
-        if (
-          nomIdx === -1 ||
-          loginIdx === -1 ||
-          passwordIdx === -1 ||
-          permsIdx === -1
-        ) {
-          toast.error("Colonnes requises : nom, login, password, permissions");
-          return;
-        }
-
-        // ✅ Set des logins existants (O(1) lookup)
-        const existingLogins = new Set(superAdmins.map((a) => a.login));
-        const createdLogins = new Set();
-
-        let count = 0;
-        let skipped = 0;
-        const errors = [];
-
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row[nomIdx] || !row[loginIdx] || !row[passwordIdx]) {
-            skipped++;
-            continue;
-          }
-
-          const nom = row[nomIdx].toString().trim();
-          const login = row[loginIdx].toString().trim();
-          const password = row[passwordIdx].toString();
-          const permsString = row[permsIdx]?.toString() || "";
-          const permValues = permsString
-            .split(/[;,]/)
-            .map((p) => p.trim())
-            .filter(Boolean);
-
-          // ✅ Validation longueur mot de passe
-          if (password.length < MIN_PASSWORD_LENGTH) {
-            errors.push(
-              `Ligne ${i + 1}: mot de passe trop court (min ${MIN_PASSWORD_LENGTH})`
-            );
-            continue;
-          }
-
-          const validPerms = permValues
-            .map((p) => {
-              const lower = p.toLowerCase();
-              if (PERMISSION_LABEL_TO_ID[lower]) return PERMISSION_LABEL_TO_ID[lower];
-              if (PERMISSIONS_LIST.some((perm) => perm.id === p)) return p;
-              return null;
-            })
-            .filter(Boolean);
-
-          if (validPerms.length === 0) {
-            errors.push(`Ligne ${i + 1}: aucune permission valide`);
-            continue;
-          }
-
-          if (existingLogins.has(login) || createdLogins.has(login)) {
-            errors.push(`Ligne ${i + 1}: login "${login}" existe déjà`);
-            continue;
-          }
-
-          try {
-            await createSuperAdmin({
-              nom,
-              login,
-              password,
-              permissions: validPerms,
-              userId,
-            });
-            createdLogins.add(login);
-            count++;
-          } catch (err) {
-            errors.push(`Ligne ${i + 1}: ${err?.message ?? "échec de création"}`);
-          }
-        }
-
-        const parts = [];
-        if (count > 0) parts.push(`${count} créé(s)`);
-        if (skipped > 0) parts.push(`${skipped} ignoré(s)`);
-        if (errors.length > 0) parts.push(`${errors.length} erreur(s)`);
-
-        if (count > 0) {
-          toast.success(parts.join(" · "));
-        } else {
-          toast.error(parts.join(" · ") || "Aucun import");
-        }
-        if (errors.length > 0 && count > 0) {
-          toast.error(errors.slice(0, 3).join(" ; "));
-        }
-      } catch (err) {
-        toast.error(
-          "Impossible de lire le fichier Excel : " +
-            (err?.message ?? "erreur inconnue")
-        );
-      } finally {
-        setImporting(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    },
-    [userId, superAdmins, createSuperAdmin, isPrincipal]
-  );
-
-  // ════════════════════════════════════════════════════════════════
-  // CRÉATION
-  // ════════════════════════════════════════════════════════════════
-  const handleCreate = useCallback(
-    async (e) => {
-      e.preventDefault();
-      if (creating) return;
-
-      // ✅ DOUBLE SÉCURITÉ
-      if (!isPrincipal) {
-        toast.error("Seul le super admin principal peut créer un super admin.");
-        return;
-      }
-      if (!userId) {
-        toast.error("Session invalide.");
-        return;
-      }
-
-      if (!form.nom.trim() || !form.login.trim() || !form.password.trim()) {
-        toast.error("Veuillez remplir tous les champs.");
-        return;
-      }
-      if (form.password.length < MIN_PASSWORD_LENGTH) {
-        toast.error(`Mot de passe : ${MIN_PASSWORD_LENGTH} caractères minimum.`);
-        return;
-      }
-      if (form.permissions.length === 0) {
-        toast.error("Attribuez au moins une permission.");
-        return;
-      }
-
-      setCreating(true);
-      try {
-        await createSuperAdmin({
-          nom: form.nom.trim(),
-          login: form.login.trim(),
-          password: form.password,
-          permissions: form.permissions,
-          userId,
-        });
-        toast.success("Super admin créé avec succès");
-        setForm({ nom: "", login: "", password: "", permissions: [] });
-        setShowCreate(false);
-        setShowPassword(false);
-      } catch (err) {
-        toast.error(
-          "Impossible de créer : " + (err?.message || "erreur inconnue")
-        );
-      } finally {
-        setCreating(false);
-      }
-    },
-    [creating, userId, form, createSuperAdmin, isPrincipal]
-  );
-
-  // ════════════════════════════════════════════════════════════════
-  // ÉDITION PERMISSIONS
-  // ════════════════════════════════════════════════════════════════
-  const startEditPermissions = useCallback((admin) => {
-    setEditingId(admin._id);
-    setEditPermissions(admin.permissions || []);
-  }, []);
-
-  const cancelEditPermissions = useCallback(() => {
-    setEditingId(null);
-    setEditPermissions([]);
-  }, []);
-
-  const toggleEditPermission = useCallback((perm) => {
-    setEditPermissions((prev) =>
-      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
-    );
-  }, []);
-
-  const handleSavePermissions = useCallback(
-    async (adminId) => {
-      if (savingPermissions) return;
-      if (!isPrincipal) {
-        toast.error("Seul le super admin principal peut modifier les permissions.");
-        return;
-      }
-      if (!userId) {
-        toast.error("Session invalide.");
-        return;
-      }
-      setSavingPermissions(true);
-      try {
-        await updatePermissions({
-          userId: adminId,
-          permissions: editPermissions,
-          adminId: userId,
-        });
-        toast.success("Permissions mises à jour");
-        setEditingId(null);
-      } catch (err) {
-        toast.error(
-          "Impossible de mettre à jour : " + (err?.message || "erreur inconnue")
-        );
-      } finally {
-        setSavingPermissions(false);
-      }
-    },
-    [savingPermissions, userId, updatePermissions, editPermissions, isPrincipal]
-  );
-
-  // ════════════════════════════════════════════════════════════════
-  // SUPPRESSION
-  // ════════════════════════════════════════════════════════════════
-  const handleDelete = useCallback(
-    async (admin) => {
-      if (!isPrincipal) {
-        toast.error("Seul le super admin principal peut supprimer.");
-        return;
-      }
-      if (!userId) {
-        toast.error("Session invalide.");
-        return;
-      }
-      const ok = await confirm(
-        "Supprimer ce super admin",
-        `Voulez-vous vraiment supprimer ${admin.nom} ? Cette action est irréversible.`
-      );
-      if (!ok) return;
-      setDeletingId(admin._id);
-      try {
-        await removeSuperAdmin({
-          userId: admin._id,
-          adminId: userId,
-        });
-        toast.success("Super admin supprimé");
-      } catch (err) {
-        toast.error(
-          "Impossible de supprimer : " + (err?.message || "erreur inconnue")
-        );
-      } finally {
-        setDeletingId(null);
-      }
-    },
-    [userId, confirm, removeSuperAdmin, isPrincipal]
-  );
-
-  // ════════════════════════════════════════════════════════════════
-  // STATS
-  // ════════════════════════════════════════════════════════════════
-  const avgPermissions = useMemo(() => {
-    if (superAdmins.length === 0) return 0;
+  // Guard
+  if (!isSuperAdmin) {
     return (
-      superAdmins.reduce((sum, a) => sum + (a.permissions?.length || 0), 0) /
-      superAdmins.length
-    ).toFixed(1);
-  }, [superAdmins]);
-
-  // ════════════════════════════════════════════════════════════════
-  // STYLES ADAPTATIFS
-  // ════════════════════════════════════════════════════════════════
-  const inputStyle = {
-    width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-    borderRadius: 8,
-    fontSize: isMobile ? 16 : 14,
-    marginBottom: 16,
-    outline: "none",
-    background: dark ? "#0F172A" : "#F8FAFC",
-    color: dark ? "#F1F5F9" : "#1E293B",
-    transition: "border-color 0.2s, background-color 0.3s",
-  };
-  const headerFlexDirection = isMobile ? "column" : "row";
-  const headerAlign = isMobile ? "stretch" : "center";
-  const searchInputWidth = isMobile ? "100%" : 200;
-  const toolbarFlexDirection = isMobile ? "column" : "row";
-  const buttonPadding = isMobile ? "10px 12px" : "8px 12px";
-  const buttonFontSize = isMobile ? 14 : 13;
-  const cardPadding = isMobile ? 12 : 16;
-  const cardFlexDirection = isMobile ? "column" : "row";
-  const cardAlign = isMobile ? "stretch" : "center";
-  const permissionGridColumns = isMobile
-    ? "1fr"
-    : "repeat(auto-fill, minmax(200px, 1fr))";
-  const permissionLabelPadding = isMobile ? "10px 12px" : "8px 12px";
-  const formButtonFlexDirection = isMobile ? "column" : "row";
-  const formButtonWidth = isMobile ? "100%" : "auto";
-
-  // ════════════════════════════════════════════════════════════════
-  // LOADING
-  // ════════════════════════════════════════════════════════════════
-  if (superAdminsRaw === undefined) {
-    return (
-      <>
-        {GsaKeyframes}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 40,
-          }}
-        >
-          <Loader size={32} className="gsa-spin" style={{ color: dark ? "#818CF8" : "#4F46E5" }} />
-        </div>
-      </>
+      <div
+        style={{
+          padding: 40,
+          textAlign: "center",
+          color: t.text.muted,
+        }}
+      >
+        Accès réservé aux super administrateurs.
+      </div>
     );
   }
 
-  // ════════════════════════════════════════════════════════════════
-  // RENDU
-  // ════════════════════════════════════════════════════════════════
-  return (
-    <div>
-      {GsaKeyframes}
+  // ────────────────────────────────────────────────────────────
+  // HANDLERS
+  // ────────────────────────────────────────────────────────────
 
-      {/* En-tête */}
+  const handleSavePermissions = async (adminId) => {
+    setSaving(true);
+    try {
+      if (editMode === "reactivate") {
+        await reactiverM({
+          userId: adminId,
+          permissions: editPerms,
+          adminId: userId,
+        });
+        toast.success("Compte réactivé");
+      } else {
+        const res = await updatePermsM({
+          userId: adminId,
+          permissions: editPerms,
+          adminId: userId,
+        });
+        toast.success(
+          res.deactivated
+            ? "Permissions vidées → compte désactivé"
+            : "Permissions mises à jour"
+        );
+      }
+      setEditingId(null);
+      setEditPerms([]);
+      setEditMode(null);
+    } catch (err) {
+      toast.error(err?.message ?? "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = (admin) => {
+    setEditingId(admin._id);
+    setEditPerms(admin.permissions ?? []);
+    setEditMode("update");
+  };
+
+  const startReactivate = (admin) => {
+    setEditingId(admin._id);
+    setEditPerms(
+      admin.permissions?.length
+        ? admin.permissions
+        : ["ecoles.read", "users.read", "stats.read"]
+    );
+    setEditMode("reactivate");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditPerms([]);
+    setEditMode(null);
+  };
+
+  const handleDelete = async (admin) => {
+    const ok = await confirm(
+      "Supprimer ce super admin",
+      `Voulez-vous vraiment supprimer ${admin.nom} ? Cette action est irréversible.`
+    );
+    if (!ok) return;
+    try {
+      await removeM({ userId: admin._id, adminId: userId });
+      toast.success("Super admin supprimé");
+    } catch (err) {
+      toast.error(err?.message ?? "Erreur");
+    }
+  };
+
+  const handlePromote = async (admin) => {
+    const ok = await confirm(
+      "Promouvoir en propriétaire",
+      `${admin.nom} aura les mêmes droits que vous (gestion des super admins, toutes les écoles). Confirmer ?`
+    );
+    if (!ok) return;
+    try {
+      await promoteM({ userId: admin._id, adminId: userId });
+      toast.success("Promu en propriétaire");
+    } catch (err) {
+      toast.error(err?.message ?? "Erreur");
+    }
+  };
+
+  const handleDemoteStart = (owner) => {
+    setDemoteTarget(owner);
+    setDemotePerms(["ecoles.read", "users.read", "stats.read"]);
+  };
+
+  const handleSaveDemote = async () => {
+    if (demotePerms.length === 0) {
+      toast.error("Au moins une permission requise.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await demoteM({
+        userId: demoteTarget._id,
+        permissions: demotePerms,
+        adminId: userId,
+      });
+      toast.success(`${demoteTarget.nom} rétrogradé en super admin`);
+      setDemoteTarget(null);
+      setDemotePerms([]);
+    } catch (err) {
+      toast.error(err?.message ?? "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+        <Loader
+          size={32}
+          style={{ animation: "spin 1s linear infinite" }}
+          color={t.accent.primary}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      {/* ═══════════ BANDEAU CONTEXTUEL ═══════════ */}
+      <ContextBanner isOwner={isOwner} isMobile={isMobile} t={t} />
+
+      {/* ═══════════ EN-TÊTE ═══════════ */}
+      <div style={{ marginBottom: 20 }}>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 24,
+            fontWeight: 700,
+            color: t.text.primary,
+          }}
+        >
+          Super Admins
+        </h2>
+        <p style={{ margin: "4px 0 0", fontSize: 14, color: t.text.muted }}>
+          {owners.length} propriétaire(s) · {admins.length} super admin(s)
+          secondaire(s)
+        </p>
+      </div>
+
+      {/* ═══════════ TABS ═══════════ */}
       <div
         style={{
           display: "flex",
-          flexDirection: headerFlexDirection,
-          justifyContent: "space-between",
-          alignItems: headerAlign,
-          flexWrap: "wrap",
-          gap: 12,
+          gap: 4,
+          borderBottom: `1px solid ${t.border.subtle}`,
           marginBottom: 20,
+          overflowX: "auto",
         }}
       >
-        <div>
-          <h3
-            style={{
-              fontSize: isMobile ? 18 : 20,
-              fontWeight: 600,
-              color: dark ? "#F1F5F9" : "#1E293B",
-              margin: 0,
-            }}
-          >
-            Super Admins secondaires
-          </h3>
-          <p
-            style={{
-              fontSize: 13,
-              color: dark ? "#94A3B8" : "#64748B",
-              marginTop: 4,
-            }}
-          >
-            {superAdmins.length} super admin(s) · Permissions moyennes :{" "}
-            {avgPermissions}/{TOTAL_PERMISSIONS}
-          </p>
-        </div>
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "10px 16px",
+                background: "transparent",
+                border: "none",
+                borderBottom: active
+                  ? `2px solid ${t.accent.primary}`
+                  : "2px solid transparent",
+                color: active ? t.accent.primary : t.text.secondary,
+                fontWeight: active ? 600 : 500,
+                cursor: "pointer",
+                fontSize: t.font.size.sm,
+                fontFamily: t.font.family,
+                whiteSpace: "nowrap",
+                marginBottom: -1,
+              }}
+            >
+              <Icon size={14} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
+      {/* ═══════════ ONGLET : SUPER ADMINS ═══════════ */}
+      {activeTab === "users" && (
+        <>
+          {/* SECTION PROPRIÉTAIRES */}
+          <Section
+            title="Propriétaires"
+            subtitle="Accès complet à la plateforme — gestion des super admins"
+            icon={<Crown size={20} />}
+            color="#F59E0B"
+            t={t}
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              {owners.map((owner) => (
+                <OwnerCard
+                  key={owner._id}
+                  owner={owner}
+                  isMe={owner._id === userId}
+                  canManage={isOwner && owner._id !== userId}
+                  canDemote={
+                    isOwner && owners.length > 1 && owner._id !== userId
+                  }
+                  onDemote={handleDemoteStart}
+                  t={t}
+                  isMobile={isMobile}
+                />
+              ))}
+            </div>
+          </Section>
+
+          {/* SECTION SUPER ADMINS */}
+          <Section
+            title="Super Admins secondaires"
+            subtitle="Permissions limitées — ne peuvent pas gérer les super admins"
+            icon={<ShieldCheck size={20} />}
+            color={t.accent.primary}
+            t={t}
+            action={
+              isOwner && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Plus size={14} />}
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  Nouveau
+                </Button>
+              )
+            }
+          >
+            {admins.length === 0 ? (
+              <EmptyState
+                text={
+                  isOwner
+                    ? "Aucun super admin secondaire. Cliquez sur « Nouveau » pour en créer."
+                    : "Aucun super admin secondaire."
+                }
+                t={t}
+              />
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {admins.map((admin) => (
+                  <AdminCard
+                    key={admin._id}
+                    admin={admin}
+                    canManage={isOwner}
+                    isEditing={editingId === admin._id}
+                    editPerms={editPerms}
+                    editMode={editMode}
+                    saving={saving}
+                    catalog={catalog}
+                    onStartEdit={() => startEdit(admin)}
+                    onCancelEdit={cancelEdit}
+                    onEditPermsChange={setEditPerms}
+                    onSave={() => handleSavePermissions(admin._id)}
+                    onDelete={() => handleDelete(admin)}
+                    onPromote={() => handlePromote(admin)}
+                    onReactivate={() => startReactivate(admin)}
+                    t={t}
+                    isMobile={isMobile}
+                  />
+                ))}
+              </div>
+            )}
+          </Section>
+        </>
+      )}
+
+      {/* ═══════════ ONGLET : SESSIONS ═══════════ */}
+      {activeTab === "sessions" && <SessionsPanel userId={userId} />}
+
+      {/* ═══════════ MODAL CRÉATION (composant isolé) ═══════════ */}
+      {showCreateModal && (
+        <CreateSuperAdminModal
+          userId={userId}
+          catalog={catalog}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
+
+      {/* ═══════════ MODAL RÉTROGRADATION ═══════════ */}
+      <Modal
+        open={demoteTarget !== null}
+        onClose={() => {
+          setDemoteTarget(null);
+          setDemotePerms([]);
+        }}
+        title={
+          demoteTarget
+            ? `Rétrograder ${demoteTarget.nom}`
+            : "Rétrograder un propriétaire"
+        }
+        maxWidth={720}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDemoteTarget(null);
+                setDemotePerms([]);
+              }}
+              disabled={saving}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleSaveDemote}
+              loading={saving}
+            >
+              Rétrograder
+            </Button>
+          </>
+        }
+      >
         <div
           style={{
             display: "flex",
-            flexDirection: toolbarFlexDirection,
-            gap: 10,
-            alignItems: isMobile ? "stretch" : "center",
-            flexWrap: "wrap",
-            width: isMobile ? "100%" : "auto",
+            gap: 12,
+            alignItems: "flex-start",
+            marginBottom: 16,
+            padding: 12,
+            borderRadius: t.radius.sm,
+            background: t.status?.warning?.bg ?? "#FEF3C7",
+            color: t.status?.warning?.fg ?? "#92400E",
+            fontSize: 13,
           }}
         >
-          <div style={{ position: "relative", width: isMobile ? "100%" : "auto" }}>
-            <Search
-              size={18}
-              style={{
-                position: "absolute",
-                left: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: dark ? "#94A3B8" : "#64748B",
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              style={{
-                padding: isMobile ? "10px 12px 10px 34px" : "8px 12px 8px 34px",
-                borderRadius: 8,
-                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                background: dark ? "#1E293B" : "#FFFFFF",
-                color: dark ? "#F1F5F9" : "#1E293B",
-                fontSize: isMobile ? 16 : 14,
-                outline: "none",
-                width: searchInputWidth,
-                boxSizing: "border-box",
-              }}
-              aria-label="Rechercher un super admin"
-            />
+          <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            {demoteTarget?.nom} perdra ses droits de propriétaire. Il deviendra
+            super admin avec les permissions choisies ci-dessous.
           </div>
-
-          {/* ✅ Exporter — visible pour tous (lecture) */}
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              padding: buttonPadding,
-              background: dark ? "#334155" : "#F1F5F9",
-              border: "none",
-              borderRadius: 8,
-              color: dark ? "#F1F5F9" : "#1E293B",
-              cursor: "pointer",
-              fontSize: buttonFontSize,
-              width: isMobile ? "100%" : "auto",
-            }}
-            aria-label="Exporter en Excel"
-          >
-            <Download size={16} /> Exporter Excel
-          </button>
-
-          {/* ✅ Importer — Principal uniquement */}
-          {isPrincipal && (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importing}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                padding: buttonPadding,
-                background: dark ? "#334155" : "#F1F5F9",
-                border: "none",
-                borderRadius: 8,
-                color: dark ? "#F1F5F9" : "#1E293B",
-                cursor: importing ? "not-allowed" : "pointer",
-                fontSize: buttonFontSize,
-                width: isMobile ? "100%" : "auto",
-              }}
-              aria-label="Importer depuis Excel"
-            >
-              {importing ? (
-                <Loader size={16} className="gsa-spin" />
-              ) : (
-                <Upload size={16} />
-              )}
-              Importer Excel
-            </button>
-          )}
-
-          {/* ✅ Nouveau — Principal uniquement */}
-          {isPrincipal && (
-            <button
-              type="button"
-              onClick={() => setShowCreate(!showCreate)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                padding: isMobile ? "10px 16px" : "8px 16px",
-                background: dark ? "#818CF8" : "#4F46E5",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: isMobile ? 16 : 14,
-                width: isMobile ? "100%" : "auto",
-              }}
-              aria-label={
-                showCreate
-                  ? "Fermer le formulaire"
-                  : "Créer un nouveau super admin"
-              }
-            >
-              {showCreate ? <X size={16} /> : <Plus size={16} />}
-              {showCreate ? "Fermer" : "Nouveau"}
-            </button>
-          )}
         </div>
-      </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        style={{ display: "none" }}
-        onChange={handleImportExcel}
-        disabled={!isPrincipal}
-      />
-
-      {/* Formulaire de création */}
-      {showCreate && isPrincipal && (
-        <div
-          style={{
-            background: dark ? "#1E293B" : "#FFFFFF",
-            borderRadius: 12,
-            padding: isMobile ? 14 : 20,
-            marginBottom: 24,
-            boxShadow: dark
-              ? "0 1px 3px rgba(0,0,0,0.3)"
-              : "0 1px 3px rgba(0,0,0,0.05)",
-            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-          }}
-        >
-          <h4
-            style={{
-              marginTop: 0,
-              marginBottom: 16,
-              color: dark ? "#F1F5F9" : "#1E293B",
-              fontSize: isMobile ? 16 : 18,
-            }}
-          >
-            Créer un super admin
-          </h4>
-          <form onSubmit={handleCreate}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: 6,
-                fontWeight: 500,
-                color: dark ? "#CBD5E1" : "#374151",
-                fontSize: isMobile ? 15 : 14,
-              }}
-            >
-              Nom complet
-            </label>
-            <input
-              value={form.nom}
-              onChange={(e) => setForm({ ...form, nom: e.target.value })}
-              placeholder="Ex: Jean Dupont"
-              style={inputStyle}
-            />
-
-            <label
-              style={{
-                display: "block",
-                marginBottom: 6,
-                fontWeight: 500,
-                color: dark ? "#CBD5E1" : "#374151",
-                fontSize: isMobile ? 15 : 14,
-              }}
-            >
-              Login
-            </label>
-            <input
-              value={form.login}
-              onChange={(e) => setForm({ ...form, login: e.target.value })}
-              placeholder="Ex: jean.dupont"
-              style={inputStyle}
-            />
-
-            <label
-              style={{
-                display: "block",
-                marginBottom: 6,
-                fontWeight: 500,
-                color: dark ? "#CBD5E1" : "#374151",
-                fontSize: isMobile ? 15 : 14,
-              }}
-            >
-              Mot de passe
-            </label>
-            <div style={{ position: "relative", marginBottom: 16 }}>
-              <input
-                type={showPassword ? "text" : "password"}
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder={`Mot de passe (min ${MIN_PASSWORD_LENGTH} caractères)`}
-                style={{ ...inputStyle, marginBottom: 0, paddingRight: 40 }}
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: "absolute",
-                  right: 10,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  color: dark ? "#94A3B8" : "#64748B",
-                  cursor: "pointer",
-                  padding: 4,
-                  display: "flex",
-                }}
-                aria-label={
-                  showPassword
-                    ? "Masquer le mot de passe"
-                    : "Afficher le mot de passe"
-                }
-              >
-                {showPassword ? (
-                  <Lock size={isMobile ? 20 : 18} />
-                ) : (
-                  <Unlock size={isMobile ? 20 : 18} />
-                )}
-              </button>
-            </div>
-
-            <label
-              style={{
-                display: "block",
-                marginBottom: 8,
-                fontWeight: 500,
-                color: dark ? "#CBD5E1" : "#374151",
-                fontSize: isMobile ? 15 : 14,
-              }}
-            >
-              Permissions
-            </label>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: permissionGridColumns,
-                gap: 8,
-                marginBottom: 16,
-              }}
-            >
-              {PERMISSIONS_LIST.map((perm) => (
-                <label
-                  key={perm.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: permissionLabelPadding,
-                    borderRadius: 8,
-                    background: form.permissions.includes(perm.id)
-                      ? dark
-                        ? "#312E81"
-                        : "#EEF2FF"
-                      : "transparent",
-                    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.permissions.includes(perm.id)}
-                    onChange={() => togglePermission(perm.id)}
-                    style={{
-                      width: isMobile ? 18 : 16,
-                      height: isMobile ? 18 : 16,
-                      accentColor: dark ? "#818CF8" : "#4F46E5",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: isMobile ? 14 : 13,
-                      color: dark ? "#F1F5F9" : "#1E293B",
-                    }}
-                  >
-                    {perm.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                flexDirection: formButtonFlexDirection,
-              }}
-            >
-              <button
-                type="submit"
-                disabled={creating}
-                style={{
-                  flex: isMobile ? "none" : 1,
-                  padding: isMobile ? "12px 16px" : "10px 16px",
-                  background: creating
-                    ? "#A5B4FC"
-                    : dark
-                    ? "#818CF8"
-                    : "#4F46E5",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  cursor: creating ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  fontSize: isMobile ? 16 : 14,
-                  width: formButtonWidth,
-                }}
-              >
-                {creating ? (
-                  <Loader size={16} className="gsa-spin" />
-                ) : (
-                  <Plus size={16} />
-                )}
-                {creating ? "Création..." : "Créer le super admin"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                style={{
-                  padding: isMobile ? "12px 16px" : "10px 16px",
-                  background: dark ? "#334155" : "#F1F5F9",
-                  border: "none",
-                  borderRadius: 8,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  color: dark ? "#F1F5F9" : "#1E293B",
-                  fontSize: isMobile ? 16 : 14,
-                  width: formButtonWidth,
-                }}
-              >
-                Annuler
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Liste */}
-      {filteredAdmins.length === 0 ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: isMobile ? 24 : 40,
-            color: dark ? "#94A3B8" : "#64748B",
-            background: dark ? "#1E293B" : "#FFFFFF",
-            borderRadius: 12,
-          }}
-        >
-          <ShieldCheck
-            size={isMobile ? 40 : 48}
-            color={dark ? "#334155" : "#CBD5E1"}
-          />
-          <p style={{ marginTop: 12, fontSize: isMobile ? 15 : 16 }}>
-            {searchTerm
-              ? "Aucun super admin trouvé"
-              : isPrincipal
-              ? "Aucun super admin secondaire. Cliquez sur « Nouveau » pour en créer."
-              : "Aucun super admin secondaire à afficher."}
-          </p>
-        </div>
-      ) : (
-        <>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: 12,
-              fontSize: isMobile ? 12 : 13,
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => toggleSort("nom")}
-              style={{
-                padding: isMobile ? "8px 10px" : "4px 8px",
-                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                borderRadius: 6,
-                background: "transparent",
-                color: dark ? "#F1F5F9" : "#1E293B",
-                cursor: "pointer",
-              }}
-            >
-              Nom{" "}
-              {sortBy === "nom" &&
-                (sortOrder === "asc" ? (
-                  <ChevronUp size={12} />
-                ) : (
-                  <ChevronDown size={12} />
-                ))}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleSort("login")}
-              style={{
-                padding: isMobile ? "8px 10px" : "4px 8px",
-                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                borderRadius: 6,
-                background: "transparent",
-                color: dark ? "#F1F5F9" : "#1E293B",
-                cursor: "pointer",
-              }}
-            >
-              Login{" "}
-              {sortBy === "login" &&
-                (sortOrder === "asc" ? (
-                  <ChevronUp size={12} />
-                ) : (
-                  <ChevronDown size={12} />
-                ))}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleSort("permissions")}
-              style={{
-                padding: isMobile ? "8px 10px" : "4px 8px",
-                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                borderRadius: 6,
-                background: "transparent",
-                color: dark ? "#F1F5F9" : "#1E293B",
-                cursor: "pointer",
-              }}
-            >
-              Permissions{" "}
-              {sortBy === "permissions" &&
-                (sortOrder === "asc" ? (
-                  <ChevronUp size={12} />
-                ) : (
-                  <ChevronDown size={12} />
-                ))}
-            </button>
-          </div>
-
-          <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
-            {paginatedAdmins.map((admin) => (
-              <div
-                key={admin._id}
-                style={{
-                  background: dark ? "#1E293B" : "#FFFFFF",
-                  borderRadius: 12,
-                  padding: cardPadding,
-                  boxShadow: dark
-                    ? "0 1px 3px rgba(0,0,0,0.3)"
-                    : "0 1px 3px rgba(0,0,0,0.05)",
-                  border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: cardAlign,
-                    flexWrap: "wrap",
-                    gap: 12,
-                    flexDirection: cardFlexDirection,
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        fontSize: 16,
-                        color: dark ? "#F1F5F9" : "#1E293B",
-                      }}
-                    >
-                      {admin.nom}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: dark ? "#94A3B8" : "#64748B",
-                      }}
-                    >
-                      @{admin.login}
-                    </div>
-                  </div>
-                  {/* ✅ Boutons d'action — Principal uniquement */}
-                  {isPrincipal && (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => startEditPermissions(admin)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: isMobile ? "10px 12px" : "6px 12px",
-                          background: dark ? "#818CF8" : "#4F46E5",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          fontSize: isMobile ? 14 : 13,
-                        }}
-                      >
-                        <Edit2 size={isMobile ? 16 : 14} /> Permissions
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(admin)}
-                        disabled={deletingId === admin._id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: isMobile ? "10px 12px" : "6px 12px",
-                          background: "#EF4444",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                          cursor:
-                            deletingId === admin._id
-                              ? "not-allowed"
-                              : "pointer",
-                          opacity: deletingId === admin._id ? 0.7 : 1,
-                          fontSize: isMobile ? 14 : 13,
-                        }}
-                      >
-                        {deletingId === admin._id ? (
-                          <Loader size={14} className="gsa-spin" />
-                        ) : (
-                          <Trash2 size={isMobile ? 16 : 14} />
-                        )}
-                        Supprimer
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ marginTop: 8 }}>
-                  {(admin.permissions || []).map((perm) => {
-                    const permLabel =
-                      PERMISSIONS_LIST.find((p) => p.id === perm)?.label ||
-                      perm;
-                    return (
-                      <PermissionBadge
-                        key={perm}
-                        label={permLabel}
-                        dark={dark}
-                      />
-                    );
-                  })}
-                </div>
-
-                {/* ✅ Bloc édition — Principal uniquement */}
-                {editingId === admin._id && isPrincipal && (
-                  <div
-                    style={{
-                      marginTop: 16,
-                      borderTop: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                      paddingTop: 12,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontWeight: 500,
-                        marginBottom: 8,
-                        color: dark ? "#CBD5E1" : "#374151",
-                        fontSize: isMobile ? 15 : 14,
-                      }}
-                    >
-                      Modifier les permissions
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        marginBottom: 12,
-                        flexDirection: isMobile ? "column" : "row",
-                      }}
-                    >
-                      {PERMISSIONS_LIST.map((perm) => (
-                        <label
-                          key={perm.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            padding: isMobile ? "10px 12px" : "6px 10px",
-                            borderRadius: 6,
-                            background: editPermissions.includes(perm.id)
-                              ? dark
-                                ? "#312E81"
-                                : "#EEF2FF"
-                              : "transparent",
-                            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={editPermissions.includes(perm.id)}
-                            onChange={() => toggleEditPermission(perm.id)}
-                            style={{
-                              width: isMobile ? 18 : 14,
-                              height: isMobile ? 18 : 14,
-                              accentColor: dark ? "#818CF8" : "#4F46E5",
-                            }}
-                          />
-                          <span
-                            style={{
-                              fontSize: isMobile ? 14 : 12,
-                              color: dark ? "#F1F5F9" : "#1E293B",
-                            }}
-                          >
-                            {perm.label}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        flexDirection: isMobile ? "column" : "row",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSavePermissions(admin._id)}
-                        disabled={savingPermissions}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 6,
-                          padding: isMobile ? "12px 14px" : "8px 14px",
-                          background: "#10B981",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                          cursor: savingPermissions
-                            ? "not-allowed"
-                            : "pointer",
-                          fontSize: isMobile ? 14 : 13,
-                        }}
-                      >
-                        {savingPermissions ? (
-                          <Loader size={14} className="gsa-spin" />
-                        ) : (
-                          <Save size={14} />
-                        )}
-                        Enregistrer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEditPermissions}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 6,
-                          padding: isMobile ? "12px 14px" : "8px 14px",
-                          background: dark ? "#334155" : "#F1F5F9",
-                          color: dark ? "#F1F5F9" : "#1E293B",
-                          border: "none",
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          fontSize: isMobile ? 14 : 13,
-                        }}
-                      >
-                        <X size={14} /> Annuler
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 16,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={safeCurrentPage === 1}
-                style={{
-                  padding: isMobile ? "8px 12px" : "6px 10px",
-                  border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                  borderRadius: 6,
-                  background: "transparent",
-                  color:
-                    safeCurrentPage === 1
-                      ? "#94A3B8"
-                      : dark
-                      ? "#F1F5F9"
-                      : "#1E293B",
-                  cursor: "pointer",
-                }}
-                aria-label="Page précédente"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span
-                style={{
-                  fontSize: isMobile ? 14 : 13,
-                  color: dark ? "#94A3B8" : "#64748B",
-                }}
-              >
-                {safeCurrentPage} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={safeCurrentPage === totalPages}
-                style={{
-                  padding: isMobile ? "8px 12px" : "6px 10px",
-                  border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                  borderRadius: 6,
-                  background: "transparent",
-                  color:
-                    safeCurrentPage === totalPages
-                      ? "#94A3B8"
-                      : dark
-                      ? "#F1F5F9"
-                      : "#1E293B",
-                  cursor: "pointer",
-                }}
-                aria-label="Page suivante"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          )}
-        </>
-      )}
+        <p style={{ color: t.text.muted, fontSize: 14, marginTop: 0 }}>
+          Permissions à attribuer :
+        </p>
+        <PermissionsEditor
+          catalog={catalog}
+          permissions={demotePerms}
+          onChange={setDemotePerms}
+        />
+      </Modal>
 
       <ConfirmDialog {...dialogProps} />
     </div>
   );
 }
+
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANTS
+// ════════════════════════════════════════════════════════════════════
+
+function ContextBanner({ isOwner, isMobile, t }) {
+  const config = isOwner
+    ? {
+        icon: <Crown size={18} />,
+        bg: t.status?.warning?.bg ?? "#FEF3C7",
+        fg: t.status?.warning?.fg ?? "#92400E",
+        title: "Vous êtes propriétaire de la plateforme",
+        text: "Vous pouvez créer, modifier et supprimer les super admins secondaires, et promouvoir d'autres propriétaires.",
+      }
+    : {
+        icon: <Info size={18} />,
+        bg: t.status?.info?.bg ?? "#DBEAFE",
+        fg: t.status?.info?.fg ?? "#1E40AF",
+        title: "Vous êtes super admin secondaire",
+        text: "Vous pouvez consulter la liste, mais seuls les propriétaires peuvent créer ou modifier des super admins.",
+      };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 12,
+        alignItems: "flex-start",
+        padding: isMobile ? 12 : 14,
+        borderRadius: t.radius.md,
+        background: config.bg,
+        color: config.fg,
+        marginBottom: 24,
+        fontSize: 13.5,
+        lineHeight: 1.5,
+      }}
+    >
+      <div style={{ flexShrink: 0, marginTop: 1 }}>{config.icon}</div>
+      <div>
+        <div style={{ fontWeight: 700, marginBottom: 2 }}>{config.title}</div>
+        <div style={{ opacity: 0.9 }}>{config.text}</div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, subtitle, icon, color, action, children, t }) {
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: t.radius.sm,
+              background: `${color}20`,
+              color,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {icon}
+          </div>
+          <div>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 700,
+                color: t.text.primary,
+              }}
+            >
+              {title}
+            </h3>
+            <p
+              style={{
+                margin: "2px 0 0",
+                fontSize: 12.5,
+                color: t.text.muted,
+              }}
+            >
+              {subtitle}
+            </p>
+          </div>
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function OwnerCard({
+  owner,
+  isMe,
+  canManage,
+  canDemote,
+  onDemote,
+  t,
+  isMobile,
+}) {
+  return (
+    <div
+      style={{
+        background: t.surface.default,
+        border: `1px solid #F59E0B40`,
+        borderRadius: t.radius.md,
+        padding: 14,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: isMobile ? "stretch" : "center",
+        flexDirection: isMobile ? "column" : "row",
+        gap: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            background: "#F59E0B20",
+            color: "#F59E0B",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <Crown size={20} />
+        </div>
+        <div>
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: 15,
+              color: t.text.primary,
+            }}
+          >
+            {owner.nom}{" "}
+            {isMe && (
+              <span style={{ color: t.text.muted, fontWeight: 400 }}>
+                (vous)
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 13, color: t.text.muted }}>
+            @{owner.login}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <Badge variant="warning" size="sm">
+          Propriétaire
+        </Badge>
+        {canDemote && (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<ArrowDownCircle size={14} />}
+            onClick={() => onDemote(owner)}
+          >
+            Rétrograder
+          </Button>
+        )}
+        {isMe && !canManage && (
+          <span style={{ fontSize: 11, color: t.text.muted }}>
+            Dernier propriétaire
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminCard({
+  admin,
+  canManage,
+  isEditing,
+  editPerms,
+  editMode,
+  saving,
+  catalog,
+  onStartEdit,
+  onCancelEdit,
+  onEditPermsChange,
+  onSave,
+  onDelete,
+  onPromote,
+  onReactivate,
+  t,
+  isMobile,
+}) {
+  const isInactive = admin.isActive === false;
+
+  return (
+    <div
+      style={{
+        background: t.surface.default,
+        border: `1px solid ${isInactive ? "#EF444440" : t.border.default}`,
+        borderRadius: t.radius.md,
+        padding: 14,
+        opacity: isInactive ? 0.85 : 1,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: isMobile ? "stretch" : "flex-start",
+          flexDirection: isMobile ? "column" : "row",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              background: isInactive ? "#EF444420" : t.accent.primarySoft,
+              color: isInactive ? "#EF4444" : t.accent.primary,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {isInactive ? <UserX size={20} /> : <UserCheck size={20} />}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: t.text.primary,
+                }}
+              >
+                {admin.nom}
+              </span>
+              {isInactive && (
+                <Badge variant="danger" size="sm">
+                  Désactivé
+                </Badge>
+              )}
+            </div>
+            <div style={{ fontSize: 13, color: t.text.muted }}>
+              @{admin.login}
+            </div>
+            {/* Permissions (affichage compact) */}
+            {!isEditing && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 4,
+                  marginTop: 8,
+                }}
+              >
+                {(admin.permissions ?? []).length === 0 && !isInactive && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: t.text.muted,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    Aucune permission
+                  </span>
+                )}
+                {(admin.permissions ?? []).slice(0, 6).map((perm) => {
+                  const [mod, action] = perm.split(".");
+                  const moduleLabel = catalog?.modules?.[mod]?.label ?? mod;
+                  return (
+                    <span
+                      key={perm}
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: t.radius.full,
+                        background:
+                          action === "delete"
+                            ? "#EF444415"
+                            : action === "write"
+                            ? "#F59E0B15"
+                            : t.surface.hover,
+                        color:
+                          action === "delete"
+                            ? "#EF4444"
+                            : action === "write"
+                            ? "#F59E0B"
+                            : t.text.secondary,
+                        fontSize: 11,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {moduleLabel} · {action}
+                    </span>
+                  );
+                })}
+                {(admin.permissions ?? []).length > 6 && (
+                  <span
+                    style={{
+                      padding: "2px 8px",
+                      borderRadius: t.radius.full,
+                      background: t.surface.hover,
+                      color: t.text.muted,
+                      fontSize: 11,
+                      fontWeight: 500,
+                    }}
+                  >
+                    +{(admin.permissions ?? []).length - 6}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {canManage && !isEditing && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Edit2 size={14} />}
+              onClick={isInactive ? onReactivate : onStartEdit}
+            >
+              {isInactive ? "Réactiver" : "Permissions"}
+            </Button>
+            {!isInactive && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<ArrowUpCircle size={14} />}
+                onClick={onPromote}
+              >
+                Promouvoir
+              </Button>
+            )}
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<Trash2 size={14} />}
+              onClick={onDelete}
+            >
+              Supprimer
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Éditeur de permissions */}
+      {isEditing && canManage && (
+        <div
+          style={{
+            marginTop: 14,
+            paddingTop: 14,
+            borderTop: `1px solid ${t.border.default}`,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: t.text.muted,
+              marginBottom: 8,
+            }}
+          >
+            {editMode === "reactivate"
+              ? "Permissions à attribuer pour la réactivation"
+              : "Modifier les permissions granulaires"}
+          </div>
+
+          <PermissionsEditor
+            catalog={catalog}
+            permissions={editPerms}
+            onChange={onEditPermsChange}
+          />
+
+          {editPerms.length === 0 && (
+            <p
+              style={{
+                fontSize: 12,
+                color: "#EF4444",
+                marginTop: 8,
+                marginBottom: 0,
+              }}
+            >
+              ⚠️ Aucune permission → le compte sera désactivé automatiquement
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Button
+              variant="success"
+              size="sm"
+              icon={<Save size={14} />}
+              onClick={onSave}
+              loading={saving}
+            >
+              {editMode === "reactivate" ? "Réactiver" : "Enregistrer"}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onCancelEdit}>
+              Annuler
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ text, t }) {
+  return (
+    <div
+      style={{
+        padding: 32,
+        textAlign: "center",
+        borderRadius: t.radius.md,
+        background: t.surface.default,
+        border: `1px dashed ${t.border.default}`,
+        color: t.text.muted,
+        fontSize: 14,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+export default GestionSuperAdmins;

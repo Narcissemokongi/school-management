@@ -1,14 +1,38 @@
+// src/components/PendingUsersList.jsx
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { useStyles } from "@/styles/theme";
-import { useIsMobile } from "@/hooks/useIsMobile"; // <-- Import du hook
-import { UserCheck, UserX, Loader, X } from "lucide-react";
+import { useTokens } from "@/theme/tokens";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { UserCheck, UserX, Loader } from "lucide-react";
 import toast from "react-hot-toast";
+import { Button, Modal } from "@/components/ui";
 
-export function PendingUsersList({ pendingUsers, adminId }) {
-  const { S, dark } = useStyles();
-  const isMobile = useIsMobile(); // Détection mobile
+// ✅ KEYFRAMES module-level, préfixés `pu-*`
+const PendingUsersKeyframes = (
+  <style>{`
+    @keyframes pu-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .pu-spin { animation: pu-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .pu-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ✅ Helper d'extraction de message d'erreur sécurisé
+function getErrorMessage(err, fallback = "Une erreur est survenue") {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && err.message) return err.message;
+  return fallback;
+}
+
+export function PendingUsersList({ pendingUsers = [], adminId }) {
+  const t = useTokens();
+  const isMobile = useIsMobile();
   const approveUser = useMutation(api.users.approveUser);
   const rejectUser = useMutation(api.users.rejectUser);
 
@@ -17,13 +41,16 @@ export function PendingUsersList({ pendingUsers, adminId }) {
   const [showRejectPrompt, setShowRejectPrompt] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  // ────────────────────────────────────────────────────────────
+  // Handlers
+  // ────────────────────────────────────────────────────────────
   const handleApprove = async (userId) => {
     setProcessing(userId);
     try {
       await approveUser({ userId, adminId });
       toast.success("Utilisateur approuvé");
     } catch (err) {
-      toast.error(err.message);
+      toast.error(getErrorMessage(err));
     } finally {
       setProcessing(null);
     }
@@ -37,205 +64,228 @@ export function PendingUsersList({ pendingUsers, adminId }) {
   const handleReject = async (userId) => {
     setRejecting(userId);
     try {
-      await rejectUser({ userId, reason: rejectReason || undefined, adminId });
+      await rejectUser({
+        userId,
+        reason: rejectReason.trim() || undefined,
+        adminId,
+      });
       toast.success("Utilisateur rejeté");
       setShowRejectPrompt(null);
       setRejectReason("");
     } catch (err) {
-      toast.error(err.message);
+      toast.error(getErrorMessage(err));
     } finally {
       setRejecting(null);
     }
   };
 
+  const closeRejectPrompt = () => {
+    if (rejecting) return; // ✅ Pas de fermeture pendant l'action
+    setShowRejectPrompt(null);
+    setRejectReason("");
+  };
+
+  // ────────────────────────────────────────────────────────────
+  // État vide
+  // ────────────────────────────────────────────────────────────
   if (pendingUsers.length === 0) {
     return (
-      <div style={{ textAlign: "center", padding: isMobile ? 32 : 48, color: dark ? "#94A3B8" : "#64748B" }}>
-        <UserCheck size={isMobile ? 40 : 48} color="#10B981" />
-        <p style={{ marginTop: 12, fontSize: isMobile ? 15 : 16 }}>Aucune demande en attente.</p>
-      </div>
-    );
-  }
-
-  // Styles adaptatifs
-  const cardPadding = isMobile ? "12px 14px" : 16;
-  const cardFlexDirection = isMobile ? "column" : "row";
-  const cardAlignItems = isMobile ? "stretch" : "center";
-  const buttonPadding = isMobile ? "10px 14px" : "6px 12px";
-  const buttonFontSize = isMobile ? 14 : 13;
-  const actionsGap = isMobile ? 8 : 8;
-  const actionsJustify = isMobile ? "flex-end" : "flex-end";
-  const modalMaxWidth = isMobile ? "92%" : 400;
-  const modalPadding = isMobile ? 18 : 24;
-  const textareaFontSize = isMobile ? 16 : 14; // 16px pour éviter le zoom iOS
-
-  return (
-    <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
-      {pendingUsers.map((u) => (
-        <div
-          key={u._id}
-          style={{
-            background: dark ? "#1E293B" : "#FFFFFF",
-            borderRadius: 12,
-            padding: cardPadding,
-            display: "flex",
-            flexDirection: cardFlexDirection,
-            justifyContent: "space-between",
-            alignItems: cardAlignItems,
-            gap: isMobile ? 8 : 0,
-            boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
-            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-            transition: "background-color 0.3s, border-color 0.3s",
-          }}
-        >
-          <div style={{ flex: isMobile ? "none" : 1, minWidth: isMobile ? "100%" : 0 }}>
-            <div style={{ fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", fontSize: isMobile ? 16 : 14 }}>
-              {u.nom}
-            </div>
-            <div style={{ fontSize: isMobile ? 13 : 13, color: dark ? "#94A3B8" : "#64748B", marginTop: 2 }}>
-              @{u.login} · {u.role}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: actionsGap, justifyContent: actionsJustify }}>
-            <button
-              onClick={() => handleApprove(u._id)}
-              disabled={processing === u._id || rejecting === u._id}
-              style={{
-                background: "#10B981",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                padding: buttonPadding,
-                cursor: processing === u._id ? "wait" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 4,
-                opacity: processing === u._id || rejecting === u._id ? 0.7 : 1,
-                fontSize: buttonFontSize,
-                flex: isMobile ? 1 : "none",
-              }}
-            >
-              {processing === u._id ? <Loader size={16} className="animate-spin" /> : <UserCheck size={isMobile ? 18 : 16} />}
-              {processing === u._id ? "..." : "Approuver"}
-            </button>
-            <button
-              onClick={() => openRejectPrompt(u._id)}
-              disabled={processing === u._id || rejecting === u._id}
-              style={{
-                background: "#EF4444",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                padding: buttonPadding,
-                cursor: processing === u._id || rejecting === u._id ? "wait" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 4,
-                opacity: processing === u._id || rejecting === u._id ? 0.7 : 1,
-                fontSize: buttonFontSize,
-                flex: isMobile ? 1 : "none",
-              }}
-            >
-              <UserX size={isMobile ? 18 : 16} />
-              Rejeter
-            </button>
-          </div>
-        </div>
-      ))}
-
-      {/* Modale de motif de rejet */}
-      {showRejectPrompt && (
+      <>
+        {PendingUsersKeyframes}
         <div
           style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            backdropFilter: "blur(4px)",
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: isMobile ? 12 : 16,
+            gap: 12,
+            padding: isMobile ? 32 : 48,
+            textAlign: "center",
           }}
-          onClick={() => setShowRejectPrompt(null)}
         >
           <div
             style={{
-              background: dark ? "#1E293B" : "#FFFFFF",
-              borderRadius: 16,
-              padding: modalPadding,
-              maxWidth: modalMaxWidth,
-              width: "100%",
-              boxShadow: dark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)",
-              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+              width: 64,
+              height: 64,
+              borderRadius: "50%",
+              background: t.status.success.bg,
+              color: t.status.success.fg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-            onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: "0 0 16px", fontSize: isMobile ? 18 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B" }}>
-              Motif du rejet
-            </h3>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Raison facultative..."
-              rows={isMobile ? 4 : 3}
+            <UserCheck size={isMobile ? 28 : 32} />
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: isMobile ? 15 : 16,
+              color: t.text.muted,
+            }}
+          >
+            Aucune demande en attente.
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Rendu
+  // ────────────────────────────────────────────────────────────
+  const isBusy = (id) => processing === id || rejecting === id;
+
+  return (
+    <>
+      {PendingUsersKeyframes}
+
+      <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
+        {pendingUsers.map((u) => (
+          <div
+            key={u._id}
+            style={{
+              background: t.surface.default,
+              borderRadius: t.radius.md,
+              padding: isMobile ? 14 : 16,
+              display: "flex",
+              flexDirection: isMobile ? "column" : "row",
+              justifyContent: "space-between",
+              alignItems: isMobile ? "stretch" : "center",
+              gap: 12,
+              boxShadow: t.shadow.sm,
+              border: `1px solid ${t.border.default}`,
+            }}
+          >
+            {/* Infos utilisateur */}
+            <div style={{ flex: isMobile ? "none" : 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontWeight: 600,
+                  color: t.text.primary,
+                  fontSize: isMobile ? 15 : 14,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {u.nom}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: t.text.muted,
+                  marginTop: 2,
+                  textTransform: "capitalize",
+                }}
+              >
+                @{u.login} · {u.role}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div
               style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                borderRadius: 8,
-                background: dark ? "#0F172A" : "#F9FAFB",
-                color: dark ? "#F1F5F9" : "#1E293B",
-                fontSize: textareaFontSize,
-                resize: "vertical",
-                outline: "none",
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                flexDirection: isMobile ? "row" : "row",
               }}
-            />
-            <div style={{ display: "flex", gap: 8, marginTop: 16, flexDirection: isMobile ? "column" : "row" }}>
-              <button
-                onClick={() => handleReject(showRejectPrompt)}
-                disabled={rejecting === showRejectPrompt}
-                style={{
-                  flex: isMobile ? "none" : 1,
-                  padding: isMobile ? "12px 0" : "10px 0",
-                  background: "#EF4444",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontSize: isMobile ? 16 : 14,
-                }}
+            >
+              <Button
+                variant="success"
+                size={isMobile ? "md" : "sm"}
+                icon={
+                  processing === u._id ? (
+                    <Loader size={14} className="pu-spin" />
+                  ) : (
+                    <UserCheck size={14} />
+                  )
+                }
+                onClick={() => handleApprove(u._id)}
+                disabled={isBusy(u._id)}
+                style={{ flex: isMobile ? 1 : "none" }}
               >
-                {rejecting === showRejectPrompt ? <Loader size={16} className="animate-spin" /> : "Confirmer le rejet"}
-              </button>
-              <button
-                onClick={() => setShowRejectPrompt(null)}
-                style={{
-                  flex: isMobile ? "none" : 1,
-                  padding: isMobile ? "12px 0" : "10px 0",
-                  background: dark ? "#334155" : "#F1F5F9",
-                  color: dark ? "#F1F5F9" : "#1E293B",
-                  border: "none",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontSize: isMobile ? 16 : 14,
-                }}
+                {processing === u._id ? "Traitement…" : "Approuver"}
+              </Button>
+              <Button
+                variant="danger"
+                size={isMobile ? "md" : "sm"}
+                icon={<UserX size={14} />}
+                onClick={() => openRejectPrompt(u._id)}
+                disabled={isBusy(u._id)}
+                style={{ flex: isMobile ? 1 : "none" }}
               >
-                Annuler
-              </button>
+                Rejeter
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
-    </div>
+      {/* ═══════════ MODAL REJET ═══════════ */}
+      <Modal
+        open={showRejectPrompt !== null}
+        onClose={closeRejectPrompt}
+        title="Motif du rejet"
+        maxWidth={420}
+        closeOnOverlay={!rejecting}
+        closeOnEscape={!rejecting}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={closeRejectPrompt}
+              disabled={!!rejecting}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => handleReject(showRejectPrompt)}
+              loading={!!rejecting}
+            >
+              Confirmer le rejet
+            </Button>
+          </>
+        }
+      >
+        <label
+          htmlFor="reject-reason"
+          style={{
+            display: "block",
+            fontSize: 12,
+            fontWeight: 600,
+            color: t.text.muted,
+            marginBottom: 6,
+            textTransform: "uppercase",
+            letterSpacing: 0.3,
+          }}
+        >
+          Raison (facultatif)
+        </label>
+        <textarea
+          id="reject-reason"
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          placeholder="Ex : informations incomplètes…"
+          rows={isMobile ? 4 : 3}
+          disabled={!!rejecting}
+          aria-label="Raison du rejet"
+          style={{
+            width: "100%",
+            padding: "10px 14px",
+            border: `1px solid ${t.border.default}`,
+            borderRadius: t.radius.sm,
+            background: t.surface.input,
+            color: t.text.primary,
+            fontSize: isMobile ? 16 : 14, // 16px pour éviter le zoom iOS
+            fontFamily: t.font.family,
+            resize: "vertical",
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+        />
+      </Modal>
+    </>
   );
 }

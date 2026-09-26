@@ -8,32 +8,29 @@ import {
 import { PendingUserCard } from "./PendingUserCard";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { useConfirm } from "@/hooks/useConfirm";
-import toast from "react-hot-toast";
-import { api } from "@convex/_generated/api";
-import { useStyles } from "@/styles/theme";
+import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { Button, IconButton } from "@/components/ui";
+import { runInBatches } from "@/utils/runInBatches";  // ✅ Import au lieu de dupliquer
+import { api } from "@convex/_generated/api";
+import toast from "react-hot-toast";
 
-// ════════════════════════════════════════════════════════════════════
-// CONSTANTES MODULE-LEVEL
-// ════════════════════════════════════════════════════════════════════
 const PAGE_SIZE = 5;
 
-// 🟢 Helper batch (5×5) pour éviter rate-limit
-const runInBatches = async (items, fn, size = 5) => {
-  for (let i = 0; i < items.length; i += size) {
-    await Promise.all(items.slice(i, i + size).map(fn));
-  }
-};
-
-// 🟢 Keyframes module-level (injectés UNE SEULE FOIS)
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES (module-level, préfixés `pt-*`)
+// ════════════════════════════════════════════════════════════════════
 const PendingTabKeyframes = (
   <style>{`
-    @keyframes pt-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .pt-spin { animation: pt-spin 1s linear infinite; }
+    @keyframes pt-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
     @keyframes pt-fade-in {
       from { opacity: 0; transform: translateY(10px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    .pt-spin { animation: pt-spin 1s linear infinite; }
     .pt-fade-in { animation: pt-fade-in 0.3s ease; }
     @media (prefers-reduced-motion: reduce) {
       .pt-spin, .pt-fade-in { animation: none !important; }
@@ -42,65 +39,67 @@ const PendingTabKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANT : Barre de recherche
+// Sous-composants (extraits et plus lisibles)
 // ════════════════════════════════════════════════════════════════════
-const SearchInput = ({ value, onChange, dark, isMobile }) => (
-  <div
-    style={{
-      position: "relative",
-      flex: 1,
-      minWidth: isMobile ? "100%" : 200,
-    }}
-  >
-    <Search
-      size={18}
-      style={{
-        position: "absolute",
-        left: 10,
-        top: "50%",
-        transform: "translateY(-50%)",
-        color: dark ? "#94A3B8" : "#64748B",
-      }}
-    />
-    <input
-      type="text"
-      placeholder="Rechercher par nom ou login..."
-      value={value}
-      onChange={onChange}
-      style={{
-        width: "100%",
-        padding: isMobile ? "12px 14px 12px 36px" : "10px 12px 10px 34px",
-        borderRadius: 8,
-        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-        background: dark ? "#1E293B" : "#FFFFFF",
-        color: dark ? "#F1F5F9" : "#1E293B",
-        fontSize: isMobile ? 16 : 14,
-        outline: "none",
-        boxSizing: "border-box",
-      }}
-      aria-label="Rechercher par nom ou login"
-    />
-  </div>
-);
 
-// ════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANT : Bouton de tri
-// ════════════════════════════════════════════════════════════════════
-const SortButton = ({
-  label,
-  field,
-  currentSort,
-  currentOrder,
-  onClick,
-  dark,
-  isMobile,
-}) => {
+function SearchInput({ value, onChange }) {
+  const t = useTokens();
+  const isMobile = useIsMobile();
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        flex: 1,
+        minWidth: isMobile ? "100%" : 200,
+      }}
+    >
+      <Search
+        size={18}
+        style={{
+          position: "absolute",
+          left: 10,
+          top: "50%",
+          transform: "translateY(-50%)",
+          color: t.text.muted,
+          pointerEvents: "none",
+        }}
+        aria-hidden="true"
+      />
+      <input
+        type="search"
+        placeholder="Rechercher par nom ou login…"
+        value={value}
+        onChange={onChange}
+        style={{
+          width: "100%",
+          padding: isMobile ? "12px 14px 12px 36px" : "10px 12px 10px 34px",
+          borderRadius: t.radius.sm,
+          border: `1px solid ${t.border.default}`,
+          background: t.surface.default,
+          color: t.text.primary,
+          fontSize: isMobile ? 16 : 14,
+          fontFamily: t.font.family,
+          outline: "none",
+          boxSizing: "border-box",
+        }}
+        aria-label="Rechercher par nom ou login"
+      />
+    </div>
+  );
+}
+
+function SortButton({ label, field, currentSort, currentOrder, onClick }) {
+  const t = useTokens();
+  const isMobile = useIsMobile();
   const isActive = currentSort === field;
+
   const Icon = isActive
     ? currentOrder === "asc"
       ? ArrowUp
       : ArrowDown
     : ArrowUpDown;
+
   return (
     <button
       type="button"
@@ -113,84 +112,68 @@ const SortButton = ({
         justifyContent: "center",
         gap: 4,
         padding: isMobile ? "8px 10px" : "6px 10px",
-        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-        borderRadius: 6,
-        background: isActive ? (dark ? "#1E293B" : "#EEF2FF") : "transparent",
-        color: isActive
-          ? dark
-            ? "#A5B4FC"
-            : "#4F46E5"
-          : dark
-          ? "#94A3B8"
-          : "#64748B",
+        border: `1px solid ${t.border.default}`,
+        borderRadius: t.radius.sm,
+        background: isActive ? t.accent.primarySoft : "transparent",
+        color: isActive ? t.accent.primary : t.text.muted,
         cursor: "pointer",
         fontSize: 13,
         fontWeight: isActive ? 600 : 400,
+        fontFamily: t.font.family,
         flex: isMobile ? 1 : "none",
+        outline: "none",
       }}
     >
       {label}
       <Icon size={14} />
     </button>
   );
-};
+}
 
-// ════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANT : Pagination
-// ════════════════════════════════════════════════════════════════════
-const Pagination = ({ currentPage, totalPages, onPageChange, dark, isMobile }) => (
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      gap: 8,
-      marginTop: 16,
-    }}
-  >
-    <button
-      type="button"
-      onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-      disabled={currentPage === 1}
-      aria-label="Page précédente"
+function Pagination({ currentPage, totalPages, onPageChange }) {
+  const t = useTokens();
+  const isMobile = useIsMobile();
+
+  return (
+    <div
       style={{
-        padding: isMobile ? "8px 12px" : "6px 10px",
-        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-        borderRadius: 6,
-        background: "transparent",
-        color: currentPage === 1 ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B",
-        cursor: currentPage === 1 ? "not-allowed" : "pointer",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 8,
+        marginTop: 16,
       }}
     >
-      <ChevronLeft size={16} />
-    </button>
-    <span
-      style={{
-        fontSize: isMobile ? 14 : 13,
-        color: dark ? "#94A3B8" : "#64748B",
-      }}
-    >
-      Page {currentPage} / {totalPages}
-    </span>
-    <button
-      type="button"
-      onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-      disabled={currentPage === totalPages}
-      aria-label="Page suivante"
-      style={{
-        padding: isMobile ? "8px 12px" : "6px 10px",
-        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-        borderRadius: 6,
-        background: "transparent",
-        color:
-          currentPage === totalPages ? "#94A3B8" : dark ? "#F1F5F9" : "#1E293B",
-        cursor: currentPage === totalPages ? "not-allowed" : "pointer",
-      }}
-    >
-      <ChevronRight size={16} />
-    </button>
-  </div>
-);
+      <IconButton
+        icon={<ChevronLeft size={16} />}
+        label="Page précédente"
+        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+        disabled={currentPage === 1}
+        variant="outline"
+        size={isMobile ? "lg" : "md"}
+      />
+      <span
+        style={{
+          fontSize: isMobile ? 14 : 13,
+          color: t.text.muted,
+          fontVariantNumeric: "tabular-nums",
+          minWidth: 80,
+          textAlign: "center",
+        }}
+      >
+        {currentPage} / {totalPages}
+      </span>
+      <IconButton
+        icon={<ChevronRight size={16} />}
+        label="Page suivante"
+        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+        disabled={currentPage === totalPages}
+        variant="outline"
+        size={isMobile ? "lg" : "md"}
+      />
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
@@ -198,13 +181,12 @@ const Pagination = ({ currentPage, totalPages, onPageChange, dark, isMobile }) =
 export function PendingTab({
   pendingUsers,
   user,
-  // 🔴 FIX : accepte les props de filtres du parent (Zustand store)
   searchTerm: searchTermProp,
   setSearchTerm: setSearchTermProp,
   filterRole: filterRoleProp,
   setFilterRole: setFilterRoleProp,
 }) {
-  const { dark } = useStyles();
+  const t = useTokens();
   const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
@@ -213,7 +195,7 @@ export function PendingTab({
   const approveUser = useMutation(api.users.approveUser);
   const rejectUser = useMutation(api.users.rejectUser);
 
-  // ✅ Filtres : props si fournies, sinon fallback état local
+  // Filtres : props si fournies, sinon fallback local
   const [localSearchTerm, setLocalSearchTerm] = useState("");
   const [localFilterRole, setLocalFilterRole] = useState("all");
   const searchTerm = searchTermProp ?? localSearchTerm;
@@ -229,9 +211,9 @@ export function PendingTab({
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   // Filtrage + tri
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   const filteredUsers = useMemo(() => {
     let result = pendingUsers ?? [];
 
@@ -251,16 +233,12 @@ export function PendingTab({
       if (sortBy === "nom") {
         const an = a.nom ?? "";
         const bn = b.nom ?? "";
-        return sortOrder === "asc"
-          ? an.localeCompare(bn)
-          : bn.localeCompare(an);
+        return sortOrder === "asc" ? an.localeCompare(bn) : bn.localeCompare(an);
       }
       if (sortBy === "role") {
         const ar = a.role ?? "";
         const br = b.role ?? "";
-        return sortOrder === "asc"
-          ? ar.localeCompare(br)
-          : br.localeCompare(ar);
+        return sortOrder === "asc" ? ar.localeCompare(br) : br.localeCompare(ar);
       }
       if (sortBy === "date") {
         const aTime = a._creationTime || 0;
@@ -273,6 +251,7 @@ export function PendingTab({
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
+
   const paginatedUsers = useMemo(
     () =>
       filteredUsers.slice(
@@ -283,20 +262,21 @@ export function PendingTab({
   );
 
   const rolesDisponibles = useMemo(() => {
-    const roles = new Set((pendingUsers ?? []).map((u) => u.role).filter(Boolean));
+    const roles = new Set(
+      (pendingUsers ?? []).map((u) => u.role).filter(Boolean)
+    );
     return Array.from(roles).sort();
   }, [pendingUsers]);
 
-  // ✅ FIX — reset page ET sélection quand filtres/recherche changent
-  // Sinon, des items cachés restent sélectionnés → bulk actions invisibles.
+  // Reset page + sélection quand filtres changent
   useEffect(() => {
     setCurrentPage(1);
     setSelectedIds(new Set());
   }, [deferredSearchTerm, filterRole]);
 
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   // Handlers unitaires
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   const handleApprove = useCallback(
     async (targetUserId) => {
       if (!userId) {
@@ -347,9 +327,9 @@ export function PendingTab({
     [userId, rejectUser]
   );
 
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   // Sélection
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   const allPageSelected = useMemo(
     () =>
       paginatedUsers.length > 0 &&
@@ -357,7 +337,6 @@ export function PendingTab({
     [paginatedUsers, selectedIds]
   );
 
-  // ✅ FIX — toggle page-par-page : n'affecte QUE les items de la page courante
   const toggleSelectAll = useCallback(() => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -379,9 +358,9 @@ export function PendingTab({
     });
   }, []);
 
-  // ════════════════════════════════════════════════════════════════
-  // Bulk : approve
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
+  // Bulk actions
+  // ────────────────────────────────────────────────────────────
   const bulkApprove = useCallback(async () => {
     if (!userId) {
       toast.error("Session invalide.");
@@ -391,30 +370,22 @@ export function PendingTab({
     if (ids.length === 0) return;
 
     setBulkProcessing(true);
-    let success = 0;
-    let failed = 0;
-
     try {
-      await runInBatches(ids, async (id) => {
-        try {
-          await approveUser({ userId: id, adminId: userId });
-          success++;
-        } catch {
-          failed++;
-        }
-      });
+      const res = await runInBatches(
+        ids,
+        (id) => approveUser({ userId: id, adminId: userId }),
+        5
+      );
 
-      if (success > 0) toast.success(`${success} utilisateur(s) approuvé(s)`);
-      if (failed > 0) toast.error(`${failed} échec(s)`);
+      if (res.success > 0)
+        toast.success(`${res.success} utilisateur(s) approuvé(s)`);
+      if (res.failed > 0) toast.error(`${res.failed} échec(s)`);
       setSelectedIds(new Set());
     } finally {
       setBulkProcessing(false);
     }
   }, [selectedIds, approveUser, userId]);
 
-  // ════════════════════════════════════════════════════════════════
-  // Bulk : reject
-  // ════════════════════════════════════════════════════════════════
   const bulkReject = useCallback(async () => {
     if (!userId) {
       toast.error("Session invalide.");
@@ -430,34 +401,30 @@ export function PendingTab({
     if (!ok) return;
 
     setBulkProcessing(true);
-    let success = 0;
-    let failed = 0;
-
     try {
-      await runInBatches(ids, async (id) => {
-        try {
-          await rejectUser({
+      const res = await runInBatches(
+        ids,
+        (id) =>
+          rejectUser({
             userId: id,
             reason: "Rejet groupé",
             adminId: userId,
-          });
-          success++;
-        } catch {
-          failed++;
-        }
-      });
+          }),
+        5
+      );
 
-      if (success > 0) toast.success(`${success} utilisateur(s) rejeté(s)`);
-      if (failed > 0) toast.error(`${failed} échec(s)`);
+      if (res.success > 0)
+        toast.success(`${res.success} utilisateur(s) rejeté(s)`);
+      if (res.failed > 0) toast.error(`${res.failed} échec(s)`);
       setSelectedIds(new Set());
     } finally {
       setBulkProcessing(false);
     }
   }, [selectedIds, rejectUser, userId, confirm]);
 
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   // Tri
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   const handleSort = useCallback(
     (field) => {
       if (sortBy === field) {
@@ -470,29 +437,48 @@ export function PendingTab({
     [sortBy]
   );
 
-  // ════════════════════════════════════════════════════════════════
-  // ÉTAT VIDE (avant tout retour conditionnel — les hooks sont passés)
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
+  // ÉTAT VIDE
+  // ────────────────────────────────────────────────────────────
   if ((pendingUsers ?? []).length === 0) {
     return (
       <>
         {PendingTabKeyframes}
         <div
           style={{
-            textAlign: "center",
-            padding: isMobile ? 32 : 48,
-            color: dark ? "#94A3B8" : "#64748B",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             gap: 12,
+            padding: isMobile ? 32 : 48,
+            textAlign: "center",
           }}
         >
-          <Inbox size={isMobile ? 40 : 48} color="#10B981" />
-          <p style={{ fontSize: isMobile ? 15 : 16, margin: 0 }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: "50%",
+              background: t.status.success.bg,
+              color: t.status.success.fg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Inbox size={isMobile ? 28 : 32} />
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: isMobile ? 15 : 16,
+              fontWeight: 600,
+              color: t.text.primary,
+            }}
+          >
             Aucune demande en attente
           </p>
-          <p style={{ fontSize: isMobile ? 13 : 14, margin: 0 }}>
+          <p style={{ margin: 0, fontSize: isMobile ? 13 : 14, color: t.text.muted }}>
             Toutes les demandes ont été traitées.
           </p>
         </div>
@@ -500,14 +486,14 @@ export function PendingTab({
     );
   }
 
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   // RENDU
-  // ════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────
   return (
     <div>
       {PendingTabKeyframes}
 
-      {/* Barre d'outils */}
+      {/* ═══ Barre d'outils ═══ */}
       <div
         style={{
           display: "flex",
@@ -521,8 +507,6 @@ export function PendingTab({
         <SearchInput
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          dark={dark}
-          isMobile={isMobile}
         />
 
         <select
@@ -530,13 +514,15 @@ export function PendingTab({
           onChange={(e) => setFilterRole(e.target.value)}
           style={{
             padding: isMobile ? "12px 14px" : "8px 12px",
-            borderRadius: 8,
-            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-            background: dark ? "#1E293B" : "#FFFFFF",
-            color: dark ? "#F1F5F9" : "#1E293B",
+            borderRadius: t.radius.sm,
+            border: `1px solid ${t.border.default}`,
+            background: t.surface.default,
+            color: t.text.primary,
             fontSize: isMobile ? 16 : 14,
+            fontFamily: t.font.family,
             cursor: "pointer",
             width: isMobile ? "100%" : "auto",
+            outline: "none",
           }}
           aria-label="Filtrer par rôle"
         >
@@ -562,8 +548,6 @@ export function PendingTab({
             currentSort={sortBy}
             currentOrder={sortOrder}
             onClick={handleSort}
-            dark={dark}
-            isMobile={isMobile}
           />
           <SortButton
             label="Rôle"
@@ -571,8 +555,6 @@ export function PendingTab({
             currentSort={sortBy}
             currentOrder={sortOrder}
             onClick={handleSort}
-            dark={dark}
-            isMobile={isMobile}
           />
           <SortButton
             label="Date"
@@ -580,8 +562,6 @@ export function PendingTab({
             currentSort={sortBy}
             currentOrder={sortOrder}
             onClick={handleSort}
-            dark={dark}
-            isMobile={isMobile}
           />
         </div>
 
@@ -595,113 +575,78 @@ export function PendingTab({
             width: isMobile ? "100%" : "auto",
           }}
         >
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={
+              allPageSelected ? <CheckSquare size={14} /> : <Square size={14} />
+            }
             onClick={toggleSelectAll}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              padding: isMobile ? "10px 12px" : "6px 10px",
-              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-              borderRadius: 6,
-              background: "transparent",
-              color: dark ? "#F1F5F9" : "#1E293B",
-              cursor: "pointer",
-              fontSize: isMobile ? 14 : 13,
-              width: isMobile ? "100%" : "auto",
-            }}
-            aria-label={allPageSelected ? "Tout désélectionner" : "Tout sélectionner"}
+            fullWidth={isMobile}
           >
-            {allPageSelected ? (
-              <CheckSquare size={16} />
-            ) : (
-              <Square size={16} />
-            )}
             Tout
-          </button>
+          </Button>
 
           {selectedIds.size > 0 && (
             <>
-              <button
-                type="button"
+              <Button
+                variant="success"
+                size="sm"
+                icon={
+                  bulkProcessing ? (
+                    <Loader size={14} className="pt-spin" />
+                  ) : (
+                    <UserCheck size={14} />
+                  )
+                }
                 onClick={bulkApprove}
                 disabled={bulkProcessing}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  padding: isMobile ? "10px 12px" : "6px 12px",
-                  background: "#10B981",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  cursor: bulkProcessing ? "not-allowed" : "pointer",
-                  fontSize: isMobile ? 14 : 13,
-                  width: isMobile ? "100%" : "auto",
-                  opacity: bulkProcessing ? 0.7 : 1,
-                }}
+                fullWidth={isMobile}
               >
-                {bulkProcessing ? (
-                  <Loader size={14} className="pt-spin" />
-                ) : (
-                  <UserCheck size={14} />
-                )}
                 Approuver ({selectedIds.size})
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                icon={
+                  bulkProcessing ? (
+                    <Loader size={14} className="pt-spin" />
+                  ) : (
+                    <UserX size={14} />
+                  )
+                }
                 onClick={bulkReject}
                 disabled={bulkProcessing}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  padding: isMobile ? "10px 12px" : "6px 12px",
-                  background: "#EF4444",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  cursor: bulkProcessing ? "not-allowed" : "pointer",
-                  fontSize: isMobile ? 14 : 13,
-                  width: isMobile ? "100%" : "auto",
-                  opacity: bulkProcessing ? 0.7 : 1,
-                }}
+                fullWidth={isMobile}
               >
-                {bulkProcessing ? (
-                  <Loader size={14} className="pt-spin" />
-                ) : (
-                  <UserX size={14} />
-                )}
                 Rejeter ({selectedIds.size})
-              </button>
+              </Button>
             </>
           )}
         </div>
       </div>
 
-      {/* Résumé */}
+      {/* ═══ Résumé ═══ */}
       <div
         style={{
           marginBottom: 12,
           fontSize: 13,
-          color: dark ? "#94A3B8" : "#64748B",
+          color: t.text.muted,
         }}
+        aria-live="polite"
       >
         {filteredUsers.length} demande(s) affichée(s)
         {selectedIds.size > 0 && ` · ${selectedIds.size} sélectionnée(s)`}
       </div>
 
-      {/* Liste */}
+      {/* ═══ Liste ═══ */}
       {filteredUsers.length === 0 ? (
         <div
           style={{
+            padding: 32,
             textAlign: "center",
-            padding: 24,
-            color: dark ? "#94A3B8" : "#64748B",
+            color: t.text.muted,
+            fontSize: 14,
           }}
         >
           Aucune demande ne correspond aux critères.
@@ -723,14 +668,12 @@ export function PendingTab({
         </div>
       )}
 
-      {/* Pagination */}
+      {/* ═══ Pagination ═══ */}
       {totalPages > 1 && (
         <Pagination
           currentPage={safeCurrentPage}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
-          dark={dark}
-          isMobile={isMobile}
         />
       )}
 
