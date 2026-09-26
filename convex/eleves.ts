@@ -253,9 +253,35 @@ export const getByUserId = query({
  * `get` — inchangé.
  */
 export const get = query({
-  args: { id: v.id("eleves") },
+  args: {
+    id: v.id("eleves"),
+    userId: v.optional(v.id("users")), // ✅ FIX SÉCURITÉ : ajout auth (était sans aucune vérif)
+  },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    if (args.userId) {
+      const caller = await ctx.db.get(args.userId);
+      if (!caller) throw new Error("Authentification requise");
+
+      const eleve = await ctx.db.get(args.id);
+      if (!eleve) return null;
+
+      // Un parent peut voir ses propres enfants, le staff son école, superAdmin tout
+      if (!isSuperAdmin(caller)) {
+        const isParent = (eleve as any).parentId === args.userId;
+        const isStaff =
+          caller.ecoleId === (eleve as any).ecoleId &&
+          ["admin", "directeur", "disciplinaire", "enseignant", "comptable"].includes(caller.role);
+        if (!isParent && !isStaff) {
+          throw new Error("Accès refusé : vous ne pouvez pas consulter cet élève.");
+        }
+      }
+      return eleve;
+    }
+    // Sans userId : retourner uniquement des données non-sensibles
+    const eleve = await ctx.db.get(args.id);
+    if (!eleve) return null;
+    // ✅ Retourner uniquement nom/code (pour les lookups par matricule publics)
+    return { _id: eleve._id, nom: eleve.nom, postnom: eleve.postnom, code: eleve.code };
   },
 });
 
@@ -522,6 +548,10 @@ export const importEleves = mutation({
 
     if (args.eleves.length === 0) {
       throw new Error("Aucun élève à importer.");
+    }
+    // ✅ FIX SÉCURITÉ E9 : limite anti-DoS (max 500 élèves par import)
+    if (args.eleves.length > 500) {
+      throw new Error("Maximum 500 élèves par import. Découpez votre fichier en plusieurs parties.");
     }
 
     let inserted = 0;

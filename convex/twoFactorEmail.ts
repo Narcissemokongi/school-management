@@ -36,6 +36,21 @@ function generateCode(): string {
 }
 
 /**
+ * ✅ FIX SÉCURITÉ M8 : comparaison en temps constant pour éviter les timing attacks.
+ * String comparison !== est vulnérable aux attaques par mesure de timing.
+ * Avec un rate limit de 5 tentatives, le risque pratique est faible,
+ * mais la bonne pratique s'impose pour les codes de sécurité.
+ */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+/**
  * 🔴 FIX : helper pour vérifier que l'appelant agit sur son propre compte,
  * OU qu'il est admin/superAdmin.
  */
@@ -203,7 +218,8 @@ export const verifyAndEnableEmail = mutation({
       throw new Error("Trop de tentatives, veuillez recommencer.");
     }
 
-    if (record.code !== args.code.trim()) {
+    // ✅ FIX M8 : comparaison en temps constant
+    if (!safeEqual(record.code ?? "", args.code.trim())) {
       await ctx.db.patch(record._id, { attempts: record.attempts + 1 });
       throw new Error("Code invalide.");
     }
@@ -342,7 +358,8 @@ export const verifyLoginCode = mutation({
       );
     }
 
-    if (record.code !== args.code.trim()) {
+    // ✅ FIX M8 : comparaison en temps constant
+    if (!safeEqual(record.code ?? "", args.code.trim())) {
       await ctx.db.patch(record._id, { attempts: record.attempts + 1 });
       throw new Error("Code invalide.");
     }

@@ -145,14 +145,35 @@ export const createParentLinkRequest = mutation({
 });
 
 export const listByParent = query({
-  args: { parentId: v.id("users") },
+  // ✅ FIX SÉCURITÉ C7 : ajout callerId — tout le monde pouvait voir les
+  // demandes de lien parent/enfant de n'importe quel parent
+  args: {
+    parentId: v.id("users"),
+    callerId: v.id("users"),
+  },
   handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.callerId);
+    if (!caller) throw new Error("Authentification requise");
+
+    const isSuperAdmin =
+      caller.role === "superAdmin" ||
+      (caller.role === "admin" && !caller.ecoleId);
+
+    const isAdminEcole =
+      !!caller.ecoleId &&
+      (caller.role === "admin" || caller.role === "directeur");
+
+    // Seuls le parent lui-même, un admin de son école ou un superAdmin peuvent voir
+    const isSelf = args.callerId === args.parentId;
+    if (!isSelf && !isSuperAdmin && !isAdminEcole) {
+      throw new Error("Accès refusé : vous ne pouvez consulter que vos propres demandes.");
+    }
+
     const requests = await ctx.db
       .query("parentLinkRequests")
       .withIndex("by_parentId", (q) => q.eq("parentId", args.parentId))
       .take(200);
 
-    // Tri par date desc (fix #8)
     return requests.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 });
@@ -392,13 +413,17 @@ export const unlinkParent = mutation({
 // ════════════════════════════════════════════════════════════════════
 
 export const backfillParentLinkEcoleId = mutation({
-  args: {},
-  handler: async (ctx) => {
+  // ✅ FIX SÉCURITÉ C6 : mutation de migration sans aucune auth → ajout admin obligatoire
+  args: { adminId: v.id("users") },
+  handler: async (ctx, args) => {
+    const { isSuperAdmin: isSuper } = await assertAdmin(ctx, args.adminId);
+    if (!isSuper) throw new Error("Réservé au super-admin.");
+
     const requests = await ctx.db.query("parentLinkRequests").take(500);
     let updated = 0;
 
     for (const req of requests) {
-      if (req.ecoleId) continue; // déjà rempli
+      if (req.ecoleId) continue;
       const eleve = await ctx.db.get(req.eleveId);
       if (!eleve) continue;
       await ctx.db.patch(req._id, { ecoleId: eleve.ecoleId });

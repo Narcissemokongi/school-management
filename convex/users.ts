@@ -135,6 +135,18 @@ function assertSameEcole(
   }
 }
 
+/**
+ * ✅ FIX SÉCURITÉ M8 : comparaison en temps constant
+ */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 function validatePasswordStrength(pwd: string) {
   if (!pwd || pwd.length < 8) {
     throw new Error("Le mot de passe doit contenir au moins 8 caractères.");
@@ -340,7 +352,8 @@ export const verify2FACode = mutation({
     if ((rec.attempts ?? 0) >= 5) {
       throw new Error("Trop de tentatives. Reconnectez-vous.");
     }
-    if (rec.code !== args.code.trim()) {
+    // ✅ FIX M8 : comparaison en temps constant
+    if (!safeEqual(rec.code ?? "", args.code.trim())) {
       await ctx.db.patch(rec._id, { attempts: (rec.attempts ?? 0) + 1 });
       throw new Error("Code invalide.");
     }

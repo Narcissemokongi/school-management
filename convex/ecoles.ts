@@ -589,7 +589,20 @@ export const updateLogo = mutation({
   },
   handler: async (ctx, args) => {
     await requireEcoleAdminOrSuperAdmin(ctx, args.userId, args.ecoleId);
-    await ctx.db.patch(args.ecoleId, { logo: args.logoUrl } as any);
+
+    // ✅ FIX SÉCURITÉ E8 : valider l'URL du logo pour éviter XSS via javascript:
+    const url = args.logoUrl.trim();
+    if (!url.startsWith("https://") && !url.startsWith("http://")) {
+      throw new Error("L'URL du logo doit commencer par https:// ou http://");
+    }
+    if (url.includes("<") || url.includes("javascript:") || url.includes("data:text")) {
+      throw new Error("URL du logo invalide.");
+    }
+    if (url.length > 2048) {
+      throw new Error("URL du logo trop longue (2048 caractères max).");
+    }
+
+    await ctx.db.patch(args.ecoleId, { logo: url } as any);
     return { success: true };
   },
 });
@@ -738,10 +751,14 @@ export const initStatuts = mutation({
 // ════════════════════════════════════════════════════════════════════
 
 function generateSchoolCode(length = 6): string {
+  // ✅ FIX SÉCURITÉ E7 : Math.random() → crypto.getRandomValues() (CSPRNG)
+  // Les codes d'école sont utilisés pour l'accès et le lien parent/élève
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const arr = new Uint32Array(length);
+  crypto.getRandomValues(arr);
   let code = "";
   for (let i = 0; i < length; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(arr[i] % chars.length);
   }
   return code;
 }
