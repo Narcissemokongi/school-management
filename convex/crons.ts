@@ -4,44 +4,32 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-/**
- * 1️⃣ Vérifie les échéances d'abonnement chaque nuit à minuit (UTC).
- * - Active les rappels
- * - Met en grâce les retards
- * - Suspend les impayés après la grâce
- * - Expire les contrats arrivés à terme
- */
+// 1. Échéances abonnements
 crons.daily(
   "verifier-echeances-abonnements",
   { hourUTC: 0, minuteUTC: 0 },
   internal.abonnements.verifierEcheances
 );
 
-/**
- * 2️⃣ Expire les annonces dont la date de fin est passée.
- * Passage toutes les heures (minute 15) → les annonces disparaissent
- * de l'UI côté admin école au maximum 1h après leur date de fin.
- */
+// 2. Expiration annonces
 crons.hourly(
   "expirer-annonces",
   { minuteUTC: 15 },
   internal.annonces.expirerAnnonces
 );
 
-/**
- * 3️⃣ ✨ V3 — Régénère les annonces récurrentes expirées.
- *
- * Passage quotidien à 00h30 UTC (après le cron #1 qui tourne à minuit).
- * Pour chaque annonce marquée `recurrence: "hebdo" | "mensuel" | "trimestriel"`
- * dont la `dateFin` est dépassée :
- *   - Crée un clone avec les dates décalées
- *   - Désactive l'original
- *   - S'arrête automatiquement si `recurrenceFin` est atteinte
- */
+// 3. Récurrences annonces
 crons.daily(
   "verifier-recurrences-annonces",
   { hourUTC: 0, minuteUTC: 30 },
   internal.annonces.verifierRecurrences
+);
+
+// 4. ✨ Purge rétention audit
+crons.daily(
+  "purge-audit-retention",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.audit.purgeRetention
 );
 
 export default crons;

@@ -15,7 +15,33 @@ import { GestionAnnees } from "./GestionAnnees";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+const MOBILE_TAP = 44;
+
 const MIN_PASSWORD_LENGTH = 8;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const ParametresKeyframes = (
+  <style>{`
+    @keyframes pg-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .pg-spin { animation: pg-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .pg-spin { animation: none !important; }
+    }
+  `}</style>
+);
 
 // ════════════════════════════════════════════════════════════════════
 // INDICATEUR DE FORCE DU MOT DE PASSE
@@ -73,6 +99,46 @@ function PasswordStrengthBar({ password, dark }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// ✨ PASSWORD TOGGLE — zone tap 44px mobile + feedback tap
+// ════════════════════════════════════════════════════════════════════
+function PasswordToggle({ visible, onToggle, isMobile, textSecondary }) {
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
+      aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+      style={{
+        position: "absolute",
+        right: isMobile ? 4 : 8,
+        top: "50%",
+        transform: `translateY(-50%) scale(${pressed ? 0.9 : 1})`,
+        background: "transparent",
+        border: "none",
+        color: textSecondary,
+        cursor: "pointer",
+        padding: 0,
+        width: isMobile ? MOBILE_TAP : 36,
+        height: isMobile ? MOBILE_TAP : 36,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 8,
+        transition: "transform 0.1s ease",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+      }}
+    >
+      {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // CARTE DE SECTION RÉUTILISABLE
 // ════════════════════════════════════════════════════════════════════
 function SectionCard({
@@ -95,6 +161,7 @@ function SectionCard({
           ? "0 1px 3px rgba(0,0,0,0.3)"
           : "0 1px 3px rgba(0,0,0,0.05)",
         marginBottom: isMobile ? 12 : 16,
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -119,6 +186,7 @@ function SectionCard({
             justifyContent: "center",
             flexShrink: 0,
           }}
+          aria-hidden="true"
         >
           {icon}
         </div>
@@ -146,7 +214,7 @@ function SectionCard({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// 2FA EMAIL — ✅ CORRIGÉ : ajout de `requesterId: userId` sur les 4 appels
+// 2FA EMAIL SETTINGS
 // ════════════════════════════════════════════════════════════════════
 function TwoFactorEmailSettings({ userId, isMobile }) {
   const { dark } = useStyles();
@@ -155,8 +223,9 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  // ✨ Feedback tap
+  const [pressedBtn, setPressedBtn] = useState(null);
 
-  // ✅ FIX — backend exige `requesterId` sur cette query
   const twoFactorRecord = useQuery(
     api.twoFactorEmail.getByUser,
     userId ? { userId, requesterId: userId } : "skip"
@@ -181,15 +250,18 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${cardBorder}`,
     borderRadius: 10,
-    fontSize: isMobile ? 15 : 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     background: inputBg,
     color: inputText,
     boxSizing: "border-box",
     fontFamily: "inherit",
+    minHeight: isMobile ? MOBILE_TAP : undefined,
+    WebkitAppearance: "none",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
   };
 
-  // ✅ FIX — ajout de `requesterId`
   const handleSendCode = async () => {
     if (!userId) {
       toast.error("Session invalide.");
@@ -208,7 +280,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
       await setupEmail({
         userId,
         email: email.trim(),
-        requesterId: userId, // ✅ OBLIGATOIRE côté backend
+        requesterId: userId,
       });
       setIsSettingUp(true);
       toast.success("Code de vérification envoyé à votre email.");
@@ -222,7 +294,6 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
   };
 
-  // ✅ FIX — ajout de `requesterId`
   const handleVerifyCode = async () => {
     if (!userId) return;
     if (code.length !== 6) {
@@ -234,7 +305,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
       await verifyAndEnable({
         userId,
         code,
-        requesterId: userId, // ✅ OBLIGATOIRE côté backend
+        requesterId: userId,
       });
       toast.success("2FA par email activée !");
       setIsSettingUp(false);
@@ -246,14 +317,13 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
   };
 
-  // ✅ FIX — ajout de `requesterId`
   const handleDisable = async () => {
     if (!userId) return;
     setVerifying(true);
     try {
       await disableEmail({
         userId,
-        requesterId: userId, // ✅ OBLIGATOIRE côté backend
+        requesterId: userId,
       });
       toast.success("2FA désactivée.");
     } catch (err) {
@@ -263,7 +333,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     }
   };
 
-  // État activé
+  // ─── État activé ───
   if (twoFactorRecord?.enabled) {
     return (
       <div
@@ -294,6 +364,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
               justifyContent: "center",
               flexShrink: 0,
             }}
+            aria-hidden="true"
           >
             <ShieldCheck size={18} />
           </div>
@@ -308,7 +379,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
                 gap: 4,
               }}
             >
-              <Check size={14} /> 2FA activée
+              <Check size={14} aria-hidden="true" /> 2FA activée
             </div>
             <div
               style={{
@@ -326,12 +397,15 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
           type="button"
           onClick={handleDisable}
           disabled={verifying}
+          onTouchStart={() => !verifying && setPressedBtn("disable")}
+          onTouchEnd={() => setPressedBtn(null)}
+          onTouchCancel={() => setPressedBtn(null)}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 6,
-            padding: isMobile ? "10px 14px" : "8px 14px",
+            padding: isMobile ? "12px 14px" : "8px 14px",
             background: "transparent",
             color: "#EF4444",
             border: "1px solid #EF4444",
@@ -341,12 +415,19 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
             cursor: verifying ? "not-allowed" : "pointer",
             width: isMobile ? "100%" : "auto",
             opacity: verifying ? 0.6 : 1,
+            minHeight: isMobile ? MOBILE_TAP : undefined,
+            transform: pressedBtn === "disable" ? "scale(0.97)" : "scale(1)",
+            transition: "transform 0.1s ease",
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
           }}
         >
           {verifying ? (
-            <Loader size={14} className="pg-spin" />
+            <Loader size={14} className="pg-spin" aria-hidden="true" />
           ) : (
-            <Trash2 size={14} />
+            <Trash2 size={14} aria-hidden="true" />
           )}
           Désactiver la 2FA
         </button>
@@ -354,7 +435,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     );
   }
 
-  // État configuration (code envoyé)
+  // ─── État configuration ───
   if (isSettingUp) {
     return (
       <div>
@@ -387,6 +468,8 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
               setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
             }
             placeholder="123456"
+            autoComplete="one-time-code"
+            enterKeyHint="done"
             style={{
               ...inputStyle,
               width: isMobile ? "100%" : 140,
@@ -400,13 +483,21 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
             type="button"
             onClick={handleVerifyCode}
             disabled={verifying || code.length !== 6}
+            onTouchStart={
+              !verifying && code.length === 6
+                ? () => setPressedBtn("verify")
+                : undefined
+            }
+            onTouchEnd={() => setPressedBtn(null)}
+            onTouchCancel={() => setPressedBtn(null)}
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 6,
               padding: isMobile ? "12px 16px" : "10px 16px",
-              background: verifying || code.length !== 6 ? "#A5B4FC" : accent,
+              background:
+                verifying || code.length !== 6 ? "#A5B4FC" : accent,
               color: "white",
               border: "none",
               borderRadius: 10,
@@ -415,12 +506,22 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
               cursor:
                 verifying || code.length !== 6 ? "not-allowed" : "pointer",
               flex: isMobile ? "none" : 1,
+              minHeight: isMobile ? MOBILE_TAP : undefined,
+              transform:
+                pressedBtn === "verify" && !verifying && code.length === 6
+                  ? "scale(0.97)"
+                  : "scale(1)",
+              transition: "transform 0.1s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           >
             {verifying ? (
-              <Loader size={14} className="pg-spin" />
+              <Loader size={14} className="pg-spin" aria-hidden="true" />
             ) : (
-              <ShieldCheck size={14} />
+              <ShieldCheck size={14} aria-hidden="true" />
             )}
             Vérifier et activer
           </button>
@@ -430,12 +531,16 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
           onClick={() => setIsSettingUp(false)}
           style={{
             marginTop: 10,
-            background: "none",
+            background: "transparent",
             border: "none",
             color: textSecondary,
             cursor: "pointer",
             fontSize: 12,
-            padding: 0,
+            padding: "8px 4px",
+            minHeight: 32,
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
+            fontFamily: "inherit",
           }}
         >
           ← Annuler
@@ -444,7 +549,7 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
     );
   }
 
-  // État initial
+  // ─── État initial ───
   return (
     <div>
       <p
@@ -472,12 +577,21 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
+          inputMode="email"
+          enterKeyHint="send"
           style={{ ...inputStyle, flex: 1 }}
         />
         <button
           type="button"
           onClick={handleSendCode}
           disabled={sending || !email.trim()}
+          onTouchStart={
+            !sending && email.trim()
+              ? () => setPressedBtn("send")
+              : undefined
+          }
+          onTouchEnd={() => setPressedBtn(null)}
+          onTouchCancel={() => setPressedBtn(null)}
           style={{
             display: "flex",
             alignItems: "center",
@@ -492,12 +606,22 @@ function TwoFactorEmailSettings({ userId, isMobile }) {
             fontSize: 13.5,
             cursor: sending || !email.trim() ? "not-allowed" : "pointer",
             opacity: sending || !email.trim() ? 0.7 : 1,
+            minHeight: isMobile ? MOBILE_TAP : undefined,
+            transform:
+              pressedBtn === "send" && !sending && email.trim()
+                ? "scale(0.97)"
+                : "scale(1)",
+            transition: "transform 0.1s ease",
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
           }}
         >
           {sending ? (
-            <Loader size={14} className="pg-spin" />
+            <Loader size={14} className="pg-spin" aria-hidden="true" />
           ) : (
-            <Mail size={14} />
+            <Mail size={14} aria-hidden="true" />
           )}
           Envoyer le code
         </button>
@@ -556,6 +680,11 @@ export function Parametres({ ecoleId, user }) {
   const [seuilA, setSeuilA] = useState(50);
   const [updating, setUpdating] = useState({});
   const [logoError, setLogoError] = useState("");
+  // ✨ Logo erreur DOM (état React au lieu de onError direct)
+  const [logoImgFailed, setLogoImgFailed] = useState(false);
+  // ✨ Feedback tap sur tabs et boutons
+  const [pressedTab, setPressedTab] = useState(null);
+  const [pressedBtn, setPressedBtn] = useState(null);
 
   useEffect(() => {
     if (!ecole) return;
@@ -568,6 +697,11 @@ export function Parametres({ ecoleId, user }) {
     setSeuilE(ecole.seuilEncouragement ?? 60);
     setSeuilA(ecole.seuilAvertissement ?? 50);
   }, [ecole]);
+
+  // Reset logo erreur quand URL change
+  useEffect(() => {
+    setLogoImgFailed(false);
+  }, [logoUrl]);
 
   const handleChangePassword = useCallback(async () => {
     if (changingPwd) return;
@@ -763,22 +897,31 @@ export function Parametres({ ecoleId, user }) {
     }
   };
 
+  // ════════════════════════════════════════════════════════════════
+  // EARLY RETURN — user invalide
+  // ════════════════════════════════════════════════════════════════
   if (!user || !userId) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-        <style>{`
-          @keyframes pg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          .pg-spin { animation: pg-spin 1s linear infinite; }
-          @media (prefers-reduced-motion: reduce) {
-            .pg-spin { animation: none !important; }
-          }
-        `}</style>
-        <Loader
-          size={28}
-          className="pg-spin"
-          style={{ color: dark ? "#818CF8" : "#4F46E5" }}
-        />
-      </div>
+      <>
+        {ParametresKeyframes}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            padding: 40,
+          }}
+        >
+          <Loader
+            size={28}
+            className="pg-spin"
+            style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+            aria-hidden="true"
+          />
+        </div>
+      </>
     );
   }
 
@@ -810,7 +953,7 @@ export function Parametres({ ecoleId, user }) {
     padding: isMobile ? "12px 14px" : "10px 14px",
     border: `1px solid ${cardBorder}`,
     borderRadius: 10,
-    fontSize: isMobile ? 15 : 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     background: inputBg,
     color: inputText,
@@ -818,6 +961,9 @@ export function Parametres({ ecoleId, user }) {
     fontFamily: "inherit",
     appearance: "none",
     WebkitAppearance: "none",
+    minHeight: isMobile ? MOBILE_TAP : undefined,
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
   };
 
   const labelStyle = {
@@ -830,7 +976,7 @@ export function Parametres({ ecoleId, user }) {
     letterSpacing: 0.3,
   };
 
-  const btnPrimary = (disabled = false) => ({
+  const btnPrimary = (disabled = false, key = null) => ({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -846,6 +992,14 @@ export function Parametres({ ecoleId, user }) {
     opacity: disabled ? 0.7 : 1,
     width: isMobile ? "100%" : "auto",
     whiteSpace: "nowrap",
+    minHeight: isMobile ? MOBILE_TAP : undefined,
+    transform:
+      pressedBtn === key && !disabled ? "scale(0.97)" : "scale(1)",
+    transition: "transform 0.1s ease",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
   });
 
   const gridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(200px, 1fr))";
@@ -857,330 +1011,297 @@ export function Parametres({ ecoleId, user }) {
     newPwd === confirmPwd &&
     newPwd.length >= MIN_PASSWORD_LENGTH;
 
+  // Padding container avec safe-area
+  const containerPadding = isMobile
+    ? `calc(10px + ${SAFE_TOP}) calc(8px + ${SAFE_RIGHT}) calc(24px + ${SAFE_BOTTOM}) calc(8px + ${SAFE_LEFT})`
+    : "20px 16px 32px";
+
   return (
-    <div
-      style={{
-        maxWidth: 900,
-        margin: "0 auto",
-        padding: isMobile ? "10px 8px 24px" : "20px 16px 32px",
-        width: "100%",
-        boxSizing: "border-box",
-      }}
-    >
-      <style>{`
-        @keyframes pg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .pg-spin { animation: pg-spin 1s linear infinite; }
-        @media (prefers-reduced-motion: reduce) {
-          .pg-spin { animation: none !important; }
-        }
-      `}</style>
-
-      <div style={{ marginBottom: isMobile ? 12 : 20 }}>
-        <h2
-          style={{
-            fontSize: isMobile ? 17 : 22,
-            fontWeight: 700,
-            color: textPrimary,
-            margin: 0,
-            lineHeight: 1.2,
-          }}
-        >
-          Paramètres
-        </h2>
-        <p
-          style={{
-            color: textSecondary,
-            marginTop: 2,
-            marginBottom: 0,
-            fontSize: isMobile ? 11.5 : 13,
-          }}
-        >
-          Gérez votre compte, votre école et la configuration
-        </p>
-      </div>
-
+    <>
+      {ParametresKeyframes}
       <div
-        role="tablist"
         style={{
-          display: "flex",
-          gap: 4,
-          borderBottom: `2px solid ${cardBorder}`,
-          marginBottom: isMobile ? 14 : 20,
-          overflowX: "auto",
-          whiteSpace: "nowrap",
-          scrollbarWidth: "none",
+          maxWidth: 900,
+          margin: "0 auto",
+          padding: containerPadding,
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
-        {tabs.map((t) => {
-          const isActive = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setTab(t.id)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: isMobile ? "12px 14px" : "12px 18px",
-                minHeight: isMobile ? 44 : 42,
-                border: "none",
-                background: "transparent",
-                color: isActive ? accent : textSecondary,
-                fontWeight: isActive ? 700 : 500,
-                borderBottom: isActive
-                  ? `3px solid ${accent}`
-                  : "3px solid transparent",
-                cursor: "pointer",
-                fontSize: isMobile ? 13.5 : 14.5,
-                flexShrink: 0,
-                marginBottom: -2,
-              }}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === "profil" && (
-        <div role="tabpanel">
-          <SectionCard
-            icon={<User size={16} />}
-            title="Mon compte"
-            subtitle="Informations de connexion"
-            dark={dark}
-            isMobile={isMobile}
+        <div style={{ marginBottom: isMobile ? 12 : 20 }}>
+          <h2
+            style={{
+              fontSize: isMobile ? 17 : 22,
+              fontWeight: 700,
+              color: textPrimary,
+              margin: 0,
+              lineHeight: 1.2,
+            }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: gridColumns,
-                gap: 12,
-                marginBottom: 16,
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    color: textSecondary,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.3,
-                    marginBottom: 4,
-                  }}
-                >
-                  Nom complet
-                </div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: textPrimary }}>
-                  {user.nom} {user.postnom || ""}
-                </div>
-              </div>
-              <div>
-                <div
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    color: textSecondary,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.3,
-                    marginBottom: 4,
-                  }}
-                >
-                  Identifiant
-                </div>
-                <div
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 600,
-                    color: textPrimary,
-                    fontFamily: "ui-monospace, monospace",
-                  }}
-                >
-                  @{user.login}
-                </div>
-              </div>
-              <div>
-                <div
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    color: textSecondary,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.3,
-                    marginBottom: 4,
-                  }}
-                >
-                  Rôle
-                </div>
-                <div
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 600,
-                    color: textPrimary,
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {user.role}
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            icon={<Lock size={16} />}
-            title="Modifier le mot de passe"
-            subtitle="Renforcez la sécurité de votre compte"
-            dark={dark}
-            isMobile={isMobile}
+            Paramètres
+          </h2>
+          <p
+            style={{
+              color: textSecondary,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 11.5 : 13,
+            }}
           >
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Mot de passe actuel</label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type={showOld ? "text" : "password"}
-                  value={oldPwd}
-                  onChange={(e) => setOldPwd(e.target.value)}
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  style={{ ...inputStyle, paddingRight: 42 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowOld(!showOld)}
-                  aria-label={showOld ? "Masquer" : "Afficher"}
-                  style={{
-                    position: "absolute",
-                    right: 10,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    color: textSecondary,
-                    cursor: "pointer",
-                    padding: 6,
-                    display: "flex",
-                  }}
-                >
-                  {showOld ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
+            Gérez votre compte, votre école et la configuration
+          </p>
+        </div>
 
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Nouveau mot de passe</label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type={showNew ? "text" : "password"}
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                  autoComplete="new-password"
-                  placeholder={`Min. ${MIN_PASSWORD_LENGTH} caractères`}
-                  style={{ ...inputStyle, paddingRight: 42 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNew(!showNew)}
-                  aria-label={showNew ? "Masquer" : "Afficher"}
-                  style={{
-                    position: "absolute",
-                    right: 10,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    color: textSecondary,
-                    cursor: "pointer",
-                    padding: 6,
-                    display: "flex",
-                  }}
-                >
-                  {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              <PasswordStrengthBar password={newPwd} dark={dark} />
-              {newPwd.length > 0 && newPwd.length < MIN_PASSWORD_LENGTH && (
-                <div
-                  style={{
-                    color: "#EF4444",
-                    fontSize: 11,
-                    marginTop: 4,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  <AlertCircle size={11} />
-                  Au moins {MIN_PASSWORD_LENGTH} caractères requis
-                </div>
-              )}
-            </div>
+        {/* ═══ Tabs ═══ */}
+        <div
+          role="tablist"
+          aria-label="Sections des paramètres"
+          style={{
+            display: "flex",
+            gap: 4,
+            borderBottom: `2px solid ${cardBorder}`,
+            marginBottom: isMobile ? 14 : 20,
+            overflowX: "auto",
+            whiteSpace: "nowrap",
+            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
+            position: "relative",
+            paddingRight: isMobile ? 24 : 0,
+          }}
+        >
+          {tabs.map((t) => {
+            const isActive = tab === t.id;
+            const isPressed = pressedTab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setTab(t.id)}
+                onTouchStart={() => setPressedTab(t.id)}
+                onTouchEnd={() => setPressedTab(null)}
+                onTouchCancel={() => setPressedTab(null)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: isMobile ? "12px 14px" : "12px 18px",
+                  minHeight: isMobile ? MOBILE_TAP : 42,
+                  border: "none",
+                  background: "transparent",
+                  color: isActive ? accent : textSecondary,
+                  fontWeight: isActive ? 700 : 500,
+                  borderBottom: isActive
+                    ? `3px solid ${accent}`
+                    : "3px solid transparent",
+                  cursor: "pointer",
+                  fontSize: isMobile ? 13.5 : 14.5,
+                  flexShrink: 0,
+                  marginBottom: -2,
+                  transform: isPressed ? "scale(0.96)" : "scale(1)",
+                  transition: "transform 0.1s ease, color 0.15s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
+                }}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
 
-            <div style={{ marginBottom: 18 }}>
-              <label style={labelStyle}>Confirmer le mot de passe</label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  value={confirmPwd}
-                  onChange={(e) => setConfirmPwd(e.target.value)}
-                  autoComplete="new-password"
-                  placeholder="Confirmer"
-                  style={{
-                    ...inputStyle,
-                    paddingRight: 42,
-                    borderColor:
-                      confirmPwd && newPwd !== confirmPwd
-                        ? "#EF4444"
-                        : confirmPwd && newPwd === confirmPwd
-                        ? "#10B981"
-                        : cardBorder,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(!showConfirm)}
-                  aria-label={showConfirm ? "Masquer" : "Afficher"}
-                  style={{
-                    position: "absolute",
-                    right: 10,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    color: textSecondary,
-                    cursor: "pointer",
-                    padding: 6,
-                    display: "flex",
-                  }}
-                >
-                  {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              {confirmPwd && newPwd !== confirmPwd && (
-                <div
-                  style={{
-                    color: "#EF4444",
-                    fontSize: 11,
-                    marginTop: 6,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  <AlertCircle size={11} />
-                  Les mots de passe ne correspondent pas
-                </div>
-              )}
-              {confirmPwd &&
-                newPwd === confirmPwd &&
-                newPwd.length >= MIN_PASSWORD_LENGTH && (
+        {/* ═══ TAB PROFIL ═══ */}
+        {tab === "profil" && (
+          <div role="tabpanel">
+            <SectionCard
+              icon={<User size={16} />}
+              title="Mon compte"
+              subtitle="Informations de connexion"
+              dark={dark}
+              isMobile={isMobile}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: gridColumns,
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <div>
                   <div
                     style={{
-                      color: "#10B981",
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      color: textSecondary,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.3,
+                      marginBottom: 4,
+                    }}
+                  >
+                    Nom complet
+                  </div>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: textPrimary }}>
+                    {user.nom} {user.postnom || ""}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      color: textSecondary,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.3,
+                      marginBottom: 4,
+                    }}
+                  >
+                    Identifiant
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      color: textPrimary,
+                      fontFamily: "ui-monospace, monospace",
+                    }}
+                  >
+                    @{user.login}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      color: textSecondary,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.3,
+                      marginBottom: 4,
+                    }}
+                  >
+                    Rôle
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      color: textPrimary,
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {user.role}
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              icon={<Lock size={16} />}
+              title="Modifier le mot de passe"
+              subtitle="Renforcez la sécurité de votre compte"
+              dark={dark}
+              isMobile={isMobile}
+            >
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Mot de passe actuel</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showOld ? "text" : "password"}
+                    value={oldPwd}
+                    onChange={(e) => setOldPwd(e.target.value)}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    style={{
+                      ...inputStyle,
+                      paddingRight: isMobile ? 52 : 42,
+                    }}
+                  />
+                  <PasswordToggle
+                    visible={showOld}
+                    onToggle={() => setShowOld(!showOld)}
+                    isMobile={isMobile}
+                    textSecondary={textSecondary}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Nouveau mot de passe</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showNew ? "text" : "password"}
+                    value={newPwd}
+                    onChange={(e) => setNewPwd(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder={`Min. ${MIN_PASSWORD_LENGTH} caractères`}
+                    style={{
+                      ...inputStyle,
+                      paddingRight: isMobile ? 52 : 42,
+                    }}
+                  />
+                  <PasswordToggle
+                    visible={showNew}
+                    onToggle={() => setShowNew(!showNew)}
+                    isMobile={isMobile}
+                    textSecondary={textSecondary}
+                  />
+                </div>
+                <PasswordStrengthBar password={newPwd} dark={dark} />
+                {newPwd.length > 0 && newPwd.length < MIN_PASSWORD_LENGTH && (
+                  <div
+                    role="alert"
+                    style={{
+                      color: "#EF4444",
+                      fontSize: 11,
+                      marginTop: 4,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <AlertCircle size={11} aria-hidden="true" />
+                    Au moins {MIN_PASSWORD_LENGTH} caractères requis
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginBottom: 18 }}>
+                <label style={labelStyle}>Confirmer le mot de passe</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    value={confirmPwd}
+                    onChange={(e) => setConfirmPwd(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder="Confirmer"
+                    style={{
+                      ...inputStyle,
+                      paddingRight: isMobile ? 52 : 42,
+                      borderColor:
+                        confirmPwd && newPwd !== confirmPwd
+                          ? "#EF4444"
+                          : confirmPwd && newPwd === confirmPwd
+                          ? "#10B981"
+                          : cardBorder,
+                    }}
+                  />
+                  <PasswordToggle
+                    visible={showConfirm}
+                    onToggle={() => setShowConfirm(!showConfirm)}
+                    isMobile={isMobile}
+                    textSecondary={textSecondary}
+                  />
+                </div>
+                {confirmPwd && newPwd !== confirmPwd && (
+                  <div
+                    role="alert"
+                    style={{
+                      color: "#EF4444",
                       fontSize: 11,
                       marginTop: 6,
                       display: "flex",
@@ -1188,443 +1309,539 @@ export function Parametres({ ecoleId, user }) {
                       gap: 4,
                     }}
                   >
-                    <Check size={11} />
-                    Les mots de passe correspondent
+                    <AlertCircle size={11} aria-hidden="true" />
+                    Les mots de passe ne correspondent pas
                   </div>
                 )}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleChangePassword}
-              disabled={!canChangePwd}
-              style={btnPrimary(!canChangePwd)}
-            >
-              {changingPwd ? (
-                <Loader size={16} className="pg-spin" />
-              ) : (
-                <Lock size={16} />
-              )}
-              {changingPwd ? "Enregistrement…" : "Changer le mot de passe"}
-            </button>
-          </SectionCard>
-        </div>
-      )}
-
-      {tab === "securite" && (
-        <div role="tabpanel">
-          <SectionCard
-            icon={<ShieldCheck size={16} />}
-            title="Authentification à deux facteurs"
-            subtitle="Recevez un code par email à chaque connexion"
-            dark={dark}
-            isMobile={isMobile}
-            iconColor={dark ? "#34D399" : "#10B981"}
-          >
-            <TwoFactorEmailSettings userId={userId} isMobile={isMobile} />
-          </SectionCard>
-        </div>
-      )}
-
-      {tab === "ecole" && (
-        <div role="tabpanel">
-          <SectionCard
-            icon={<Building size={16} />}
-            title="Informations de l'école"
-            subtitle="Nom, logo et identité visuelle"
-            dark={dark}
-            isMobile={isMobile}
-          >
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Nom de l'école</label>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexDirection: isMobile ? "column" : "row",
-                }}
-              >
-                <input
-                  value={nomEcole}
-                  onChange={(e) => setNomEcole(e.target.value)}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-                <button
-                  type="button"
-                  onClick={handleUpdateEcole}
-                  disabled={updating.ecole}
-                  style={btnPrimary(updating.ecole)}
-                >
-                  {updating.ecole ? (
-                    <Loader size={14} className="pg-spin" />
-                  ) : (
-                    <Save size={14} />
-                  )}
-                  Mettre à jour
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Logo (URL)</label>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  flexDirection: isMobile ? "column" : "row",
-                }}
-              >
-                <input
-                  value={logoUrl}
-                  onChange={(e) => {
-                    setLogoUrl(e.target.value);
-                    setLogoError("");
-                  }}
-                  style={{
-                    ...inputStyle,
-                    flex: 1,
-                    borderColor: logoError ? "#EF4444" : cardBorder,
-                  }}
-                  placeholder="https://exemple.com/logo.png"
-                />
-                <button
-                  type="button"
-                  onClick={handleUpdateLogo}
-                  disabled={updating.logo}
-                  style={btnPrimary(updating.logo)}
-                >
-                  {updating.logo ? (
-                    <Loader size={14} className="pg-spin" />
-                  ) : (
-                    <Upload size={14} />
-                  )}
-                  Mettre à jour
-                </button>
-              </div>
-              {logoError && (
-                <div
-                  style={{
-                    color: "#EF4444",
-                    fontSize: 11,
-                    marginTop: 6,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  <AlertCircle size={11} /> {logoError}
-                </div>
-              )}
-              {logoUrl && !logoError && (
-                <div style={{ marginTop: 12 }}>
-                  <img
-                    src={logoUrl}
-                    alt="Logo"
-                    style={{
-                      maxWidth: 100,
-                      borderRadius: 8,
-                      border: `1px solid ${cardBorder}`,
-                    }}
-                    onError={(e) => (e.target.style.display = "none")}
-                  />
-                </div>
-              )}
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            icon={<BookOpen size={16} />}
-            title="Paramètres pédagogiques"
-            subtitle="Devise, périodes et barèmes"
-            dark={dark}
-            isMobile={isMobile}
-            iconColor={dark ? "#C4B5FD" : "#8B5CF6"}
-          >
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Devise</label>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexDirection: isMobile ? "column" : "row",
-                }}
-              >
-                <select
-                  value={devise}
-                  onChange={(e) => setDevise(e.target.value)}
-                  style={{ ...inputStyle, flex: 1 }}
-                >
-                  <option value="CDF">CDF — Franc congolais</option>
-                  <option value="USD">USD — Dollar américain</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={handleUpdateDevise}
-                  disabled={updating.devise}
-                  style={btnPrimary(updating.devise)}
-                >
-                  {updating.devise ? (
-                    <Loader size={14} className="pg-spin" />
-                  ) : (
-                    <Save size={14} />
-                  )}
-                  Mettre à jour
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Type de période</label>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexDirection: isMobile ? "column" : "row",
-                }}
-              >
-                <select
-                  value={typePeriode}
-                  onChange={(e) => setTypePeriode(e.target.value)}
-                  style={{ ...inputStyle, flex: 1 }}
-                >
-                  <option value="trimestre">Trimestre</option>
-                  <option value="semestre">Semestre</option>
-                  <option value="mois">Mois</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={handleUpdateTypePeriode}
-                  disabled={updating.periode}
-                  style={btnPrimary(updating.periode)}
-                >
-                  {updating.periode ? (
-                    <Loader size={14} className="pg-spin" />
-                  ) : (
-                    <Save size={14} />
-                  )}
-                  Mettre à jour
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Barème (note maximale)</label>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexDirection: isMobile ? "column" : "row",
-                }}
-              >
-                <input
-                  type="number"
-                  min="1"
-                  value={bareme}
-                  onChange={(e) => setBareme(e.target.value)}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-                <button
-                  type="button"
-                  onClick={handleUpdateBareme}
-                  disabled={updating.bareme}
-                  style={btnPrimary(updating.bareme)}
-                >
-                  {updating.bareme ? (
-                    <Loader size={14} className="pg-spin" />
-                  ) : (
-                    <Save size={14} />
-                  )}
-                  Mettre à jour
-                </button>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            icon={<TrendingUp size={16} />}
-            title="Seuils des mentions"
-            subtitle="Utilisés pour les appréciations automatiques"
-            dark={dark}
-            isMobile={isMobile}
-            iconColor={dark ? "#FBBF24" : "#F59E0B"}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
-                gap: 12,
-                marginBottom: 14,
-              }}
-            >
-              <div>
-                <label style={labelStyle}>Félicitations</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={seuilF}
-                  onChange={(e) => setSeuilF(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Encouragement</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={seuilE}
-                  onChange={(e) => setSeuilE(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Avertissement</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={seuilA}
-                  onChange={(e) => setSeuilA(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleUpdateMentions}
-              disabled={updating.mentions}
-              style={btnPrimary(updating.mentions)}
-            >
-              {updating.mentions ? (
-                <Loader size={14} className="pg-spin" />
-              ) : (
-                <Save size={14} />
-              )}
-              Mettre à jour les seuils
-            </button>
-          </SectionCard>
-        </div>
-      )}
-
-      {tab === "roles" && (
-        <div role="tabpanel">
-          <SectionCard
-            icon={<Shield size={16} />}
-            title="Gestion des rôles"
-            subtitle={`${users.length} utilisateur${users.length > 1 ? "s" : ""}`}
-            dark={dark}
-            isMobile={isMobile}
-            iconColor={dark ? "#F87171" : "#EF4444"}
-          >
-            {users.length === 0 ? (
-              <p
-                style={{
-                  color: textSecondary,
-                  fontSize: 13,
-                  margin: 0,
-                  textAlign: "center",
-                  padding: "16px 0",
-                }}
-              >
-                Aucun utilisateur
-              </p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {users.map((u) => {
-                  const isSelf = u._id === userId;
-                  return (
+                {confirmPwd &&
+                  newPwd === confirmPwd &&
+                  newPwd.length >= MIN_PASSWORD_LENGTH && (
                     <div
-                      key={u._id}
                       style={{
+                        color: "#10B981",
+                        fontSize: 11,
+                        marginTop: 6,
                         display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: isMobile ? "stretch" : "center",
-                        gap: 8,
-                        padding: "10px 12px",
-                        border: `1px solid ${cardBorder}`,
-                        borderRadius: 10,
-                        background: isSelf
-                          ? dark
-                            ? "#0F172A"
-                            : "#F8FAFC"
-                          : "transparent",
-                        flexDirection: isMobile ? "column" : "row",
+                        alignItems: "center",
+                        gap: 4,
                       }}
                     >
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div
-                          style={{
-                            fontWeight: 600,
-                            fontSize: 13.5,
-                            color: textPrimary,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                          }}
-                        >
-                          {u.nom}
-                          {isSelf && (
-                            <span
-                              style={{
-                                background: accentBg,
-                                color: accent,
-                                padding: "1px 6px",
-                                borderRadius: 8,
-                                fontSize: 9.5,
-                                fontWeight: 700,
-                              }}
-                            >
-                              VOUS
-                            </span>
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            color: textSecondary,
-                            textTransform: "capitalize",
-                          }}
-                        >
-                          Rôle actuel : {u.role}
-                        </div>
-                      </div>
-                      <select
-                        value={u.role}
-                        onChange={(e) =>
-                          handleRoleChange(u._id, e.target.value)
-                        }
-                        disabled={isSelf}
+                      <Check size={11} aria-hidden="true" />
+                      Les mots de passe correspondent
+                    </div>
+                  )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleChangePassword}
+                disabled={!canChangePwd}
+                onTouchStart={
+                  canChangePwd
+                    ? () => setPressedBtn("pwd-change")
+                    : undefined
+                }
+                onTouchEnd={() => setPressedBtn(null)}
+                onTouchCancel={() => setPressedBtn(null)}
+                style={btnPrimary(!canChangePwd, "pwd-change")}
+              >
+                {changingPwd ? (
+                  <Loader size={16} className="pg-spin" aria-hidden="true" />
+                ) : (
+                  <Lock size={16} aria-hidden="true" />
+                )}
+                {changingPwd ? "Enregistrement…" : "Changer le mot de passe"}
+              </button>
+            </SectionCard>
+          </div>
+        )}
+
+        {/* ═══ TAB SÉCURITÉ ═══ */}
+        {tab === "securite" && (
+          <div role="tabpanel">
+            <SectionCard
+              icon={<ShieldCheck size={16} />}
+              title="Authentification à deux facteurs"
+              subtitle="Recevez un code par email à chaque connexion"
+              dark={dark}
+              isMobile={isMobile}
+              iconColor={dark ? "#34D399" : "#10B981"}
+            >
+              <TwoFactorEmailSettings userId={userId} isMobile={isMobile} />
+            </SectionCard>
+          </div>
+        )}
+
+        {/* ═══ TAB ÉCOLE ═══ */}
+        {tab === "ecole" && (
+          <div role="tabpanel">
+            <SectionCard
+              icon={<Building size={16} />}
+              title="Informations de l'école"
+              subtitle="Nom, logo et identité visuelle"
+              dark={dark}
+              isMobile={isMobile}
+            >
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Nom de l'école</label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexDirection: isMobile ? "column" : "row",
+                  }}
+                >
+                  <input
+                    value={nomEcole}
+                    onChange={(e) => setNomEcole(e.target.value)}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUpdateEcole}
+                    disabled={updating.ecole}
+                    onTouchStart={
+                      !updating.ecole
+                        ? () => setPressedBtn("save-ecole")
+                        : undefined
+                    }
+                    onTouchEnd={() => setPressedBtn(null)}
+                    onTouchCancel={() => setPressedBtn(null)}
+                    style={btnPrimary(updating.ecole, "save-ecole")}
+                  >
+                    {updating.ecole ? (
+                      <Loader size={14} className="pg-spin" aria-hidden="true" />
+                    ) : (
+                      <Save size={14} aria-hidden="true" />
+                    )}
+                    Mettre à jour
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Logo (URL)</label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    flexDirection: isMobile ? "column" : "row",
+                  }}
+                >
+                  <input
+                    value={logoUrl}
+                    onChange={(e) => {
+                      setLogoUrl(e.target.value);
+                      setLogoError("");
+                    }}
+                    style={{
+                      ...inputStyle,
+                      flex: 1,
+                      borderColor: logoError ? "#EF4444" : cardBorder,
+                    }}
+                    placeholder="https://exemple.com/logo.png"
+                    inputMode="url"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUpdateLogo}
+                    disabled={updating.logo}
+                    onTouchStart={
+                      !updating.logo
+                        ? () => setPressedBtn("save-logo")
+                        : undefined
+                    }
+                    onTouchEnd={() => setPressedBtn(null)}
+                    onTouchCancel={() => setPressedBtn(null)}
+                    style={btnPrimary(updating.logo, "save-logo")}
+                  >
+                    {updating.logo ? (
+                      <Loader size={14} className="pg-spin" aria-hidden="true" />
+                    ) : (
+                      <Upload size={14} aria-hidden="true" />
+                    )}
+                    Mettre à jour
+                  </button>
+                </div>
+                {logoError && (
+                  <div
+                    role="alert"
+                    style={{
+                      color: "#EF4444",
+                      fontSize: 11,
+                      marginTop: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <AlertCircle size={11} aria-hidden="true" /> {logoError}
+                  </div>
+                )}
+                {/* ✨ Preview logo : state React pour l'erreur */}
+                {logoUrl && !logoError && !logoImgFailed && (
+                  <div style={{ marginTop: 12 }}>
+                    <img
+                      src={logoUrl}
+                      alt="Logo de l'école"
+                      onError={() => setLogoImgFailed(true)}
+                      style={{
+                        maxWidth: 100,
+                        borderRadius: 8,
+                        border: `1px solid ${cardBorder}`,
+                      }}
+                    />
+                  </div>
+                )}
+                {logoUrl && logoImgFailed && !logoError && (
+                  <div
+                    style={{
+                      color: textSecondary,
+                      fontSize: 11,
+                      marginTop: 8,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    Aperçu indisponible
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              icon={<BookOpen size={16} />}
+              title="Paramètres pédagogiques"
+              subtitle="Devise, périodes et barèmes"
+              dark={dark}
+              isMobile={isMobile}
+              iconColor={dark ? "#C4B5FD" : "#8B5CF6"}
+            >
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Devise</label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexDirection: isMobile ? "column" : "row",
+                  }}
+                >
+                  <select
+                    value={devise}
+                    onChange={(e) => setDevise(e.target.value)}
+                    style={{ ...inputStyle, flex: 1, cursor: "pointer" }}
+                  >
+                    <option value="CDF">CDF — Franc congolais</option>
+                    <option value="USD">USD — Dollar américain</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleUpdateDevise}
+                    disabled={updating.devise}
+                    onTouchStart={
+                      !updating.devise
+                        ? () => setPressedBtn("save-devise")
+                        : undefined
+                    }
+                    onTouchEnd={() => setPressedBtn(null)}
+                    onTouchCancel={() => setPressedBtn(null)}
+                    style={btnPrimary(updating.devise, "save-devise")}
+                  >
+                    {updating.devise ? (
+                      <Loader size={14} className="pg-spin" aria-hidden="true" />
+                    ) : (
+                      <Save size={14} aria-hidden="true" />
+                    )}
+                    Mettre à jour
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Type de période</label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexDirection: isMobile ? "column" : "row",
+                  }}
+                >
+                  <select
+                    value={typePeriode}
+                    onChange={(e) => setTypePeriode(e.target.value)}
+                    style={{ ...inputStyle, flex: 1, cursor: "pointer" }}
+                  >
+                    <option value="trimestre">Trimestre</option>
+                    <option value="semestre">Semestre</option>
+                    <option value="mois">Mois</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleUpdateTypePeriode}
+                    disabled={updating.periode}
+                    onTouchStart={
+                      !updating.periode
+                        ? () => setPressedBtn("save-periode")
+                        : undefined
+                    }
+                    onTouchEnd={() => setPressedBtn(null)}
+                    onTouchCancel={() => setPressedBtn(null)}
+                    style={btnPrimary(updating.periode, "save-periode")}
+                  >
+                    {updating.periode ? (
+                      <Loader size={14} className="pg-spin" aria-hidden="true" />
+                    ) : (
+                      <Save size={14} aria-hidden="true" />
+                    )}
+                    Mettre à jour
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Barème (note maximale)</label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexDirection: isMobile ? "column" : "row",
+                  }}
+                >
+                  <input
+                    type="number"
+                    min="1"
+                    value={bareme}
+                    onChange={(e) => setBareme(e.target.value)}
+                    inputMode="numeric"
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUpdateBareme}
+                    disabled={updating.bareme}
+                    onTouchStart={
+                      !updating.bareme
+                        ? () => setPressedBtn("save-bareme")
+                        : undefined
+                    }
+                    onTouchEnd={() => setPressedBtn(null)}
+                    onTouchCancel={() => setPressedBtn(null)}
+                    style={btnPrimary(updating.bareme, "save-bareme")}
+                  >
+                    {updating.bareme ? (
+                      <Loader size={14} className="pg-spin" aria-hidden="true" />
+                    ) : (
+                      <Save size={14} aria-hidden="true" />
+                    )}
+                    Mettre à jour
+                  </button>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              icon={<TrendingUp size={16} />}
+              title="Seuils des mentions"
+              subtitle="Utilisés pour les appréciations automatiques"
+              dark={dark}
+              isMobile={isMobile}
+              iconColor={dark ? "#FBBF24" : "#F59E0B"}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+                  gap: 12,
+                  marginBottom: 14,
+                }}
+              >
+                <div>
+                  <label style={labelStyle}>Félicitations</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={seuilF}
+                    onChange={(e) => setSeuilF(e.target.value)}
+                    inputMode="numeric"
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Encouragement</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={seuilE}
+                    onChange={(e) => setSeuilE(e.target.value)}
+                    inputMode="numeric"
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Avertissement</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={seuilA}
+                    onChange={(e) => setSeuilA(e.target.value)}
+                    inputMode="numeric"
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleUpdateMentions}
+                disabled={updating.mentions}
+                onTouchStart={
+                  !updating.mentions
+                    ? () => setPressedBtn("save-mentions")
+                    : undefined
+                }
+                onTouchEnd={() => setPressedBtn(null)}
+                onTouchCancel={() => setPressedBtn(null)}
+                style={btnPrimary(updating.mentions, "save-mentions")}
+              >
+                {updating.mentions ? (
+                  <Loader size={14} className="pg-spin" aria-hidden="true" />
+                ) : (
+                  <Save size={14} aria-hidden="true" />
+                )}
+                Mettre à jour les seuils
+              </button>
+            </SectionCard>
+          </div>
+        )}
+
+        {/* ═══ TAB RÔLES ═══ */}
+        {tab === "roles" && (
+          <div role="tabpanel">
+            <SectionCard
+              icon={<Shield size={16} />}
+              title="Gestion des rôles"
+              subtitle={`${users.length} utilisateur${users.length > 1 ? "s" : ""}`}
+              dark={dark}
+              isMobile={isMobile}
+              iconColor={dark ? "#F87171" : "#EF4444"}
+            >
+              {users.length === 0 ? (
+                <p
+                  style={{
+                    color: textSecondary,
+                    fontSize: 13,
+                    margin: 0,
+                    textAlign: "center",
+                    padding: "16px 0",
+                  }}
+                >
+                  Aucun utilisateur
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {users.map((u) => {
+                    const isSelf = u._id === userId;
+                    return (
+                      <div
+                        key={u._id}
                         style={{
-                          ...inputStyle,
-                          width: isMobile ? "100%" : 160,
-                          cursor: isSelf ? "not-allowed" : "pointer",
-                          opacity: isSelf ? 0.5 : 1,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: isMobile ? "stretch" : "center",
+                          gap: 8,
+                          padding: "10px 12px",
+                          border: `1px solid ${cardBorder}`,
+                          borderRadius: 10,
+                          background: isSelf
+                            ? dark
+                              ? "#0F172A"
+                              : "#F8FAFC"
+                            : "transparent",
+                          flexDirection: isMobile ? "column" : "row",
+                          boxSizing: "border-box",
                         }}
                       >
-                        {roles.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </SectionCard>
-        </div>
-      )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div
+                            style={{
+                              fontWeight: 600,
+                              fontSize: 13.5,
+                              color: textPrimary,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {u.nom}
+                            {isSelf && (
+                              <span
+                                style={{
+                                  background: accentBg,
+                                  color: accent,
+                                  padding: "1px 6px",
+                                  borderRadius: 8,
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                VOUS
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11.5,
+                              color: textSecondary,
+                              textTransform: "capitalize",
+                            }}
+                          >
+                            Rôle actuel : {u.role}
+                          </div>
+                        </div>
+                        <select
+                          value={u.role}
+                          onChange={(e) =>
+                            handleRoleChange(u._id, e.target.value)
+                          }
+                          disabled={isSelf}
+                          aria-label={`Rôle de ${u.nom}`}
+                          style={{
+                            ...inputStyle,
+                            width: isMobile ? "100%" : 160,
+                            cursor: isSelf ? "not-allowed" : "pointer",
+                            opacity: isSelf ? 0.5 : 1,
+                          }}
+                        >
+                          {roles.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </SectionCard>
+          </div>
+        )}
 
-      {tab === "annees" && (
-        <div role="tabpanel">
-          <GestionAnnees ecoleId={ecoleId} userId={userId} />
-        </div>
-      )}
+        {/* ═══ TAB ANNÉES ═══ */}
+        {tab === "annees" && (
+          <div role="tabpanel">
+            <GestionAnnees ecoleId={ecoleId} userId={userId} />
+          </div>
+        )}
 
-      <ConfirmDialog {...dialogProps} />
-    </div>
+        <ConfirmDialog {...dialogProps} />
+      </div>
+    </>
   );
 }

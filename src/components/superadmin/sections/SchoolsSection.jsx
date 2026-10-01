@@ -2,13 +2,14 @@
 import { useState, useMemo, useCallback, useDeferredValue, useEffect } from "react";
 import {
   UserPlus, UserMinus, Trash2, X, Plus, AlertCircle,
-  Lock, // ✨ NOUVEAU
+  Lock,
+  Filter, // ✨ NOUVEAU
 } from "lucide-react";
 import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import toast from "react-hot-toast";
 import { runInBatches } from "@/utils/runInBatches";
-import { Button } from "@/components/ui";
+import { Button, BottomSheet, Fab } from "@/components/ui"; // ✨ NOUVEAU
 import { SchoolTable } from "../SchoolTable";
 import { SchoolCard } from "../schools/SchoolCard";
 import { SchoolsToolbar } from "../schools/SchoolsToolbar";
@@ -26,12 +27,11 @@ export function SchoolsSection({
   confirm,
   userId,
   canCreate = true,
-  canDelete = true, // ✨ NOUVEAU
+  canDelete = true,
 }) {
   const t = useTokens();
   const isMobile = useIsMobile();
 
-  // canCreate couvre aussi "modifier" (rename, suspend, reactivate)
   const canEdit = canCreate;
 
   // ────────────────────────────────────────────────
@@ -45,6 +45,9 @@ export function SchoolsSection({
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // ✨ NOUVEAU — Bottom Sheet filtres mobile
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const deferredSearch = useDeferredValue(searchTerm);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -307,6 +310,8 @@ export function SchoolsSection({
 
   const handlePrint = useCallback(() => window.print(), []);
 
+  const hasActiveFilter = schoolFilter !== "all" || !!deferredSearch.trim();
+
   // ────────────────────────────────────────────────
   // Rendu
   // ────────────────────────────────────────────────
@@ -336,8 +341,8 @@ export function SchoolsSection({
         </div>
       )}
 
-      {/* ═══ Bouton Nouvelle école ═══ */}
-      {canCreate && (
+      {/* ═══ Bouton Nouvelle école (desktop uniquement) ═══ */}
+      {canCreate && !isMobile && (
         <div
           style={{
             display: "flex",
@@ -347,7 +352,7 @@ export function SchoolsSection({
         >
           <Button
             variant="primary"
-            size={isMobile ? "md" : "sm"}
+            size="sm"
             icon={<Plus size={16} />}
             onClick={() => setShowCreateModal(true)}
           >
@@ -374,7 +379,56 @@ export function SchoolsSection({
         }
       />
 
-      {/* ═══ Barre d'actions groupées (canEdit requis) ═══ */}
+      {/* ✨ Bouton Filtres rapides (mobile) */}
+      {isMobile && (
+        <button
+          type="button"
+          onClick={() => setShowMobileFilters(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            padding: "10px 14px",
+            marginBottom: 16,
+            border: `1px solid ${t.border.default}`,
+            borderRadius: t.radius.sm,
+            background: hasActiveFilter
+              ? `${t.accent.primary}15`
+              : t.surface.elevated,
+            color: hasActiveFilter ? t.accent.primary : t.text.secondary,
+            cursor: "pointer",
+            fontSize: t.font.size.sm,
+            fontWeight: 600,
+            fontFamily: t.font.family,
+            width: "100%",
+          }}
+        >
+          <Filter size={14} />
+          Filtres
+          {hasActiveFilter && (
+            <span
+              style={{
+                background: t.accent.primary,
+                color: "#FFFFFF",
+                borderRadius: t.radius.full,
+                minWidth: 18,
+                height: 18,
+                padding: "0 5px",
+                fontSize: 10,
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              !
+            </span>
+          )}
+        </button>
+      )}
+
+      {/* ═══ Barre d'actions groupées ═══ */}
       {canEdit && selectedSet.size > 0 && (
         <BulkBar
           count={selectedSet.size}
@@ -446,7 +500,7 @@ export function SchoolsSection({
         </>
       )}
 
-      {/* ═══ Modale création (canCreate requis) ═══ */}
+      {/* ═══ Modale création ═══ */}
       {canCreate && (
         <CreateSchoolModal
           open={showCreateModal}
@@ -455,6 +509,147 @@ export function SchoolsSection({
           submitting={creating}
         />
       )}
+
+      {/* ✨ NOUVEAU — FAB mobile (création) */}
+      {isMobile && canCreate && (
+        <Fab
+          icon={<Plus size={22} />}
+          label="Nouvelle école"
+          onClick={() => setShowCreateModal(true)}
+          bottom={24}
+        />
+      )}
+
+      {/* ✨ NOUVEAU — Bottom Sheet Filtres mobile */}
+      <BottomSheet
+        open={showMobileFilters}
+        onClose={() => setShowMobileFilters(false)}
+        title="Filtres"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Filtre statut */}
+          <div>
+            <div
+              style={{
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                color: t.text.primary,
+                marginBottom: 10,
+              }}
+            >
+              Statut
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[
+                { id: "all", label: "Toutes", count: stats.total },
+                { id: "active", label: "Actives", count: stats.active },
+                { id: "suspendue", label: "Suspendues", count: stats.suspended },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setSchoolFilter(f.id)}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: t.radius.full,
+                    border: `1px solid ${
+                      schoolFilter === f.id
+                        ? t.accent.primary
+                        : t.border.default
+                    }`,
+                    background:
+                      schoolFilter === f.id
+                        ? `${t.accent.primary}15`
+                        : "transparent",
+                    color:
+                      schoolFilter === f.id
+                        ? t.accent.primary
+                        : t.text.secondary,
+                    cursor: "pointer",
+                    fontSize: t.font.size.sm,
+                    fontWeight: 600,
+                    fontFamily: t.font.family,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {f.label}
+                  <span
+                    style={{
+                      fontSize: t.font.size.xs,
+                      color: t.text.muted,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {f.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Info résultats */}
+          <div
+            style={{
+              padding: t.space.sm,
+              background: `${t.accent.primary}08`,
+              border: `1px solid ${t.accent.primary}20`,
+              borderRadius: t.radius.sm,
+              fontSize: t.font.size.xs,
+              color: t.text.secondary,
+              textAlign: "center",
+            }}
+          >
+            {filtered.length} école(s) correspond{filtered.length > 1 ? "ent" : ""}
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 10 }}>
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSchoolFilter("all");
+                  setSearchTerm("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: 14,
+                  background: "transparent",
+                  color: "#EF4444",
+                  border: `1px solid ${t.border.default}`,
+                  borderRadius: t.radius.sm,
+                  cursor: "pointer",
+                  fontSize: t.font.size.sm,
+                  fontWeight: 600,
+                  fontFamily: t.font.family,
+                }}
+              >
+                Réinitialiser
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(false)}
+              style={{
+                flex: 1,
+                padding: 14,
+                background: t.accent.primary,
+                color: "#FFFFFF",
+                border: "none",
+                borderRadius: t.radius.sm,
+                cursor: "pointer",
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                fontFamily: t.font.family,
+              }}
+            >
+              Appliquer
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
     </div>
   );
 }
@@ -470,7 +665,7 @@ function BulkBar({
   onSuspend,
   onDelete,
   onCancel,
-  canDelete = true, // ✨ NOUVEAU
+  canDelete = true,
 }) {
   const t = useTokens();
   const isMobile = useIsMobile();
@@ -488,7 +683,6 @@ function BulkBar({
       color: "#F59E0B",
       onClick: onSuspend,
     },
-    // ✨ Supprimer seulement si canDelete
     ...(canDelete
       ? [
           {
@@ -626,3 +820,5 @@ function EmptyState({ hasFilter }) {
     </div>
   );
 }
+
+export default SchoolsSection;

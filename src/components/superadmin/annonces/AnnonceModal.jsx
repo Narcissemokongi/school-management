@@ -409,7 +409,7 @@ export function AnnonceModal({ userId, annonce, onClose }) {
   const typeConf = TYPES.find((x) => x.value === type) ?? TYPES[0];
   const modalTitle = isEdit
     ? "Modifier l'annonce"
-    : isDuplicate
+    : isDuplicate && annonce?.titre  // dupliqué avec contenu existant
     ? "Dupliquer l'annonce"
     : "Nouvelle annonce";
 

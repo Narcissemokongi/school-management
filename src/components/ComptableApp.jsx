@@ -39,6 +39,9 @@ const COMPTABLE_BASE = "/comptable";
 // Onglets qui nécessitent une année active
 const TABS_REQUIRING_YEAR = ["dashboard", "frais"];
 
+// ✨ Onglets avec hauteur plein écran
+const TABS_FULL_HEIGHT = ["messagerie", "appels"];
+
 // ════════════════════════════════════════════════════════════════════
 // HELPER — Parse URL
 // ════════════════════════════════════════════════════════════════════
@@ -249,6 +252,9 @@ export function ComptableApp({
   const tabNeedsYear = TABS_REQUIRING_YEAR.includes(tab);
   const showBanner = !anneeId && !tabNeedsYear;
 
+  // ✨ Onglets avec hauteur plein écran
+  const needsFullHeight = TABS_FULL_HEIGHT.includes(tab);
+
   // ════════════════════════════════════════════════════════════════════
   // RENDU CONTENU
   // ════════════════════════════════════════════════════════════════════
@@ -371,33 +377,50 @@ export function ComptableApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {/* Bannière : uniquement sur les onglets SANS message complet */}
-      {showBanner && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: tokens.warningBg,
-            color: tokens.warningText,
-            padding: isMobile ? "10px 12px" : "10px 16px",
-            fontSize: isMobile ? 12 : 13,
-            fontWeight: 500,
-            borderRadius: 10,
-            marginBottom: isMobile ? 12 : 16,
-            lineHeight: 1.4,
-            border: `1px solid ${dark ? "rgba(251,191,36,0.3)" : "rgba(245,158,11,0.2)"}`,
-          }}
-          role="alert"
-        >
-          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
-          <span>
-            Aucune année scolaire active. Les données financières sont
-            indisponibles.
-          </span>
-        </div>
-      )}
-      {renderContent()}
+      {/* ✨ Wrapper full-height conditionnel */}
+      <div
+        style={
+          needsFullHeight
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                height: "100%",
+                width: "100%",
+                overflow: "hidden",
+              }
+            : undefined
+        }
+      >
+        {/* Bannière : uniquement sur les onglets SANS message complet */}
+        {showBanner && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: tokens.warningBg,
+              color: tokens.warningText,
+              padding: isMobile ? "10px 12px" : "10px 16px",
+              fontSize: isMobile ? 12 : 13,
+              fontWeight: 500,
+              borderRadius: 10,
+              marginBottom: isMobile ? 12 : 16,
+              lineHeight: 1.4,
+              border: `1px solid ${dark ? "rgba(251,191,36,0.3)" : "rgba(245,158,11,0.2)"}`,
+            }}
+            role="alert"
+          >
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+            <span>
+              Aucune année scolaire active. Les données financières sont
+              indisponibles.
+            </span>
+          </div>
+        )}
+        {renderContent()}
+      </div>
     </Layout>
   );
 }

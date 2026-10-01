@@ -1,11 +1,13 @@
 // src/components/ui/Modal.jsx
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useId } from "react";
 import { X } from "lucide-react";
 import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { IconButton } from "./Button";
 
-// ✅ KEYFRAMES au module-level
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL (classes CSS au lieu de [style*="..."])
+// ════════════════════════════════════════════════════════════════════
 const ModalKeyframes = (
   <style>{`
     @keyframes ui-modal-fade {
@@ -20,15 +22,69 @@ const ModalKeyframes = (
       from { transform: scale(0.96); opacity: 0; }
       to   { transform: scale(1);    opacity: 1; }
     }
+    .ui-modal-overlay {
+      animation: ui-modal-fade 0.2s ease-out;
+    }
+    .ui-modal-panel-mobile {
+      animation: ui-modal-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .ui-modal-panel-desktop {
+      animation: ui-modal-zoom 0.2s ease-out;
+    }
     @media (prefers-reduced-motion: reduce) {
-      [style*="ui-modal-fade"],
-      [style*="ui-modal-slide-up"],
-      [style*="ui-modal-zoom"] {
+      .ui-modal-overlay,
+      .ui-modal-panel-mobile,
+      .ui-modal-panel-desktop {
         animation: none !important;
       }
     }
   `}</style>
 );
+
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES
+// ════════════════════════════════════════════════════════════════════
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "textarea:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+// ════════════════════════════════════════════════════════════════════
+// HOOK — Focus trap (Tab / Shift+Tab restent dans le panel)
+// ════════════════════════════════════════════════════════════════════
+function useFocusTrap(panelRef, isOpen) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const handleTab = (e) => {
+      if (e.key !== "Tab") return;
+      const focusables = panel.querySelectorAll(FOCUSABLE_SELECTOR);
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    panel.addEventListener("keydown", handleTab);
+    return () => panel.removeEventListener("keydown", handleTab);
+  }, [panelRef, isOpen]);
+}
 
 export function Modal({
   open,
@@ -44,6 +100,10 @@ export function Modal({
   const isMobile = useIsMobile();
   const panelRef = useRef(null);
   const previousFocusRef = useRef(null);
+  const titleId = useId();
+
+  // ✅ Focus trap
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -57,8 +117,17 @@ export function Modal({
     };
     document.addEventListener("keydown", handleKey);
 
+    // ✅ Body scroll lock robuste (iOS Safari)
+    const scrollY = window.scrollY;
     const prevOverflow = document.body.style.overflow;
+    const prevPosition = document.body.style.position;
+    const prevTop = document.body.style.top;
+    const prevWidth = document.body.style.width;
+
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
 
     const focusTimer = setTimeout(() => {
       panelRef.current?.focus();
@@ -67,6 +136,10 @@ export function Modal({
     return () => {
       document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPosition;
+      document.body.style.top = prevTop;
+      document.body.style.width = prevWidth;
+      window.scrollTo(0, scrollY);
       clearTimeout(focusTimer);
       if (previousFocusRef.current?.focus) previousFocusRef.current.focus();
     };
@@ -84,7 +157,8 @@ export function Modal({
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
-      aria-labelledby={title ? "modal-title" : undefined}
+      aria-labelledby={title ? titleId : undefined}
+      className="ui-modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -96,12 +170,15 @@ export function Modal({
         justifyContent: "center",
         zIndex: 1000,
         padding: isMobile ? 0 : 16,
-        animation: "ui-modal-fade 0.2s ease-out",
+        overscrollBehavior: "contain",
       }}
     >
       <div
         ref={panelRef}
         tabIndex={-1}
+        className={
+          isMobile ? "ui-modal-panel-mobile" : "ui-modal-panel-desktop"
+        }
         style={{
           background: t.surface.default,
           borderRadius: isMobile ? "20px 20px 0 0" : t.radius.lg,
@@ -110,19 +187,19 @@ export function Modal({
           maxWidth: isMobile ? "100%" : maxWidth,
           maxHeight: isMobile ? "92vh" : "90vh",
           overflowY: "auto",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
           boxShadow: t.shadow.lg,
           border: isMobile ? "none" : `1px solid ${t.border.default}`,
           outline: "none",
           paddingBottom: isMobile
             ? "calc(20px + env(safe-area-inset-bottom, 0px))"
             : 24,
-          animation: isMobile
-            ? "ui-modal-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1)"
-            : "ui-modal-zoom 0.2s ease-out",
         }}
       >
         {isMobile && (
           <div
+            aria-hidden="true"
             style={{
               width: 40,
               height: 4,
@@ -130,7 +207,6 @@ export function Modal({
               background: t.border.default,
               margin: "0 auto 16px",
             }}
-            aria-hidden="true"
           />
         )}
 
@@ -146,7 +222,7 @@ export function Modal({
           >
             {title && (
               <h3
-                id="modal-title"
+                id={titleId}
                 style={{
                   margin: 0,
                   fontSize: isMobile ? 17 : 18,
@@ -159,7 +235,7 @@ export function Modal({
               </h3>
             )}
             <IconButton
-              icon={<X size={20} />}
+              icon={<X size={20} aria-hidden="true" />}
               label="Fermer"
               onClick={onClose}
               variant="ghost"
@@ -187,7 +263,6 @@ export function Modal({
         )}
       </div>
 
-      {/* ✅ Keyframes au module-level */}
       {ModalKeyframes}
     </div>
   );

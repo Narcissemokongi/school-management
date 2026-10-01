@@ -12,7 +12,15 @@ import {
 } from "../utils";
 
 // ============================================================
-// KEYFRAMES (injectés dans toutes les branches)
+// CONSTANTES MODULE-LEVEL
+// ============================================================
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+// ============================================================
+// KEYFRAMES (module-level, rendus UNE fois)
 // ============================================================
 const Keyframes = (
   <style>{`
@@ -29,7 +37,8 @@ const Keyframes = (
 // ============================================================
 function StatCard({ icon, label, value, color, dark, isMobile }) {
   return (
-    <div
+    <article
+      aria-label={`${label} : ${value}`}
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 12,
@@ -43,9 +52,11 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
         gap: 10,
         minWidth: isMobile ? 130 : "auto",
         flex: isMobile ? "0 0 auto" : 1,
+        minHeight: 44,
       }}
     >
       <div
+        aria-hidden="true"
         style={{
           width: 32,
           height: 32,
@@ -77,12 +88,13 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
             fontSize: 18,
             fontWeight: 700,
             lineHeight: 1.1,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {value}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -117,12 +129,19 @@ function BarRow({ label, count, max, color, dark, isMobile }) {
             fontSize: isMobile ? 11 : 12,
             color: textSecondary,
             fontWeight: 600,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {count}
         </span>
       </div>
+      {/* ✅ A11y — progressbar pour lecteur d'écran */}
       <div
+        role="progressbar"
+        aria-label={`${label} : ${count}`}
+        aria-valuenow={count}
+        aria-valuemin={0}
+        aria-valuemax={max}
         style={{
           height: 6,
           background: dark ? "#334155" : "#F1F5F9",
@@ -131,6 +150,7 @@ function BarRow({ label, count, max, color, dark, isMobile }) {
         }}
       >
         <div
+          aria-hidden="true"
           style={{
             height: "100%",
             width: `${pct}%`,
@@ -148,20 +168,13 @@ function BarRow({ label, count, max, color, dark, isMobile }) {
 // COMPOSANT PRINCIPAL
 // ============================================================
 export function DashboardDirecteur({
-  ecoleId,
-  punitions,
-  eleves,
-  classes,
-  fautes,
-  notifs,
-  user,
+  ecoleId, punitions, eleves, classes, fautes, notifs, user,
 }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
 
   const userId = user?._id;
 
-  // ✅ userId ajouté + garde
   const enseignantsRaw = useQuery(
     api.users.listEnseignantsByEcole,
     ecoleId && userId ? { ecoleId, userId } : "skip"
@@ -171,7 +184,6 @@ export function DashboardDirecteur({
     [enseignantsRaw]
   );
 
-  // ✅ Map fautes pour lookup O(1)
   const fautesById = useMemo(
     () => new Map((fautes ?? []).map((f) => [f._id, f])),
     [fautes]
@@ -188,7 +200,6 @@ export function DashboardDirecteur({
     [punitions, eleves, classes]
   );
 
-  // ✅ Utilise la Map
   const graves = useMemo(
     () =>
       (punitions ?? []).filter(
@@ -203,7 +214,6 @@ export function DashboardDirecteur({
   const totalEnseignants = enseignants.length;
   const totalPunitions = punitions?.length ?? 0;
 
-  // ✅ Mémoïsé
   const { elevesAvecPunitions, tauxElevesAvecPunitions } = useMemo(() => {
     if (!punitions || punitions.length === 0) {
       return { elevesAvecPunitions: 0, tauxElevesAvecPunitions: "0" };
@@ -216,7 +226,6 @@ export function DashboardDirecteur({
     return { elevesAvecPunitions, tauxElevesAvecPunitions: taux };
   }, [punitions, totalEleves]);
 
-  // Effectifs par classe
   const effectifsParClasse = useMemo(() => {
     const map = new Map();
     (eleves ?? []).forEach((e) => {
@@ -227,7 +236,6 @@ export function DashboardDirecteur({
     );
   }, [eleves]);
 
-  // ✅ Fautes par gravité — utilise Map
   const fautesParGravite = useMemo(() => {
     const counts = { Légère: 0, Moyenne: 0, Grave: 0 };
     (punitions ?? []).forEach((p) => {
@@ -250,7 +258,8 @@ export function DashboardDirecteur({
   const success = dark ? "#34D399" : "#10B981";
   const info = dark ? "#38BDF8" : "#0EA5E9";
 
-  const cardStyle = {
+  // ✅ useMemo pour éviter la recréation à chaque render
+  const cardStyle = useMemo(() => ({
     background: cardBg,
     borderRadius: 14,
     padding: isMobile ? "14px" : "18px",
@@ -258,7 +267,7 @@ export function DashboardDirecteur({
       ? "0 1px 3px rgba(0,0,0,0.3)"
       : "0 1px 3px rgba(0,0,0,0.05)",
     border: `1px solid ${cardBorder}`,
-  };
+  }), [cardBg, cardBorder, dark, isMobile]);
 
   // ========== Loading ==========
   const isLoading =
@@ -273,6 +282,9 @@ export function DashboardDirecteur({
       <>
         {Keyframes}
         <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
           style={{
             display: "flex",
             justifyContent: "center",
@@ -284,19 +296,34 @@ export function DashboardDirecteur({
             size={32}
             className="dd-spin"
             style={{ color: accent }}
+            aria-hidden="true"
           />
+          <span style={{ position: "absolute", left: -9999 }}>
+            Chargement du tableau de bord
+          </span>
         </div>
       </>
     );
   }
 
-  const maxEffectif = Math.max(
-    ...effectifsParClasse.map(([, n]) => n),
-    1
+  // ✅ useMemo — évite le spread de Math.max à chaque render
+  const maxEffectif = useMemo(
+    () => Math.max(...effectifsParClasse.map(([, n]) => n), 1),
+    [effectifsParClasse]
   );
-  const maxFaute = Math.max(...Object.values(fautesParGravite), 1);
-  const toutesFautesZero = Object.values(fautesParGravite).every(
-    (v) => v === 0
+  const maxFaute = useMemo(
+    () => Math.max(...Object.values(fautesParGravite), 1),
+    [fautesParGravite]
+  );
+  const toutesFautesZero = useMemo(
+    () => Object.values(fautesParGravite).every((v) => v === 0),
+    [fautesParGravite]
+  );
+
+  // ✅ useMemo — dérivé de parClasse
+  const classesTouchees = useMemo(
+    () => Object.values(parClasse).filter((v) => v > 0).length,
+    [parClasse]
   );
 
   return (
@@ -347,74 +374,18 @@ export function DashboardDirecteur({
             marginBottom: isMobile ? 14 : 20,
             overflowX: isMobile ? "auto" : "visible",
             paddingBottom: isMobile ? 4 : 0,
-            WebkitOverflowScrolling: "touch",
             scrollbarWidth: "none",
+            ...SCROLL_AREA,
           }}
         >
-          <StatCard
-            icon={<ClipboardList size={16} />}
-            label="Punitions"
-            value={totalPunitions}
-            color={accent}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<AlertTriangle size={16} />}
-            label="Fautes graves"
-            value={graves.length}
-            color={danger}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<Users size={16} />}
-            label="Élèves concernés"
-            value={elevesAvecPunitions}
-            color={warning}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<Building size={16} />}
-            label="Classes touchées"
-            value={Object.values(parClasse).filter((v) => v > 0).length}
-            color={success}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<GraduationCap size={16} />}
-            label="Élèves"
-            value={totalEleves}
-            color={info}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<Building size={16} />}
-            label="Classes"
-            value={totalClasses}
-            color={success}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<UserCheck size={16} />}
-            label="Enseignants"
-            value={totalEnseignants}
-            color={accent}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<Activity size={16} />}
-            label="% élèves punis"
-            value={`${tauxElevesAvecPunitions}%`}
-            color={warning}
-            dark={dark}
-            isMobile={isMobile}
-          />
+          <StatCard icon={<ClipboardList size={16} />} label="Punitions" value={totalPunitions} color={accent} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<AlertTriangle size={16} />} label="Fautes graves" value={graves.length} color={danger} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<Users size={16} />} label="Élèves concernés" value={elevesAvecPunitions} color={warning} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<Building size={16} />} label="Classes touchées" value={classesTouchees} color={success} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<GraduationCap size={16} />} label="Élèves" value={totalEleves} color={info} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<Building size={16} />} label="Classes" value={totalClasses} color={success} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<UserCheck size={16} />} label="Enseignants" value={totalEnseignants} color={accent} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<Activity size={16} />} label="% élèves punis" value={`${tauxElevesAvecPunitions}%`} color={warning} dark={dark} isMobile={isMobile} />
         </div>
 
         {/* ==================== RÉPARTITIONS ==================== */}
@@ -426,139 +397,78 @@ export function DashboardDirecteur({
               : "repeat(auto-fit, minmax(300px, 1fr))",
             gap: isMobile ? 10 : 14,
             marginBottom: isMobile ? 14 : 20,
+            ...SCROLL_AREA,
           }}
         >
           {/* Effectifs par classe */}
           <div style={cardStyle}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 12,
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <div
+                aria-hidden="true"
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 8,
+                  width: 28, height: 28, borderRadius: 8,
                   background: `${info}20`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: info,
-                  flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: info, flexShrink: 0,
                 }}
               >
                 <Users size={14} />
               </div>
-              <h4
-                style={{
-                  fontSize: isMobile ? 13.5 : 14,
-                  fontWeight: 700,
-                  color: textPrimary,
-                  margin: 0,
-                }}
-              >
+              <h3 style={{ fontSize: isMobile ? 13.5 : 14, fontWeight: 700, color: textPrimary, margin: 0 }}>
                 Effectifs par classe
-              </h4>
+              </h3>
             </div>
 
             {effectifsParClasse.length === 0 ? (
               <p
-                style={{
-                  color: textSecondary,
-                  fontSize: 12.5,
-                  margin: 0,
-                  textAlign: "center",
-                  padding: "16px 0",
-                }}
+                role="status"
+                aria-live="polite"
+                style={{ color: textSecondary, fontSize: 12.5, margin: 0, textAlign: "center", padding: "16px 0" }}
               >
                 Aucune donnée
               </p>
             ) : (
               effectifsParClasse.map(([classe, effectif]) => (
-                <BarRow
-                  key={classe}
-                  label={classe}
-                  count={effectif}
-                  max={maxEffectif}
-                  color={info}
-                  dark={dark}
-                  isMobile={isMobile}
-                />
+                <BarRow key={classe} label={classe} count={effectif} max={maxEffectif} color={info} dark={dark} isMobile={isMobile} />
               ))
             )}
           </div>
 
           {/* Fautes par gravité */}
           <div style={cardStyle}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 12,
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <div
+                aria-hidden="true"
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 8,
+                  width: 28, height: 28, borderRadius: 8,
                   background: `${warning}20`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: warning,
-                  flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: warning, flexShrink: 0,
                 }}
               >
                 <AlertTriangle size={14} />
               </div>
-              <h4
-                style={{
-                  fontSize: isMobile ? 13.5 : 14,
-                  fontWeight: 700,
-                  color: textPrimary,
-                  margin: 0,
-                }}
-              >
+              <h3 style={{ fontSize: isMobile ? 13.5 : 14, fontWeight: 700, color: textPrimary, margin: 0 }}>
                 Fautes par gravité
-              </h4>
+              </h3>
             </div>
 
             {toutesFautesZero ? (
               <p
-                style={{
-                  color: textSecondary,
-                  fontSize: 12.5,
-                  margin: 0,
-                  textAlign: "center",
-                  padding: "16px 0",
-                }}
+                role="status"
+                aria-live="polite"
+                style={{ color: textSecondary, fontSize: 12.5, margin: 0, textAlign: "center", padding: "16px 0" }}
               >
                 Aucune faute enregistrée
               </p>
             ) : (
               Object.entries(fautesParGravite).map(([gravite, count]) => {
                 const color =
-                  gravite === "Grave"
-                    ? danger
-                    : gravite === "Moyenne"
-                    ? warning
-                    : success;
+                  gravite === "Grave" ? danger
+                  : gravite === "Moyenne" ? warning
+                  : success;
                 return (
-                  <BarRow
-                    key={gravite}
-                    label={gravite}
-                    count={count}
-                    max={maxFaute}
-                    color={color}
-                    dark={dark}
-                    isMobile={isMobile}
-                  />
+                  <BarRow key={gravite} label={gravite} count={count} max={maxFaute} color={color} dark={dark} isMobile={isMobile} />
                 );
               })
             )}
@@ -568,188 +478,142 @@ export function DashboardDirecteur({
         {/* ==================== ALERTES RÉCENTES ==================== */}
         {notifs.length > 0 && (
           <div style={{ ...cardStyle, marginBottom: isMobile ? 14 : 20 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 10,
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div
+                aria-hidden="true"
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 8,
+                  width: 28, height: 28, borderRadius: 8,
                   background: `${danger}20`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: danger,
-                  flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: danger, flexShrink: 0,
                 }}
               >
                 <AlertTriangle size={14} />
               </div>
-              <h4
-                style={{
-                  fontSize: isMobile ? 13.5 : 14,
-                  fontWeight: 700,
-                  color: textPrimary,
-                  margin: 0,
-                }}
-              >
+              <h3 style={{ fontSize: isMobile ? 13.5 : 14, fontWeight: 700, color: textPrimary, margin: 0 }}>
                 Alertes récentes
-              </h4>
+              </h3>
             </div>
-            {notifs.slice(-3).map((n, i, arr) => (
-              <div
-                key={`${i}-${typeof n === "string" ? n.slice(0, 20) : i}`}
-                style={{
-                  padding: "8px 0",
-                  borderBottom:
-                    i < arr.length - 1
-                      ? `1px solid ${cardBorder}`
-                      : "none",
-                  fontSize: isMobile ? 12 : 13,
-                  color: textPrimary,
-                  lineHeight: 1.4,
-                }}
-              >
-                {n}
-              </div>
-            ))}
+            <ul
+              role="list"
+              style={{ listStyle: "none", padding: 0, margin: 0 }}
+            >
+              {notifs.slice(-3).map((n, i, arr) => (
+                <li
+                  key={`${i}-${typeof n === "string" ? n.slice(0, 20) : i}`}
+                  style={{
+                    padding: "8px 0",
+                    borderBottom: i < arr.length - 1 ? `1px solid ${cardBorder}` : "none",
+                    fontSize: isMobile ? 12 : 13,
+                    color: textPrimary,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {n}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
         {/* ==================== TOP 3 ==================== */}
         <div style={cardStyle}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 12,
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <div
+              aria-hidden="true"
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
+                width: 28, height: 28, borderRadius: 8,
                 background: `${warning}20`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: warning,
-                flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: warning, flexShrink: 0,
               }}
             >
               <Flame size={14} />
             </div>
-            <h4
-              style={{
-                fontSize: isMobile ? 13.5 : 14,
-                fontWeight: 700,
-                color: textPrimary,
-                margin: 0,
-              }}
-            >
+            <h3 style={{ fontSize: isMobile ? 13.5 : 14, fontWeight: 700, color: textPrimary, margin: 0 }}>
               Élèves les plus sanctionnés
-            </h4>
+            </h3>
           </div>
 
           {top.length === 0 ? (
             <p
-              style={{
-                color: textSecondary,
-                fontSize: 12.5,
-                margin: 0,
-                textAlign: "center",
-                padding: "16px 0",
-              }}
+              role="status"
+              aria-live="polite"
+              style={{ color: textSecondary, fontSize: 12.5, margin: 0, textAlign: "center", padding: "16px 0" }}
             >
               Aucun élève sanctionné
             </p>
           ) : (
-            top.map((t, i) => (
-              <div
-                key={t.eleve?._id ?? `top-${i}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 0",
-                  borderBottom:
-                    i < top.length - 1
-                      ? `1px solid ${cardBorder}`
-                      : "none",
-                }}
-              >
-                <div
+            <ol
+              role="list"
+              style={{ listStyle: "none", padding: 0, margin: 0 }}
+            >
+              {top.map((t, i) => (
+                <li
+                  key={t.eleve?._id ?? `top-${i}`}
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 12,
-                    minWidth: 0,
+                    justifyContent: "space-between",
+                    padding: "10px 0",
+                    borderBottom: i < top.length - 1 ? `1px solid ${cardBorder}` : "none",
                   }}
                 >
-                  <div
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                    <div
+                      aria-label={`Rang ${i + 1}`}
+                      style={{
+                        width: isMobile ? 28 : 32,
+                        height: isMobile ? 28 : 32,
+                        borderRadius: "50%",
+                        background: i === 0 ? danger : i === 1 ? warning : accent,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: isMobile ? 12 : 13,
+                        fontWeight: 800,
+                        color: "#fff",
+                        flexShrink: 0,
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {i + 1}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: isMobile ? 13 : 14,
+                          color: textPrimary,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {t.eleve?.nom} {t.eleve?.postnom}
+                      </div>
+                      <div style={{ fontSize: isMobile ? 11 : 12, color: textSecondary }}>
+                        Classe {t.eleve?.classe}
+                      </div>
+                    </div>
+                  </div>
+                  <span
                     style={{
-                      width: isMobile ? 28 : 32,
-                      height: isMobile ? 28 : 32,
-                      borderRadius: "50%",
-                      background:
-                        i === 0 ? danger : i === 1 ? warning : accent,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: isMobile ? 12 : 13,
-                      fontWeight: 800,
+                      background: i === 0 ? danger : warning,
                       color: "#fff",
+                      padding: "2px 10px",
+                      borderRadius: 20,
+                      fontSize: isMobile ? 11 : 12,
+                      fontWeight: 600,
                       flexShrink: 0,
+                      fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {i + 1}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        fontSize: isMobile ? 13 : 14,
-                        color: textPrimary,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {t.eleve?.nom} {t.eleve?.postnom}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: isMobile ? 11 : 12,
-                        color: textSecondary,
-                      }}
-                    >
-                      Classe {t.eleve?.classe}
-                    </div>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    background: i === 0 ? danger : warning,
-                    color: "#fff",
-                    padding: "2px 10px",
-                    borderRadius: 20,
-                    fontSize: isMobile ? 11 : 12,
-                    fontWeight: 600,
-                    flexShrink: 0,
-                  }}
-                >
-                  {t.count} faute{t.count > 1 ? "s" : ""}
-                </span>
-              </div>
-            ))
+                    {t.count} faute{t.count > 1 ? "s" : ""}
+                  </span>
+                </li>
+              ))}
+            </ol>
           )}
         </div>
       </div>

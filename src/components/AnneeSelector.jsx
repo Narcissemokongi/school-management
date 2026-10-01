@@ -1,3 +1,4 @@
+// src/components/AnneeSelector.jsx
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -6,9 +7,30 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { Calendar, Loader, CheckCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// Taille minimale tap target mobile
+// ════════════════════════════════════════════════════════════════════
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const AnneeSelectorKeyframes = (
+  <style>{`
+    @keyframes as-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .as-spin { animation: as-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .as-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
 // HELPER ERREUR
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function extractErrMsg(err, fallback = "Erreur inconnue") {
   if (!err) return fallback;
   if (typeof err === "string") return err;
@@ -20,8 +42,9 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
   const [activating, setActivating] = useState(false);
+  // ✨ Feedback tap
+  const [pressed, setPressed] = useState(false);
 
-  // ✅ userId ajouté à la query + garde stricte
   const annees = useQuery(
     api.anneesScolaires.listByEcole,
     ecoleId && userId ? { ecoleId, userId } : "skip"
@@ -37,23 +60,22 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
     );
   }, [annees]);
 
-  // Année actuellement sélectionnée (lookup une seule fois)
   const anneeSelectionnee = useMemo(
     () => anneesTriees.find((a) => a._id === anneeId) ?? null,
     [anneesTriees, anneeId]
   );
 
-  // Au moins une année active dans la liste
   const aUneAnneeActive = useMemo(
     () => anneesTriees.some((a) => a.estActive),
     [anneesTriees]
   );
 
-  // Affiche le bouton si : une année est active ET la sélectionnée ne l'est pas
   const showActivateButton =
     aUneAnneeActive && anneeSelectionnee && !anneeSelectionnee.estActive;
 
-  // ===== HANDLERS =====
+  // ════════════════════════════════════════════════════════════════════
+  // HANDLERS
+  // ════════════════════════════════════════════════════════════════════
   const handleChange = useCallback(
     (newAnneeId) => {
       if (!newAnneeId || newAnneeId === anneeId) return;
@@ -90,7 +112,15 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
     onAnneeChange,
   ]);
 
-  // ===== Styles adaptatifs =====
+  // ✨ Handlers touch
+  const handleTouchStart = () => {
+    if (!activating) setPressed(true);
+  };
+  const handleTouchEnd = () => setPressed(false);
+
+  // ════════════════════════════════════════════════════════════════════
+  // STYLES
+  // ════════════════════════════════════════════════════════════════════
   const containerStyle = {
     display: "flex",
     alignItems: isMobile ? "stretch" : "center",
@@ -98,6 +128,7 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
     flexWrap: "wrap",
     flexDirection: isMobile ? "column" : "row",
     width: isMobile ? "100%" : "auto",
+    boxSizing: "border-box",
   };
 
   const innerRowStyle = {
@@ -105,13 +136,15 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
     alignItems: "center",
     gap: 8,
     width: isMobile ? "100%" : "auto",
+    minWidth: 0,
   };
 
   const selectStyle = {
     padding: isMobile ? "12px 14px" : "8px 12px",
     border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
     borderRadius: 8,
-    fontSize: isMobile ? 16 : 14, // 16px évite le zoom iOS
+    // ✨ 16px évite le zoom iOS
+    fontSize: isMobile ? 16 : 14,
     background: dark ? "#1E293B" : "#FFFFFF",
     color: dark ? "#F1F5F9" : "#1E293B",
     outline: "none",
@@ -119,6 +152,14 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
     width: isMobile ? "100%" : "auto",
     minWidth: isMobile ? "100%" : 180,
     flex: isMobile ? 1 : "0 0 auto",
+    fontFamily: "inherit",
+    // ✨ Mobile : min height WCAG + neutralise tap delay
+    minHeight: isMobile ? MOBILE_TAP : undefined,
+    WebkitAppearance: "none",
+    appearance: "none",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+    boxSizing: "border-box",
   };
 
   const activateButtonStyle = {
@@ -136,38 +177,58 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
     opacity: activating ? 0.7 : 1,
     fontSize: isMobile ? 16 : 14,
     width: isMobile ? "100%" : "auto",
-    transition: "opacity 0.2s ease",
+    fontFamily: "inherit",
+    // ✨ Transition + feedback tap
+    transition:
+      "opacity 0.2s ease, transform 0.1s ease, background 0.12s ease",
+    transform: pressed ? "scale(0.97)" : "scale(1)",
+    // ✨ Mobile : min height WCAG + neutralise tap delay
+    minHeight: isMobile ? MOBILE_TAP : undefined,
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+    boxSizing: "border-box",
   };
 
-  // ===== Rendu =====
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU
+  // ════════════════════════════════════════════════════════════════════
   return (
     <div style={containerStyle}>
-      {/* Keyframes préfixés as-* (Annee Selector) */}
-      <style>{`
-        @keyframes as-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .as-spin { animation: as-spin 1s linear infinite; }
-        @media (prefers-reduced-motion: reduce) {
-          .as-spin { animation: none !important; }
-        }
-      `}</style>
+      {AnneeSelectorKeyframes}
 
       <div style={innerRowStyle}>
         <Calendar
           size={isMobile ? 20 : 18}
           color={dark ? "#94A3B8" : "#64748B"}
+          aria-hidden="true"
         />
 
         {annees === undefined ? (
-          <Loader
-            size={16}
-            className="as-spin"
-            style={{ color: dark ? "#818CF8" : "#4F46E5" }}
-          />
+          <div
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: isMobile ? MOBILE_TAP : undefined,
+              minWidth: isMobile ? MOBILE_TAP : undefined,
+            }}
+          >
+            <Loader
+              size={16}
+              className="as-spin"
+              style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+              aria-hidden="true"
+            />
+          </div>
         ) : (
           <select
             value={anneeId || ""}
             onChange={(e) => handleChange(e.target.value)}
             style={selectStyle}
+            aria-label="Sélectionner l'année scolaire"
           >
             {anneesTriees.length === 0 && (
               <option value="">Aucune année</option>
@@ -188,16 +249,25 @@ export function AnneeSelector({ ecoleId, anneeId, onAnneeChange, userId }) {
       {/* Bouton d'activation */}
       {showActivateButton && (
         <button
+          type="button"
           onClick={handleActivateCurrent}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
           disabled={activating}
           style={activateButtonStyle}
           title="Activer cette année"
           aria-label="Activer cette année scolaire"
+          aria-busy={activating}
         >
           {activating ? (
-            <Loader size={16} className="as-spin" />
+            <Loader
+              size={16}
+              className="as-spin"
+              aria-hidden="true"
+            />
           ) : (
-            <CheckCircle size={isMobile ? 20 : 16} />
+            <CheckCircle size={isMobile ? 20 : 16} aria-hidden="true" />
           )}
           Activer
         </button>

@@ -10,8 +10,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { RoleBadge, Badge, Button, IconButton } from "@/components/ui";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES (module-level, préfixés `puc-*`)
-// ✅ Auto-injectés par le composant — pas besoin du parent
+// KEYFRAMES
 // ════════════════════════════════════════════════════════════════════
 const PendingUserCardKeyframes = (
   <style>{`
@@ -33,9 +32,6 @@ const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-// ════════════════════════════════════════════════════════════════════
-// BADGE "NOUVEAU" (< 24h)
-// ════════════════════════════════════════════════════════════════════
 function NewBadge({ createdAt }) {
   if (!createdAt) return null;
   const diff = Date.now() - createdAt;
@@ -69,6 +65,8 @@ export function PendingUserCard({
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [hovered, setHovered] = useState(false);
+  // ✨ Nouveau : feedback tap
+  const [pressed, setPressed] = useState(false);
 
   const noMotion = useMemo(() => prefersReducedMotion(), []);
 
@@ -96,12 +94,10 @@ export function PendingUserCard({
     setLeaving(true);
     try {
       await onReject(rejectReason.trim());
-      // ✅ Ferme l'input uniquement en cas de succès
       setShowRejectInput(false);
     } catch (err) {
       console.error("[PendingUserCard] reject failed:", err);
       setLeaving(false);
-      // L'input reste ouvert pour réessayer
     } finally {
       setRejecting(false);
     }
@@ -112,9 +108,7 @@ export function PendingUserCard({
     setRejectReason("");
   }, []);
 
-  // ────────────────────────────────────────────────────────────
-  // Données dérivées
-  // ────────────────────────────────────────────────────────────
+  // ─── Données dérivées ───
   const displayName = useMemo(() => {
     const fullName = [user?.nom, user?.postnom, user?.prenom]
       .filter(Boolean)
@@ -151,9 +145,15 @@ export function PendingUserCard({
 
   const isBusy = approving || rejecting || disabled;
 
-  // ────────────────────────────────────────────────────────────
-  // Rendu
-  // ────────────────────────────────────────────────────────────
+  // ✨ Handlers touch
+  const handleTouchStart = useCallback(() => {
+    if (!disabled) setPressed(true);
+  }, [disabled]);
+
+  const handleTouchEnd = useCallback(() => {
+    setPressed(false);
+  }, []);
+
   return (
     <>
       {PendingUserCardKeyframes}
@@ -168,7 +168,9 @@ export function PendingUserCard({
           alignItems: isMobile ? "stretch" : "center",
           gap: isMobile ? 8 : 12,
           boxShadow:
-            hovered && !noMotion ? t.shadow.md : t.shadow.sm,
+            !isMobile && hovered && !noMotion
+              ? t.shadow.md
+              : t.shadow.sm,
           transition: noMotion
             ? "none"
             : `box-shadow ${t.transition.normal}, background-color ${t.transition.slow}, border-color ${t.transition.slow}, opacity ${t.transition.slow}, transform ${t.transition.slow}`,
@@ -176,15 +178,26 @@ export function PendingUserCard({
             selected ? t.accent.primary : t.border.subtle
           }`,
           opacity: leaving ? 0 : 1,
-          transform: leaving && !noMotion ? "translateX(20px)" : "translateX(0)",
+          // ✨ Feedback tap (scale)
+          transform: leaving
+            ? "translateX(20px)"
+            : pressed
+            ? "scale(0.99)"
+            : "translateX(0)",
           cursor: "pointer",
           flexWrap: "wrap",
+          // ✨ Neutralise flash + délai tap
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
         }}
         onClick={toggleExpanded}
-        onMouseEnter={() => !noMotion && setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={() => !isMobile && !noMotion && setHovered(true)}
+        onMouseLeave={() => !isMobile && setHovered(false)}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
-        {/* ═══ Case à cocher ═══ */}
+        {/* ═══ Case à cocher — ✨ Zone tap élargie ═══ */}
         {onToggleSelect && (
           <button
             type="button"
@@ -197,11 +210,19 @@ export function PendingUserCard({
               background: "none",
               border: "none",
               cursor: disabled ? "not-allowed" : "pointer",
-              padding: 0,
+              // ✨ Zone tap 44x44 minimum
+              padding: isMobile ? 10 : 4,
+              margin: isMobile ? -10 : -4, // compense le padding visuellement
               flexShrink: 0,
               color: selected ? t.accent.primary : t.text.muted,
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
+              minWidth: isMobile ? 44 : undefined,
+              minHeight: isMobile ? 44 : undefined,
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              borderRadius: 8,
             }}
             aria-label={selected ? "Désélectionner" : "Sélectionner"}
             title={selected ? "Désélectionner" : "Sélectionner"}
@@ -255,7 +276,6 @@ export function PendingUserCard({
             {inscriptionDate && ` · Inscrit le ${inscriptionDate}`}
           </div>
 
-          {/* Détails étendus */}
           {expanded && (
             <div
               style={{
@@ -374,18 +394,26 @@ export function PendingUserCard({
                   if (e.key === "Escape") cancelReject();
                 }}
                 style={{
-                  padding: isMobile ? "10px 8px" : "6px 8px",
+                  padding: isMobile ? "10px 12px" : "6px 8px",
                   borderRadius: t.radius.sm,
                   border: `1px solid ${t.border.default}`,
                   background: t.surface.input,
                   color: t.text.primary,
-                  fontSize: isMobile ? 14 : 13,
+                  // ✨ 16px minimum pour éviter le zoom iOS
+                  fontSize: 16,
                   fontFamily: t.font.family,
                   outline: "none",
                   width: isMobile ? "100%" : 140,
                   boxSizing: "border-box",
+                  // ✨ Neutralise tap delay
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  minHeight: isMobile ? 44 : undefined,
                 }}
                 aria-label="Motif du rejet"
+                inputMode="text"
+                autoComplete="off"
+                autoCorrect="off"
               />
               <IconButton
                 icon={

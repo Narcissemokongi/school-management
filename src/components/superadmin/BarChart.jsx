@@ -1,3 +1,4 @@
+// src/components/BarChart.jsx
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -5,7 +6,7 @@ import { Download } from "lucide-react";
 import toast from "react-hot-toast";
 
 // ============================================================
-// 🟢 KEYFRAMES (composant JSX, à injecter UNE SEULE FOIS par le parent)
+// 🟢 KEYFRAMES
 // ============================================================
 export const BarChartKeyframes = (
   <style>{`
@@ -20,14 +21,202 @@ export const BarChartKeyframes = (
   `}</style>
 );
 
-// Fallback : si le parent ne fournit pas BarChartKeyframes,
-// on l'injecte quand même ici (avec préfixe unique par instance pour éviter les collisions)
 const FALLBACK_KEYFRAMES = `
   @keyframes bc-fade-in {
     from { opacity: 0; transform: translateX(-10px); }
     to   { opacity: 1; transform: translateX(0); }
   }
 `;
+
+// ✨ Sous-composant : ligne de barre (avec hover state React)
+function BarRow({
+  item,
+  index,
+  value,
+  percent,
+  label,
+  isClickable,
+  onBarClick,
+  dark,
+  isMobile,
+  color,
+  gradientTo,
+  barHeight,
+  gap,
+  showRanking,
+  rankingSize,
+  rankingFontSize,
+  labelWidthEffective,
+  labelFontSize,
+  showExternalValues,
+  valueWidth,
+  valueFontSize,
+  showPercentInside,
+  formatter,
+  animated,
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onBarClick(item);
+    }
+  };
+
+  return (
+    <div
+      className="bc-bar-row"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap,
+        animation: animated
+          ? `bc-fade-in 0.4s ease ${index * 0.05}s both`
+          : "none",
+      }}
+    >
+      {showRanking && (
+        <div
+          style={{
+            width: rankingSize,
+            height: rankingSize,
+            borderRadius: "50%",
+            background:
+              index < 3 ? (dark ? "#312E81" : "#EEF2FF") : "transparent",
+            color:
+              index < 3
+                ? dark
+                  ? "#A5B4FC"
+                  : "#4F46E5"
+                : dark
+                ? "#64748B"
+                : "#94A3B8",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: rankingFontSize,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {index + 1}
+        </div>
+      )}
+
+      <div
+        title={label}
+        style={{
+          width: isMobile
+            ? `calc(38% - 20px)`
+            : `clamp(80px, ${labelWidthEffective}px, 200px)`,
+          fontSize: labelFontSize,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          color: dark ? "#E2E8F0" : "#1E293B",
+          fontWeight: 500,
+          minWidth: 0,
+        }}
+      >
+        {label}
+      </div>
+
+      {/* ✨ Barre cliquable avec feedback tap + touch-action */}
+      <div
+        role={isClickable ? "button" : "progressbar"}
+        aria-valuenow={String(value)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${label}: ${formatter(value)}`}
+        aria-valuetext={`${formatter(value)} (${Math.round(percent)}%)`}
+        tabIndex={isClickable ? 0 : undefined}
+        onKeyDown={isClickable ? handleKeyDown : undefined}
+        onClick={() => isClickable && onBarClick(item)}
+        onMouseEnter={() => !isMobile && isClickable && setHovered(true)}
+        onMouseLeave={() => !isMobile && isClickable && setHovered(false)}
+        onTouchStart={() => isClickable && setPressed(true)}
+        onTouchEnd={() => isClickable && setPressed(false)}
+        onTouchCancel={() => isClickable && setPressed(false)}
+        style={{
+          flex: 1,
+          background: dark ? "#334155" : "#F1F5F9",
+          borderRadius: 6,
+          height: `${barHeight}px`,
+          overflow: "hidden",
+          position: "relative",
+          cursor: isClickable ? "pointer" : "default",
+          transition: "box-shadow 0.15s ease, transform 0.1s ease",
+          outline: "none",
+          // ✨ Feedback tap
+          transform: pressed ? "scale(0.99)" : "scale(1)",
+          boxShadow:
+            hovered && isClickable
+              ? dark
+                ? "0 2px 8px rgba(0,0,0,0.5)"
+                : "0 2px 8px rgba(0,0,0,0.1)"
+              : "none",
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
+          minWidth: 0,
+        }}
+      >
+        <div
+          className="bc-bar-fill"
+          style={{
+            width: `${percent}%`,
+            height: "100%",
+            background: `linear-gradient(90deg, ${color}, ${gradientTo})`,
+            borderRadius: 6,
+            minWidth: value > 0 ? 4 : 0,
+            transition: "width 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+          }}
+          title={`${label} : ${formatter(value)} (${Math.round(percent)}%)`}
+        >
+          {showPercentInside && percent > 25 && (
+            <span
+              style={{
+                position: "absolute",
+                right: 6,
+                top: "50%",
+                transform: "translateY(-50%)",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "white",
+                textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                pointerEvents: "none",
+              }}
+            >
+              {Math.round(percent)}%
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ✨ Valeur toujours visible (mobile inclus) */}
+      {showExternalValues && (
+        <div
+          style={{
+            width: valueWidth,
+            textAlign: "right",
+            fontSize: valueFontSize,
+            fontWeight: 600,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            fontVariantNumeric: "tabular-nums",
+            flexShrink: 0,
+          }}
+        >
+          {formatter(value)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function BarChart({
   data,
@@ -49,20 +238,15 @@ export function BarChart({
   onBarClick,
   exportable = false,
   exportFileName = "bar-chart.csv",
-  // 🟢 Permet au parent d'éviter la ré-injection des keyframes
   renderKeyframes = true,
 }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
-  const [isAnimating, setIsAnimating] = useState(false);
 
-  // ✅ Garde safe si `data` est null/undefined
   const safeData = useMemo(() => data ?? [], [data]);
 
-  // ✅ Signature stable pour ne pas redéclencher l'animation
   const dataSignature = useMemo(
-    () =>
-      safeData.map((d) => `${d[idKey]}-${d[valueKey]}`).join("|"),
+    () => safeData.map((d) => `${d[idKey]}-${d[valueKey]}`).join("|"),
     [safeData, idKey, valueKey]
   );
 
@@ -85,21 +269,17 @@ export function BarChart({
     [maxValue, sortedData, valueKey]
   );
 
-  // ✅ Respecte prefers-reduced-motion (via CSS, mais aussi skip le state)
+  // Respect prefers-reduced-motion
+  const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
-    if (!animated) return;
-    if (typeof window !== "undefined") {
-      const reduceMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-      ).matches;
-      if (reduceMotion) return;
-    }
-    setIsAnimating(true);
-    const timer = setTimeout(() => setIsAnimating(false), 600);
-    return () => clearTimeout(timer);
-  }, [animated, dataSignature]);
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(mq.matches);
+    const handler = (e) => setReduceMotion(e.matches);
+    mq.addEventListener?.("change", handler);
+    return () => mq.removeEventListener?.("change", handler);
+  }, []);
 
-  // ✅ Export CSV — logique inchangée (déjà propre)
   const handleExport = useCallback(() => {
     try {
       const escapeCSV = (val) =>
@@ -133,19 +313,20 @@ export function BarChart({
 
   // Styles adaptatifs
   const labelFontSize = isMobile ? 12 : 13;
-  const labelWidthEffective = isMobile ? Math.min(labelWidth, 100) : labelWidth;
+  const labelWidthEffective = isMobile
+    ? Math.min(labelWidth, 100)
+    : labelWidth;
   const rankingSize = isMobile ? 20 : 24;
   const rankingFontSize = isMobile ? 10 : 12;
-  const barHeight = isMobile ? Math.max(height, 16) : height;
+  const barHeight = isMobile ? Math.max(height, 18) : height;
   const valueFontSize = isMobile ? 11 : 13;
-  const valueWidth = isMobile ? 45 : 60;
+  // ✨ NOUVEAU — valeur toujours visible sur mobile, juste plus étroite
+  const valueWidth = isMobile ? 40 : 60;
   const gap = isMobile ? 6 : 10;
-  const showPercentInside = showPercentage && (!isMobile || !showValues);
-  const showExternalValues = showValues && !isMobile;
+  const showPercentInside = showPercentage;
+  const showExternalValues = showValues; // ✨ Toujours affichée
 
-  // ============================================================
   // ÉTAT VIDE
-  // ============================================================
   if (sortedData.length === 0) {
     return (
       <div
@@ -190,24 +371,29 @@ export function BarChart({
         gap: isMobile ? 8 : 12,
       }}
     >
-      {/* 🟢 Keyframes optionnels (le parent peut les injecter une fois) */}
       {renderKeyframes && <style>{FALLBACK_KEYFRAMES}</style>}
 
       {exportable && (
         <button
+          type="button"
           onClick={handleExport}
           style={{
             alignSelf: "flex-end",
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 6,
-            padding: isMobile ? "8px 10px" : "6px 10px",
+            padding: isMobile ? "10px 14px" : "6px 10px",
+            minHeight: isMobile ? 40 : undefined,
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 6,
             background: "transparent",
             cursor: "pointer",
             color: dark ? "#94A3B8" : "#64748B",
             fontSize: isMobile ? 13 : 12,
+            fontFamily: "inherit",
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
           }}
           aria-label="Exporter en CSV"
         >
@@ -223,159 +409,33 @@ export function BarChart({
         const isClickable = Boolean(onBarClick);
 
         return (
-          <div
+          <BarRow
             key={itemId}
-            className="bc-bar-row"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: gap,
-              animation: animated
-                ? `bc-fade-in 0.4s ease ${index * 0.05}s both`
-                : "none",
-            }}
-          >
-            {showRanking && (
-              <div
-                style={{
-                  width: rankingSize,
-                  height: rankingSize,
-                  borderRadius: "50%",
-                  background:
-                    index < 3
-                      ? dark
-                        ? "#312E81"
-                        : "#EEF2FF"
-                      : "transparent",
-                  color:
-                    index < 3
-                      ? dark
-                        ? "#A5B4FC"
-                        : "#4F46E5"
-                      : dark
-                      ? "#64748B"
-                      : "#94A3B8",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: rankingFontSize,
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}
-              >
-                {index + 1}
-              </div>
-            )}
-
-            <div
-              title={label}
-              style={{
-                width: isMobile
-                  ? `calc(35% - 20px)`
-                  : `clamp(80px, ${labelWidthEffective}px, 200px)`,
-                fontSize: labelFontSize,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                color: dark ? "#E2E8F0" : "#1E293B",
-                fontWeight: 500,
-              }}
-            >
-              {label}
-            </div>
-
-            <div
-              role="progressbar"
-              aria-valuenow={String(value)}
-              aria-valuemin={0}
-              aria-valuemax={safeMax}
-              aria-label={`${label}: ${formatter(value)}`}
-              aria-valuetext={`${formatter(value)} (${Math.round(percent)}%)`}
-              // ✅ Navigation clavier si cliquable
-              tabIndex={isClickable ? 0 : undefined}
-              onKeyDown={
-                isClickable
-                  ? (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onBarClick(item);
-                      }
-                    }
-                  : undefined
-              }
-              style={{
-                flex: 1,
-                background: dark ? "#334155" : "#F1F5F9",
-                borderRadius: 6,
-                height: `${barHeight}px`,
-                overflow: "hidden",
-                position: "relative",
-                cursor: isClickable ? "pointer" : "default",
-                transition: "box-shadow 0.2s",
-                outline: "none",
-              }}
-              onClick={() => onBarClick && onBarClick(item)}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.boxShadow = dark
-                  ? "0 2px 8px rgba(0,0,0,0.5)"
-                  : "0 2px 8px rgba(0,0,0,0.1)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.boxShadow = "none")
-              }
-            >
-              <div
-                className="bc-bar-fill"
-                style={{
-                  width: isAnimating ? 0 : `${percent}%`,
-                  height: "100%",
-                  background: `linear-gradient(90deg, ${color}, ${gradientTo})`,
-                  borderRadius: 6,
-                  minWidth: value > 0 ? 4 : 0,
-                  transition: "width 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                }}
-                title={`${label} : ${formatter(
-                  value
-                )} (${Math.round(percent)}%)`}
-              >
-                {showPercentInside && percent > 20 && (
-                  <span
-                    style={{
-                      position: "absolute",
-                      right: 6,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "white",
-                      textShadow: "0 1px 2px rgba(0,0,0,0.3)",
-                    }}
-                  >
-                    {Math.round(percent)}%
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {showExternalValues && (
-              <div
-                style={{
-                  width: valueWidth,
-                  textAlign: "right",
-                  fontSize: valueFontSize,
-                  fontWeight: 600,
-                  color: dark ? "#F1F5F9" : "#1E293B",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {formatter(value)}
-              </div>
-            )}
-          </div>
+            item={item}
+            index={index}
+            value={value}
+            percent={percent}
+            label={label}
+            isClickable={isClickable}
+            onBarClick={onBarClick}
+            dark={dark}
+            isMobile={isMobile}
+            color={color}
+            gradientTo={gradientTo}
+            barHeight={barHeight}
+            gap={gap}
+            showRanking={showRanking}
+            rankingSize={rankingSize}
+            rankingFontSize={rankingFontSize}
+            labelWidthEffective={labelWidthEffective}
+            labelFontSize={labelFontSize}
+            showExternalValues={showExternalValues}
+            valueWidth={valueWidth}
+            valueFontSize={valueFontSize}
+            showPercentInside={showPercentInside}
+            formatter={formatter}
+            animated={animated && !reduceMotion}
+          />
         );
       })}
     </div>

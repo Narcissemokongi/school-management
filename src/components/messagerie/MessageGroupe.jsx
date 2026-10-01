@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   Send,
   ArrowLeft,
@@ -12,13 +13,24 @@ import {
   BookOpen,
   Loader,
   Megaphone,
+  AlertCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 // ════════════════════════════════════════════════════════════════════
-// CONSTANTES MODULE-LEVEL
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES
 // ════════════════════════════════════════════════════════════════════
 const ROLES_AUTORISES_DIFFUSION = ["admin", "directeur", "disciplinaire"];
+
+const MAX_MESSAGE_LENGTH = 5000;
 
 const TARGETS = [
   {
@@ -87,10 +99,12 @@ function buildTokens(dark) {
     primarySoft: dark ? "#312E81" : "#EEF2FF",
     primaryDisabled: dark ? "#4B5563" : "#A5B4FC",
     ghostHover: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+    ghostActive: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
     inputBg: dark ? "#0F172A" : "#F8FAFC",
     buttonSecondaryBg: dark ? "#334155" : "#F1F5F9",
     buttonSecondaryText: dark ? "#F1F5F9" : "#1E293B",
     buttonSecondaryHover: dark ? "#475569" : "#E2E8F0",
+    danger: dark ? "#F87171" : "#EF4444",
     shadow: dark
       ? "0 1px 3px rgba(0,0,0,0.3)"
       : "0 1px 3px rgba(0,0,0,0.05)",
@@ -112,9 +126,14 @@ function TargetButton({
 }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   const bg = isActive
-    ? tokens.primary
+    ? pressed
+      ? tokens.primaryHover
+      : tokens.primary
+    : pressed
+    ? tokens.buttonSecondaryHover
     : hovered && !disabled
     ? tokens.buttonSecondaryHover
     : tokens.buttonSecondaryBg;
@@ -126,10 +145,13 @@ function TargetButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
       style={{
         padding: isMobile ? "14px 14px" : "12px 16px",
         borderRadius: 12,
@@ -148,11 +170,15 @@ function TargetButton({
         fontSize: 14,
         flex: isMobile ? "none" : 1,
         width: isMobile ? "100%" : "auto",
-        transition: "background 0.15s ease, border-color 0.15s ease",
+        transition:
+          "background 0.12s ease, border-color 0.15s ease, transform 0.1s ease",
+        transform: pressed && !disabled ? "scale(0.97)" : "scale(1)",
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: 2,
         minHeight: isMobile ? 48 : 44,
         boxSizing: "border-box",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
       }}
       aria-pressed={isActive}
     >
@@ -165,6 +191,7 @@ function TargetButton({
 function BackButton({ onClick, tokens }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   return (
     <button
@@ -174,8 +201,15 @@ function BackButton({ onClick, tokens }) {
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
       style={{
-        background: hovered ? tokens.ghostHover : "transparent",
+        background: pressed
+          ? tokens.ghostActive
+          : hovered
+          ? tokens.ghostHover
+          : "transparent",
         border: "none",
         cursor: "pointer",
         color: tokens.text,
@@ -188,9 +222,12 @@ function BackButton({ onClick, tokens }) {
         marginLeft: -8,
         borderRadius: 12,
         flexShrink: 0,
-        transition: "background 0.15s ease",
+        transition: "background 0.12s ease, transform 0.1s ease",
+        transform: pressed ? "scale(0.92)" : "scale(1)",
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: 2,
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
       }}
       aria-label="Retour"
       title="Retour"
@@ -206,6 +243,7 @@ function BackButton({ onClick, tokens }) {
 export function MessageGroupe({ user, ecoleId, onBack }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
+  const confirm = useConfirm();
 
   const tokens = useMemo(() => buildTokens(dark), [dark]);
 
@@ -213,14 +251,18 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
   const [sending, setSending] = useState(false);
   const [target, setTarget] = useState("parents");
   const [selectedClasse, setSelectedClasse] = useState("");
+  const [sendPressed, setSendPressed] = useState(false);
 
   // ════════════════════════════════════════════════════════════════════
-  // QUERIES / MUTATIONS
+  // MUTATIONS
   // ════════════════════════════════════════════════════════════════════
   const sendToAllParents = useMutation(api.messages.sendToAllParents);
   const sendToAllEleves = useMutation(api.messages.sendToAllEleves);
   const sendToClasse = useMutation(api.messages.sendToClasse);
 
+  // ════════════════════════════════════════════════════════════════════
+  // QUERY CLASSES
+  // ════════════════════════════════════════════════════════════════════
   const classesArgs = useMemo(
     () => (ecoleId ? { ecoleId } : "skip"),
     [ecoleId]
@@ -231,12 +273,17 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
   // ════════════════════════════════════════════════════════════════════
   // VALIDATION
   // ════════════════════════════════════════════════════════════════════
+  const trimmedMessage = message.trim();
+  const messageLength = trimmedMessage.length;
+  const isOverLimit = messageLength > MAX_MESSAGE_LENGTH;
+
   const canSend = useMemo(() => {
     if (sending) return false;
-    if (!message.trim()) return false;
+    if (!trimmedMessage) return false;
+    if (isOverLimit) return false;
     if (target === "classe" && !selectedClasse) return false;
     return true;
-  }, [sending, message, target, selectedClasse]);
+  }, [sending, trimmedMessage, isOverLimit, target, selectedClasse]);
 
   const hasRole = useMemo(
     () => ROLES_AUTORISES_DIFFUSION.includes(user?.role),
@@ -244,68 +291,7 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
   );
 
   // ════════════════════════════════════════════════════════════════════
-  // HANDLERS
-  // ════════════════════════════════════════════════════════════════════
-  const handleSend = useCallback(async () => {
-    if (!message.trim()) {
-      toast.error("Veuillez écrire un message.");
-      return;
-    }
-    if (target === "classe" && !selectedClasse) {
-      toast.error("Veuillez choisir une classe.");
-      return;
-    }
-
-    setSending(true);
-    try {
-      let count = 0;
-      switch (target) {
-        case "parents":
-          count = await sendToAllParents({
-            ecoleId,
-            expediteurId: user._id,
-            contenu: message.trim(),
-          });
-          break;
-        case "eleves":
-          count = await sendToAllEleves({
-            ecoleId,
-            expediteurId: user._id,
-            contenu: message.trim(),
-          });
-          break;
-        case "classe":
-          count = await sendToClasse({
-            ecoleId,
-            expediteurId: user._id,
-            classe: selectedClasse,
-            contenu: message.trim(),
-          });
-          break;
-      }
-      toast.success(`Message envoyé à ${count} personne(s).`);
-      onBack();
-    } catch (err) {
-      toast.error("Erreur : " + (err?.message ?? "inconnue"));
-    } finally {
-      setSending(false);
-    }
-  }, [
-    message,
-    target,
-    selectedClasse,
-    ecoleId,
-    user,
-    sendToAllParents,
-    sendToAllEleves,
-    sendToClasse,
-    onBack,
-  ]);
-
-  if (!hasRole) return null;
-
-  // ════════════════════════════════════════════════════════════════════
-  // COMPUTED
+  // DESCRIPTION DESTINATAIRES
   // ════════════════════════════════════════════════════════════════════
   const targetDescription = useMemo(() => {
     if (target === "parents") return "tous les parents de l'école";
@@ -319,6 +305,94 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
   }, [target, selectedClasse]);
 
   // ════════════════════════════════════════════════════════════════════
+  // HANDLER SEND
+  // ════════════════════════════════════════════════════════════════════
+  const handleSend = useCallback(async () => {
+    if (!trimmedMessage) {
+      toast.error("Veuillez écrire un message.");
+      return;
+    }
+    if (target === "classe" && !selectedClasse) {
+      toast.error("Veuillez choisir une classe.");
+      return;
+    }
+
+    // ✅ Confirmation avant envoi de masse
+    const ok = await confirm({
+      title: "Confirmer la diffusion",
+      message: `Envoyer ce message à ${targetDescription} ? Cette action est irréversible.`,
+      confirmLabel: "Envoyer",
+      cancelLabel: "Annuler",
+    });
+    if (!ok) return;
+
+    setSending(true);
+    try {
+      let result;
+      switch (target) {
+        case "parents":
+          result = await sendToAllParents({
+            ecoleId,
+            expediteurId: user._id,
+            contenu: trimmedMessage,
+          });
+          break;
+        case "eleves":
+          result = await sendToAllEleves({
+            ecoleId,
+            expediteurId: user._id,
+            contenu: trimmedMessage,
+          });
+          break;
+        case "classe":
+          result = await sendToClasse({
+            ecoleId,
+            expediteurId: user._id,
+            classe: selectedClasse,
+            contenu: trimmedMessage,
+          });
+          break;
+        default:
+          throw new Error("Cible invalide");
+      }
+
+      // ✅ FIX : le backend renvoie { success, sent, skipped }
+      const sent = result?.sent ?? 0;
+      const skipped = result?.skipped ?? 0;
+
+      if (sent === 0) {
+        toast.error("Aucun destinataire trouvé.");
+      } else {
+        toast.success(
+          `Message envoyé à ${sent} personne${sent > 1 ? "s" : ""}${
+            skipped ? ` (${skipped} ignoré${skipped > 1 ? "s" : ""})` : ""
+          }.`
+        );
+        onBack();
+      }
+    } catch (err) {
+      const msg = err?.message ?? "inconnue";
+      toast.error("Erreur : " + msg);
+    } finally {
+      setSending(false);
+    }
+  }, [
+    trimmedMessage,
+    target,
+    selectedClasse,
+    targetDescription,
+    confirm,
+    ecoleId,
+    user,
+    sendToAllParents,
+    sendToAllEleves,
+    sendToClasse,
+    onBack,
+  ]);
+
+  if (!hasRole) return null;
+
+  // ════════════════════════════════════════════════════════════════════
   // RENDU
   // ════════════════════════════════════════════════════════════════════
   return (
@@ -326,7 +400,7 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
       style={{
         minHeight: "100%",
         background: tokens.bg,
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        paddingBottom: `calc(16px + ${SAFE_BOTTOM})`,
       }}
     >
       {MessageGroupeKeyframes}
@@ -337,7 +411,7 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
           maxWidth: 720,
           margin: "0 auto",
           padding: isMobile
-            ? "calc(12px + env(safe-area-inset-top, 0px)) 12px 16px"
+            ? `calc(12px + ${SAFE_TOP}) calc(12px + ${SAFE_LEFT}) 16px calc(12px + ${SAFE_RIGHT})`
             : "20px 16px",
           width: "100%",
           boxSizing: "border-box",
@@ -484,6 +558,9 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
                   cursor: sending ? "not-allowed" : "pointer",
                   opacity: sending ? 0.6 : 1,
                   minHeight: 48,
+                  fontFamily: "inherit",
+                  WebkitAppearance: "none",
+                  touchAction: "manipulation",
                 }}
               >
                 <option value="">— Choisir une classe —</option>
@@ -500,7 +577,9 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
           <label
             htmlFor="message-input"
             style={{
-              display: "block",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
               marginBottom: 8,
               fontWeight: 700,
               fontSize: 11,
@@ -509,7 +588,19 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
               letterSpacing: 0.6,
             }}
           >
-            Message
+            <span>Message</span>
+            {/* ✨ Compteur de caractères */}
+            <span
+              style={{
+                fontWeight: 600,
+                color: isOverLimit ? tokens.danger : tokens.textMuted,
+                fontSize: 11,
+                letterSpacing: 0,
+                textTransform: "none",
+              }}
+            >
+              {messageLength} / {MAX_MESSAGE_LENGTH}
+            </span>
           </label>
           <textarea
             id="message-input"
@@ -517,7 +608,9 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
               width: "100%",
               padding: isMobile ? "14px 14px" : "12px 14px",
               borderRadius: 10,
-              border: `1.5px solid ${tokens.border}`,
+              border: `1.5px solid ${
+                isOverLimit ? tokens.danger : tokens.border
+              }`,
               background: tokens.inputBg,
               color: tokens.text,
               fontSize: isMobile ? 15 : 14,
@@ -528,11 +621,15 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
               fontFamily: "inherit",
               lineHeight: 1.5,
               opacity: sending ? 0.6 : 1,
+              WebkitAppearance: "none",
+              touchAction: "manipulation",
             }}
             placeholder="Écrivez votre communiqué…"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             disabled={sending}
+            enterKeyHint="enter"
+            autoComplete="off"
           />
 
           {/* Info destinataires */}
@@ -543,7 +640,7 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
               gap: 8,
               padding: "10px 12px",
               borderRadius: 10,
-              background: tokens.primarySoft,
+              background: isOverLimit ? tokens.primarySoft : tokens.primarySoft,
               color: tokens.primary,
               marginTop: 12,
               marginBottom: 20,
@@ -551,23 +648,39 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
               lineHeight: 1.4,
             }}
           >
-            <Send size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+            {isOverLimit ? (
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+            ) : (
+              <Send size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+            )}
             <span>
-              Ce message sera envoyé à{" "}
-              <strong>{targetDescription}</strong>.
+              {isOverLimit ? (
+                <>
+                  Message trop long : <strong>{MAX_MESSAGE_LENGTH} caractères max</strong>.
+                </>
+              ) : (
+                <>
+                  Ce message sera envoyé à <strong>{targetDescription}</strong>.
+                </>
+              )}
             </span>
           </div>
 
-          {/* Bouton Envoyer — ✅ gradient Hero */}
+          {/* Bouton Envoyer */}
           <button
             type="button"
             onClick={handleSend}
             disabled={!canSend}
+            onTouchStart={() => setSendPressed(true)}
+            onTouchEnd={() => setSendPressed(false)}
+            onTouchCancel={() => setSendPressed(false)}
             style={{
               padding: isMobile ? "16px 20px" : "14px 20px",
               borderRadius: 12,
               background: canSend
-                ? `linear-gradient(135deg, ${tokens.primary}, ${tokens.primaryHover})`
+                ? sendPressed
+                  ? `linear-gradient(135deg, ${tokens.primaryHover}, ${tokens.primary})`
+                  : `linear-gradient(135deg, ${tokens.primary}, ${tokens.primaryHover})`
                 : tokens.primaryDisabled,
               color: "#FFFFFF",
               border: "none",
@@ -579,19 +692,16 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
               gap: 8,
               cursor: canSend ? "pointer" : "not-allowed",
               width: "100%",
-              boxShadow: canSend
+              boxShadow: canSend && !sendPressed
                 ? "0 6px 18px rgba(79,70,229,0.3)"
                 : "none",
-              transition: "background 0.15s ease, box-shadow 0.15s ease",
+              transition:
+                "background 0.12s ease, box-shadow 0.15s ease, transform 0.1s ease",
+              transform: sendPressed && canSend ? "scale(0.98)" : "scale(1)",
               minHeight: 52,
               outline: "none",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.outline = `2px solid ${tokens.primary}`;
-              e.currentTarget.style.outlineOffset = "2px";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.outline = "none";
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
             }}
           >
             {sending ? (

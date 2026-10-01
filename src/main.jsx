@@ -8,6 +8,8 @@ import toast from "react-hot-toast";
 import './fonts.css';
 import './index.css';
 import './App.css';
+// src/main.jsx (ou App.jsx)
+import "./lib/pdfWorker";
 
 
 

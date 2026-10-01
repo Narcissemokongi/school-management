@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+// src/components/FraisModals.jsx
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   X, Search, Loader, Edit2, Trash2, Upload, Download,
   FileSpreadsheet, Users, School, Settings,
@@ -6,28 +7,85 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-// ============================================================
-// KEYFRAMES PARTAGÉS (préfixés `fm-`)
-// ============================================================
-const fmStyles = `
-  @keyframes fm-slide-up {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-  }
-  @keyframes fm-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  @keyframes fm-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  .fm-spin { animation: fm-spin 1s linear infinite; }
-`;
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
 
-// ============================================================
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const FraisModalsKeyframes = (
+  <style>{`
+    @keyframes fm-slide-up {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+    @keyframes fm-fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes fm-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .fm-spin { animation: fm-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .fm-spin,
+      [style*="fm-slide-up"],
+      [style*="fm-fade-in"] {
+        animation: none !important;
+      }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// BOUTON FERMER — ✨ zone 44×44px mobile
+// ════════════════════════════════════════════════════════════════════
+function CloseButton({ onClick, dark, ariaLabel = "Fermer" }) {
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      style={{
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        color: dark ? "#94A3B8" : "#64748B",
+        padding: 0,
+        minWidth: MOBILE_TAP,
+        minHeight: MOBILE_TAP,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 8,
+        transform: pressed ? "scale(0.9)" : "scale(1)",
+        transition: "transform 0.1s ease",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+      }}
+    >
+      <X size={22} />
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // BOTTOM SHEET FILTRES + ACTIONS
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function FraisFiltersSheet({
   open,
   onClose,
@@ -40,7 +98,6 @@ export function FraisFiltersSheet({
   setStatutFiltre,
   classesStats,
   onReset,
-  activeFiltersCount, // eslint-disable-line no-unused-vars
   onImportClick,
   onDownloadTemplate,
   onExportClick,
@@ -48,7 +105,16 @@ export function FraisFiltersSheet({
   exporting,
   deviseSymbol,
 }) {
+  // ✨ Feedback tap + focus states
+  const [pressedBtn, setPressedBtn] = useState(null);
+  const [focusedField, setFocusedField] = useState(null);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
+
   if (!open) return null;
+
+  const accent = dark ? "#818CF8" : "#4F46E5";
 
   const labelStyle = {
     display: "block",
@@ -60,21 +126,30 @@ export function FraisFiltersSheet({
     letterSpacing: 0.3,
   };
 
-  const fieldStyle = {
+  // ✨ fieldStyle avec focus + 16px mobile
+  const fieldStyle = (fieldName) => ({
     width: "100%",
     padding: "12px 14px",
     borderRadius: 10,
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+    border: `1px solid ${
+      focusedField === fieldName ? accent : dark ? "#334155" : "#E2E8F0"
+    }`,
     background: dark ? "#0F172A" : "#F8FAFC",
     color: dark ? "#F1F5F9" : "#1E293B",
-    fontSize: 15,
+    fontSize: 16,
     outline: "none",
     boxSizing: "border-box",
     appearance: "none",
     WebkitAppearance: "none",
-  };
+    MozAppearance: "none",
+    fontFamily: "inherit",
+    minHeight: MOBILE_TAP,
+    transition: "border-color 0.15s ease",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+  });
 
-  const actionBtnStyle = (disabled) => ({
+  const actionBtnStyle = (disabled, key) => ({
     display: "flex",
     alignItems: "center",
     gap: 10,
@@ -89,10 +164,18 @@ export function FraisFiltersSheet({
     textAlign: "left",
     width: "100%",
     opacity: disabled ? 0.6 : 1,
+    minHeight: MOBILE_TAP,
+    transform: pressedBtn === key && !disabled ? "scale(0.98)" : "scale(1)",
+    transition: "transform 0.1s ease, opacity 0.15s ease",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
   });
 
   return (
     <>
+      {FraisModalsKeyframes}
       <div
         onClick={onClose}
         style={{
@@ -102,8 +185,12 @@ export function FraisFiltersSheet({
           zIndex: 1100,
           animation: "fm-fade-in 0.18s ease-out",
         }}
+        aria-hidden="true"
       />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Filtrer et gérer les frais"
         style={{
           position: "fixed",
           left: 0,
@@ -112,12 +199,15 @@ export function FraisFiltersSheet({
           background: dark ? "#1E293B" : "#FFFFFF",
           borderTopLeftRadius: 20,
           borderTopRightRadius: 20,
-          padding: "12px 16px 24px",
+          padding: `12px calc(16px + ${SAFE_LEFT}) calc(24px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_RIGHT})`,
           zIndex: 1101,
           maxHeight: "85vh",
           overflowY: "auto",
           boxShadow: "0 -8px 30px rgba(0,0,0,0.25)",
           animation: "fm-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+          boxSizing: "border-box",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
         }}
       >
         <div
@@ -128,6 +218,7 @@ export function FraisFiltersSheet({
             background: dark ? "#475569" : "#CBD5E1",
             margin: "0 auto 16px",
           }}
+          aria-hidden="true"
         />
 
         <div
@@ -148,18 +239,7 @@ export function FraisFiltersSheet({
           >
             Filtrer et gérer
           </h3>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: dark ? "#94A3B8" : "#64748B",
-              padding: 4,
-            }}
-          >
-            <X size={22} />
-          </button>
+          <CloseButton onClick={onClose} dark={dark} />
         </div>
 
         {/* Recherche */}
@@ -174,14 +254,23 @@ export function FraisFiltersSheet({
                 top: "50%",
                 transform: "translateY(-50%)",
                 color: dark ? "#94A3B8" : "#64748B",
+                pointerEvents: "none",
               }}
+              aria-hidden="true"
             />
             <input
               type="text"
               placeholder="Nom, prénom, classe…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ ...fieldStyle, paddingLeft: 36 }}
+              onFocus={() => setFocusedField("search")}
+              onBlur={() => setFocusedField(null)}
+              inputMode="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
+              aria-label="Rechercher un élève"
+              style={{ ...fieldStyle("search"), paddingLeft: 36 }}
             />
           </div>
         </div>
@@ -192,7 +281,10 @@ export function FraisFiltersSheet({
           <select
             value={classeActive}
             onChange={(e) => setClasseActive(e.target.value)}
-            style={fieldStyle}
+            onFocus={() => setFocusedField("classe")}
+            onBlur={() => setFocusedField(null)}
+            aria-label="Filtrer par classe"
+            style={{ ...fieldStyle("classe"), cursor: "pointer" }}
           >
             <option value="">Toutes les classes</option>
             {classesStats.map((c) => (
@@ -211,45 +303,53 @@ export function FraisFiltersSheet({
               { v: "tous", l: "Tous" },
               { v: "paye", l: "Payé" },
               { v: "en_attente", l: "En attente" },
-            ].map((opt) => (
-              <button
-                key={opt.v}
-                onClick={() => setStatutFiltre(opt.v)}
-                style={{
-                  flex: 1,
-                  padding: "10px 8px",
-                  borderRadius: 10,
-                  border: `1px solid ${
-                    statutFiltre === opt.v
-                      ? dark
-                        ? "#818CF8"
-                        : "#4F46E5"
-                      : dark
-                      ? "#334155"
-                      : "#E2E8F0"
-                  }`,
-                  background:
-                    statutFiltre === opt.v
+            ].map((opt) => {
+              const isActive = statutFiltre === opt.v;
+              const isPressed = pressedBtn === `statut-${opt.v}`;
+              return (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setStatutFiltre(opt.v)}
+                  onTouchStart={pressBtn(`statut-${opt.v}`)}
+                  onTouchEnd={releaseBtn}
+                  onTouchCancel={releaseBtn}
+                  aria-pressed={isActive}
+                  style={{
+                    flex: 1,
+                    padding: "12px 8px",
+                    borderRadius: 10,
+                    border: `1px solid ${
+                      isActive ? accent : dark ? "#334155" : "#E2E8F0"
+                    }`,
+                    background: isActive
                       ? dark
                         ? "#312E81"
                         : "#EEF2FF"
                       : "transparent",
-                  color:
-                    statutFiltre === opt.v
+                    color: isActive
                       ? dark
                         ? "#C7D2FE"
                         : "#4F46E5"
                       : dark
                       ? "#CBD5E1"
                       : "#475569",
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                {opt.l}
-              </button>
-            ))}
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    minHeight: MOBILE_TAP,
+                    transform: isPressed ? "scale(0.97)" : "scale(1)",
+                    transition: "transform 0.1s ease, background 0.12s ease",
+                    WebkitTapHighlightColor: "transparent",
+                    touchAction: "manipulation",
+                    fontFamily: "inherit",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  {opt.l}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -258,39 +358,51 @@ export function FraisFiltersSheet({
           <label style={labelStyle}>Actions</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <button
+              type="button"
               onClick={() => {
                 onImportClick();
                 onClose();
               }}
+              onTouchStart={!importing ? pressBtn("import") : undefined}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
               disabled={importing}
-              style={actionBtnStyle(importing)}
+              style={actionBtnStyle(importing, "import")}
             >
               {importing ? (
-                <Loader size={18} className="fm-spin" />
+                <Loader size={18} className="fm-spin" aria-hidden="true" />
               ) : (
-                <Upload size={18} />
+                <Upload size={18} aria-hidden="true" />
               )}
               Importer depuis Excel
             </button>
             <button
+              type="button"
               onClick={onDownloadTemplate}
-              style={actionBtnStyle(false)}
+              onTouchStart={pressBtn("template")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={actionBtnStyle(false, "template")}
             >
-              <FileSpreadsheet size={18} />
+              <FileSpreadsheet size={18} aria-hidden="true" />
               Télécharger le modèle
             </button>
             <button
+              type="button"
               onClick={() => {
                 onExportClick();
                 onClose();
               }}
+              onTouchStart={!exporting ? pressBtn("export") : undefined}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
               disabled={exporting}
-              style={actionBtnStyle(exporting)}
+              style={actionBtnStyle(exporting, "export")}
             >
               {exporting ? (
-                <Loader size={18} className="fm-spin" />
+                <Loader size={18} className="fm-spin" aria-hidden="true" />
               ) : (
-                <Download size={18} />
+                <Download size={18} aria-hidden="true" />
               )}
               Exporter en Excel
             </button>
@@ -312,10 +424,14 @@ export function FraisFiltersSheet({
         {/* Actions principales */}
         <div style={{ display: "flex", gap: 10 }}>
           <button
+            type="button"
             onClick={() => {
               onReset();
               onClose();
             }}
+            onTouchStart={pressBtn("reset")}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
             style={{
               flex: 1,
               padding: "14px 16px",
@@ -330,38 +446,54 @@ export function FraisFiltersSheet({
               alignItems: "center",
               justifyContent: "center",
               gap: 6,
+              minHeight: MOBILE_TAP,
+              transform: pressedBtn === "reset" ? "scale(0.97)" : "scale(1)",
+              transition: "transform 0.1s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           >
-            <RotateCcw size={16} />
+            <RotateCcw size={16} aria-hidden="true" />
             Réinitialiser
           </button>
           <button
+            type="button"
             onClick={onClose}
+            onTouchStart={pressBtn("apply")}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
             style={{
               flex: 2,
               padding: "14px 16px",
               borderRadius: 12,
               border: "none",
-              background: dark ? "#818CF8" : "#4F46E5",
+              background: pressedBtn === "apply" ? "#4338CA" : accent,
               color: "#FFFFFF",
               fontWeight: 700,
               fontSize: 14,
               cursor: "pointer",
+              minHeight: MOBILE_TAP,
+              transform: pressedBtn === "apply" ? "scale(0.97)" : "scale(1)",
+              transition: "transform 0.1s ease, background 0.12s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           >
             Voir les résultats
           </button>
         </div>
       </div>
-
-      <style>{fmStyles}</style>
     </>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // MODALE AJOUT / ÉDITION DE FRAIS
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function AddFraisModal({
   open,
   onClose,
@@ -379,6 +511,11 @@ export function AddFraisModal({
   isMobile,
 }) {
   const [mode, setMode] = useState(initialMode);
+  // ✨ Feedback tap
+  const [pressedBtn, setPressedBtn] = useState(null);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
 
   useEffect(() => {
     if (open) {
@@ -388,8 +525,11 @@ export function AddFraisModal({
 
   if (!open) return null;
 
+  const accent = dark ? "#818CF8" : "#4F46E5";
+
   return (
     <>
+      {FraisModalsKeyframes}
       <div
         onClick={onClose}
         style={{
@@ -399,8 +539,12 @@ export function AddFraisModal({
           zIndex: 1200,
           animation: "fm-fade-in 0.18s ease-out",
         }}
+        aria-hidden="true"
       />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={initialData ? "Modifier les frais" : "Nouveaux frais"}
         style={{
           position: "fixed",
           left: 0,
@@ -411,7 +555,9 @@ export function AddFraisModal({
           borderTopLeftRadius: 20,
           borderTopRightRadius: 20,
           borderRadius: isMobile ? "20px 20px 0 0" : 0,
-          padding: isMobile ? "12px 16px 24px" : 0,
+          padding: isMobile
+            ? `12px calc(16px + ${SAFE_LEFT}) calc(24px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_RIGHT})`
+            : 0,
           zIndex: 1201,
           maxHeight: isMobile ? "92vh" : "100vh",
           height: isMobile ? "auto" : "100vh",
@@ -422,6 +568,9 @@ export function AddFraisModal({
           animation: isMobile
             ? "fm-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1)"
             : "fm-fade-in 0.2s ease-out",
+          boxSizing: "border-box",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
         }}
       >
         <div
@@ -442,6 +591,8 @@ export function AddFraisModal({
                   padding: 24,
                   border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                   boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+                  boxSizing: "border-box",
+                  overscrollBehavior: "contain",
                 }
           }
         >
@@ -454,6 +605,7 @@ export function AddFraisModal({
                 background: dark ? "#475569" : "#CBD5E1",
                 margin: "0 auto 14px",
               }}
+              aria-hidden="true"
             />
           )}
 
@@ -475,22 +627,13 @@ export function AddFraisModal({
             >
               {initialData ? "Modifier les frais" : "Nouveaux frais"}
             </h3>
-            <button
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: dark ? "#94A3B8" : "#64748B",
-                padding: 4,
-              }}
-            >
-              <X size={22} />
-            </button>
+            <CloseButton onClick={onClose} dark={dark} />
           </div>
 
           {!initialData && (
             <div
+              role="tablist"
+              aria-label="Mode d'ajout"
               style={{
                 display: "flex",
                 borderBottom: `2px solid ${dark ? "#334155" : "#E2E8F0"}`,
@@ -498,10 +641,18 @@ export function AddFraisModal({
                 overflowX: "auto",
                 whiteSpace: "nowrap",
                 scrollbarWidth: "none",
+                WebkitOverflowScrolling: "touch",
+                overscrollBehaviorX: "contain",
               }}
             >
               <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "individuel"}
                 onClick={() => setMode("individuel")}
+                onTouchStart={pressBtn("tab-individuel")}
+                onTouchEnd={releaseBtn}
+                onTouchCancel={releaseBtn}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -511,27 +662,38 @@ export function AddFraisModal({
                   background: "transparent",
                   color:
                     mode === "individuel"
-                      ? dark
-                        ? "#818CF8"
-                        : "#4F46E5"
+                      ? accent
                       : dark
                       ? "#94A3B8"
                       : "#64748B",
                   fontWeight: mode === "individuel" ? 700 : 500,
                   borderBottom:
                     mode === "individuel"
-                      ? `3px solid ${dark ? "#818CF8" : "#4F46E5"}`
+                      ? `3px solid ${accent}`
                       : "3px solid transparent",
                   cursor: "pointer",
                   fontSize: 13.5,
                   flexShrink: 0,
                   marginBottom: -2,
+                  minHeight: MOBILE_TAP,
+                  transform:
+                    pressedBtn === "tab-individuel" ? "scale(0.96)" : "scale(1)",
+                  transition: "transform 0.1s ease, color 0.15s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
                 }}
               >
-                <Users size={16} /> Individuel
+                <Users size={16} aria-hidden="true" /> Individuel
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "groupe"}
                 onClick={() => setMode("groupe")}
+                onTouchStart={pressBtn("tab-groupe")}
+                onTouchEnd={releaseBtn}
+                onTouchCancel={releaseBtn}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -541,24 +703,29 @@ export function AddFraisModal({
                   background: "transparent",
                   color:
                     mode === "groupe"
-                      ? dark
-                        ? "#818CF8"
-                        : "#4F46E5"
+                      ? accent
                       : dark
                       ? "#94A3B8"
                       : "#64748B",
                   fontWeight: mode === "groupe" ? 700 : 500,
                   borderBottom:
                     mode === "groupe"
-                      ? `3px solid ${dark ? "#818CF8" : "#4F46E5"}`
+                      ? `3px solid ${accent}`
                       : "3px solid transparent",
                   cursor: "pointer",
                   fontSize: 13.5,
                   flexShrink: 0,
                   marginBottom: -2,
+                  minHeight: MOBILE_TAP,
+                  transform:
+                    pressedBtn === "tab-groupe" ? "scale(0.96)" : "scale(1)",
+                  transition: "transform 0.1s ease, color 0.15s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
                 }}
               >
-                <School size={16} /> Groupé
+                <School size={16} aria-hidden="true" /> Groupé
               </button>
             </div>
           )}
@@ -593,15 +760,13 @@ export function AddFraisModal({
           )}
         </div>
       </div>
-
-      <style>{fmStyles}</style>
     </>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // MODALE DÉTAIL D'UN FRAIS
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function DetailFraisModal({
   frais,
   eleve,
@@ -612,6 +777,12 @@ export function DetailFraisModal({
   dark,
   isMobile,
 }) {
+  // ✨ Feedback tap
+  const [pressedBtn, setPressedBtn] = useState(null);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
+
   const estPaye = frais.reste <= 0;
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
@@ -627,290 +798,344 @@ export function DetailFraisModal({
     : "#F59E0B";
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: isMobile ? "flex-end" : "center",
-        justifyContent: "center",
-        zIndex: 1300,
-        padding: isMobile ? 0 : 16,
-        animation: "fm-fade-in 0.2s ease-out",
-      }}
-    >
+    <>
+      {FraisModalsKeyframes}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Détail des frais de ${eleve?.nom || "élève"}`}
+        onClick={onClose}
         style={{
-          background: cardBg,
-          borderRadius: isMobile ? "20px 20px 0 0" : 16,
-          padding: isMobile ? 16 : 24,
-          width: "100%",
-          maxWidth: isMobile ? "100%" : 520,
-          maxHeight: "92vh",
-          overflowY: "auto",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-          border: `1px solid ${cardBorder}`,
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.5)",
+          display: "flex",
+          alignItems: isMobile ? "flex-end" : "center",
+          justifyContent: "center",
+          zIndex: 1300,
+          padding: isMobile ? 0 : 16,
+          animation: "fm-fade-in 0.2s ease-out",
         }}
       >
-        {isMobile && (
-          <div
-            style={{
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              background: dark ? "#475569" : "#CBD5E1",
-              margin: "0 auto 14px",
-            }}
-          />
-        )}
-
         <div
+          onClick={(e) => e.stopPropagation()}
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 18,
-          }}
-        >
-          <h3
-            style={{
-              margin: 0,
-              fontSize: 17,
-              fontWeight: 700,
-              color: textPrimary,
-            }}
-          >
-            Détail des frais
-          </h3>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: textSecondary,
-              padding: 4,
-            }}
-          >
-            <X size={22} />
-          </button>
-        </div>
-
-        {/* Carte élève */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: 14,
-            marginBottom: 16,
-            background: dark ? "#0F172A" : "#F8FAFC",
-            borderRadius: 12,
+            background: cardBg,
+            borderRadius: isMobile ? "20px 20px 0 0" : 16,
+            padding: isMobile
+              ? `16px calc(16px + ${SAFE_LEFT}) calc(20px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_RIGHT})`
+              : 24,
+            width: "100%",
+            maxWidth: isMobile ? "100%" : 520,
+            maxHeight: "92vh",
+            overflowY: "auto",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
             border: `1px solid ${cardBorder}`,
+            boxSizing: "border-box",
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
           }}
         >
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: "50%",
-              background: dark ? "#312E81" : "#EEF2FF",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: dark ? "#A5B4FC" : "#4F46E5",
-              fontWeight: 700,
-              fontSize: 14,
-              flexShrink: 0,
-            }}
-          >
-            {eleve?.prenom?.[0]}
-            {eleve?.nom?.[0]}
-          </div>
-          <div style={{ minWidth: 0 }}>
+          {isMobile && (
             <div
               style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: textPrimary,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                background: dark ? "#475569" : "#CBD5E1",
+                margin: "0 auto 14px",
               }}
-            >
-              {eleve?.nom} {eleve?.postnom}{" "}
-              {eleve?.prenom ? `(${eleve.prenom})` : ""}
-            </div>
-            <div style={{ fontSize: 12.5, color: textSecondary, marginTop: 2 }}>
-              Classe {eleve?.classe}
-            </div>
-          </div>
-        </div>
-
-        {/* Note en grand */}
-        <div
-          style={{
-            padding: "16px 0",
-            marginBottom: 16,
-            background: dark ? "#0F172A" : "#F8FAFC",
-            borderRadius: 12,
-            border: `1px solid ${cardBorder}`,
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: textSecondary,
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-              marginBottom: 6,
-            }}
-          >
-            Reste à payer
-          </div>
-          <div
-            style={{
-              fontSize: 32,
-              fontWeight: 800,
-              color: resteColor,
-              lineHeight: 1,
-            }}
-          >
-            {frais.reste.toLocaleString()}
-            <span
-              style={{
-                fontSize: 16,
-                fontWeight: 500,
-                color: textSecondary,
-                marginLeft: 6,
-              }}
-            >
-              {deviseSymbol}
-            </span>
-          </div>
-          <div
-            style={{
-              marginTop: 10,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "4px 10px",
-              borderRadius: 20,
-              fontSize: 11.5,
-              fontWeight: 700,
-              background: estPaye
-                ? dark
-                  ? "#064E3B"
-                  : "#D1FAE5"
-                : dark
-                ? "#78350F"
-                : "#FEF3C7",
-              color: estPaye
-                ? dark
-                  ? "#34D399"
-                  : "#065F46"
-                : dark
-                ? "#FBBF24"
-                : "#92400E",
-            }}
-          >
-            {estPaye ? <CheckCircle size={12} /> : <Clock size={12} />}
-            {estPaye ? "Soldé" : "En attente"}
-          </div>
-        </div>
-
-        {/* Détails */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <DetailRow
-            label="Montant total"
-            value={`${frais.montantTotal.toLocaleString()} ${deviseSymbol}`}
-            dark={dark}
-          />
-          <DetailRow
-            label="Montant payé"
-            value={`${frais.montantPaye.toLocaleString()} ${deviseSymbol}`}
-            dark={dark}
-          />
-          {frais.commentaire && (
-            <DetailRow
-              label="Commentaire"
-              value={frais.commentaire}
-              dark={dark}
+              aria-hidden="true"
             />
           )}
-        </div>
 
-        {/* Actions */}
-        <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-          <button
-            onClick={onEdit}
+          <div
             style={{
-              flex: 1,
-              padding: "12px 14px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 18,
+            }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 17,
+                fontWeight: 700,
+                color: textPrimary,
+              }}
+            >
+              Détail des frais
+            </h3>
+            <CloseButton onClick={onClose} dark={dark} />
+          </div>
+
+          {/* Carte élève */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: 14,
+              marginBottom: 16,
+              background: dark ? "#0F172A" : "#F8FAFC",
               borderRadius: 12,
               border: `1px solid ${cardBorder}`,
-              background: dark ? "#0F172A" : "#F8FAFC",
-              color: textPrimary,
-              cursor: "pointer",
-              fontWeight: 600,
-              fontSize: 13.5,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
+              boxSizing: "border-box",
             }}
           >
-            <Edit2 size={16} />
-            Modifier
-          </button>
-          <button
-            onClick={onDelete}
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: dark ? "#312E81" : "#EEF2FF",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: dark ? "#A5B4FC" : "#4F46E5",
+                fontWeight: 700,
+                fontSize: 14,
+                flexShrink: 0,
+              }}
+              aria-hidden="true"
+            >
+              {eleve?.prenom?.[0]}
+              {eleve?.nom?.[0]}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: textPrimary,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {eleve?.nom} {eleve?.postnom}{" "}
+                {eleve?.prenom ? `(${eleve.prenom})` : ""}
+              </div>
+              <div style={{ fontSize: 12.5, color: textSecondary, marginTop: 2 }}>
+                Classe {eleve?.classe}
+              </div>
+            </div>
+          </div>
+
+          {/* Note en grand */}
+          <div
             style={{
-              flex: 1,
-              padding: "12px 14px",
+              padding: "16px 0",
+              marginBottom: 16,
+              background: dark ? "#0F172A" : "#F8FAFC",
               borderRadius: 12,
-              border: "none",
-              background: "#DC2626",
-              color: "#FFFFFF",
+              border: `1px solid ${cardBorder}`,
+              textAlign: "center",
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: textSecondary,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                marginBottom: 6,
+              }}
+            >
+              Reste à payer
+            </div>
+            <div
+              style={{
+                fontSize: 32,
+                fontWeight: 800,
+                color: resteColor,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {frais.reste.toLocaleString()}
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 500,
+                  color: textSecondary,
+                  marginLeft: 6,
+                }}
+              >
+                {deviseSymbol}
+              </span>
+            </div>
+            <div
+              style={{
+                marginTop: 10,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 10px",
+                borderRadius: 20,
+                fontSize: 11.5,
+                fontWeight: 700,
+                background: estPaye
+                  ? dark
+                    ? "#064E3B"
+                    : "#D1FAE5"
+                  : dark
+                  ? "#78350F"
+                  : "#FEF3C7",
+                color: estPaye
+                  ? dark
+                    ? "#34D399"
+                    : "#065F46"
+                  : dark
+                  ? "#FBBF24"
+                  : "#92400E",
+              }}
+            >
+              {estPaye ? (
+                <CheckCircle size={12} aria-hidden="true" />
+              ) : (
+                <Clock size={12} aria-hidden="true" />
+              )}
+              {estPaye ? "Soldé" : "En attente"}
+            </div>
+          </div>
+
+          {/* Détails */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <DetailRow
+              label="Montant total"
+              value={`${frais.montantTotal.toLocaleString()} ${deviseSymbol}`}
+              dark={dark}
+            />
+            <DetailRow
+              label="Montant payé"
+              value={`${frais.montantPaye.toLocaleString()} ${deviseSymbol}`}
+              dark={dark}
+            />
+            {frais.commentaire && (
+              <DetailRow
+                label="Commentaire"
+                value={frais.commentaire}
+                dark={dark}
+              />
+            )}
+          </div>
+
+          {/* Actions */}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginTop: 20,
+              flexDirection: isMobile ? "column" : "row",
+            }}
+          >
+            <button
+              type="button"
+              onClick={onEdit}
+              onTouchStart={pressBtn("edit")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={{
+                flex: 1,
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: `1px solid ${cardBorder}`,
+                background: dark ? "#0F172A" : "#F8FAFC",
+                color: textPrimary,
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: 13.5,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                minHeight: MOBILE_TAP,
+                transform: pressedBtn === "edit" ? "scale(0.97)" : "scale(1)",
+                transition: "transform 0.1s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
+              }}
+            >
+              <Edit2 size={16} aria-hidden="true" />
+              Modifier
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              onTouchStart={pressBtn("delete")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={{
+                flex: 1,
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: "none",
+                background: pressedBtn === "delete" ? "#B91C1C" : "#DC2626",
+                color: "#FFFFFF",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: 13.5,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                minHeight: MOBILE_TAP,
+                transform: pressedBtn === "delete" ? "scale(0.97)" : "scale(1)",
+                transition: "transform 0.1s ease, background 0.12s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
+              }}
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              Supprimer
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            onTouchStart={pressBtn("close")}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
+            style={{
+              marginTop: 10,
+              width: "100%",
+              padding: 12,
+              background: "transparent",
+              border: `1px solid ${cardBorder}`,
+              borderRadius: 12,
+              color: textSecondary,
               cursor: "pointer",
               fontWeight: 600,
               fontSize: 13.5,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
+              minHeight: MOBILE_TAP,
+              transform: pressedBtn === "close" ? "scale(0.98)" : "scale(1)",
+              transition: "transform 0.1s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           >
-            <Trash2 size={16} />
-            Supprimer
+            Fermer
           </button>
         </div>
-
-        <button
-          onClick={onClose}
-          style={{
-            marginTop: 10,
-            width: "100%",
-            padding: 12,
-            background: "transparent",
-            border: `1px solid ${cardBorder}`,
-            borderRadius: 12,
-            color: textSecondary,
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: 13.5,
-          }}
-        >
-          Fermer
-        </button>
       </div>
-    </div>
+    </>
   );
 }
 
+// ════════════════════════════════════════════════════════════════════
+// DETAIL ROW
+// ════════════════════════════════════════════════════════════════════
 function DetailRow({ label, value, dark }) {
   return (
     <div
@@ -923,6 +1148,7 @@ function DetailRow({ label, value, dark }) {
         borderRadius: 10,
         background: dark ? "#0F172A" : "#F8FAFC",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        boxSizing: "border-box",
       }}
     >
       <span
@@ -932,6 +1158,7 @@ function DetailRow({ label, value, dark }) {
           color: dark ? "#94A3B8" : "#64748B",
           textTransform: "uppercase",
           letterSpacing: 0.3,
+          flexShrink: 0,
         }}
       >
         {label}
@@ -943,6 +1170,8 @@ function DetailRow({ label, value, dark }) {
           color: dark ? "#F1F5F9" : "#1E293B",
           textAlign: "right",
           wordBreak: "break-word",
+          fontVariantNumeric: "tabular-nums",
+          minWidth: 0,
         }}
       >
         {value}
@@ -951,9 +1180,9 @@ function DetailRow({ label, value, dark }) {
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // MODALE CONFIG FRAIS PAR CLASSE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function ConfigFraisModal({
   open,
   onClose,
@@ -961,7 +1190,7 @@ export function ConfigFraisModal({
   upsertFraisClasse,
   ecoleId,
   anneeId,
-  userId, // ✅ Ajouté dans les props
+  userId,
   deviseSymbol,
   dark,
   isMobile,
@@ -969,6 +1198,12 @@ export function ConfigFraisModal({
   const [configClasse, setConfigClasse] = useState("");
   const [configMontant, setConfigMontant] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // ✨ Feedback tap + focus
+  const [pressedBtn, setPressedBtn] = useState(null);
+  const [focusedField, setFocusedField] = useState(null);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
 
   useEffect(() => {
     if (open) {
@@ -978,6 +1213,8 @@ export function ConfigFraisModal({
   }, [open]);
 
   if (!open) return null;
+
+  const accent = dark ? "#818CF8" : "#4F46E5";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -992,7 +1229,7 @@ export function ConfigFraisModal({
         montantTotal: parseFloat(configMontant),
         ecoleId,
         anneeId: anneeId || undefined,
-        userId, // ✅ Ajouté (à confirmer côté backend)
+        userId,
       });
       toast.success(`Montant fixé pour la classe ${configClasse}`);
       onClose();
@@ -1003,19 +1240,27 @@ export function ConfigFraisModal({
     }
   };
 
-  const fieldStyle = {
+  const fieldStyle = (fieldName) => ({
     width: "100%",
     padding: "12px 14px",
     borderRadius: 10,
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+    border: `1px solid ${
+      focusedField === fieldName ? accent : dark ? "#334155" : "#E2E8F0"
+    }`,
     background: dark ? "#0F172A" : "#F8FAFC",
     color: dark ? "#F1F5F9" : "#1E293B",
-    fontSize: 15,
+    fontSize: 16,
     outline: "none",
     boxSizing: "border-box",
     appearance: "none",
     WebkitAppearance: "none",
-  };
+    MozAppearance: "none",
+    fontFamily: "inherit",
+    minHeight: MOBILE_TAP,
+    transition: "border-color 0.15s ease",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+  });
 
   const labelStyle = {
     display: "block",
@@ -1029,6 +1274,7 @@ export function ConfigFraisModal({
 
   return (
     <>
+      {FraisModalsKeyframes}
       <div
         onClick={onClose}
         style={{
@@ -1038,8 +1284,12 @@ export function ConfigFraisModal({
           zIndex: 1300,
           animation: "fm-fade-in 0.18s ease-out",
         }}
+        aria-hidden="true"
       />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Configurer les frais par classe"
         style={{
           position: "fixed",
           left: 0,
@@ -1050,7 +1300,9 @@ export function ConfigFraisModal({
           borderTopLeftRadius: 20,
           borderTopRightRadius: 20,
           borderRadius: isMobile ? "20px 20px 0 0" : 0,
-          padding: isMobile ? "12px 16px 24px" : 0,
+          padding: isMobile
+            ? `12px calc(16px + ${SAFE_LEFT}) calc(24px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_RIGHT})`
+            : 0,
           zIndex: 1301,
           maxHeight: isMobile ? "92vh" : "100vh",
           height: isMobile ? "auto" : "100vh",
@@ -1058,6 +1310,9 @@ export function ConfigFraisModal({
           animation: isMobile
             ? "fm-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1)"
             : "fm-fade-in 0.2s ease-out",
+          boxSizing: "border-box",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
         }}
       >
         <div
@@ -1078,6 +1333,8 @@ export function ConfigFraisModal({
                   padding: 24,
                   border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                   boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+                  boxSizing: "border-box",
+                  overscrollBehavior: "contain",
                 }
           }
         >
@@ -1090,6 +1347,7 @@ export function ConfigFraisModal({
                 background: dark ? "#475569" : "#CBD5E1",
                 margin: "0 auto 14px",
               }}
+              aria-hidden="true"
             />
           )}
 
@@ -1102,7 +1360,7 @@ export function ConfigFraisModal({
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Settings size={18} color={dark ? "#818CF8" : "#4F46E5"} />
+              <Settings size={18} color={accent} aria-hidden="true" />
               <h3
                 style={{
                   margin: 0,
@@ -1114,24 +1372,14 @@ export function ConfigFraisModal({
                 Frais par classe
               </h3>
             </div>
-            <button
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: dark ? "#94A3B8" : "#64748B",
-                padding: 4,
-              }}
-            >
-              <X size={22} />
-            </button>
+            <CloseButton onClick={onClose} dark={dark} />
           </div>
 
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Classe</label>
+              <label htmlFor="config-classe" style={labelStyle}>Classe</label>
               <select
+                id="config-classe"
                 value={configClasse}
                 onChange={(e) => {
                   setConfigClasse(e.target.value);
@@ -1144,7 +1392,10 @@ export function ConfigFraisModal({
                     setConfigMontant("");
                   }
                 }}
-                style={fieldStyle}
+                onFocus={() => setFocusedField("classe")}
+                onBlur={() => setFocusedField(null)}
+                aria-label="Sélectionner une classe"
+                style={{ ...fieldStyle("classe"), cursor: "pointer" }}
               >
                 <option value="">Sélectionner une classe</option>
                 {classesStats.map((c) => (
@@ -1157,23 +1408,37 @@ export function ConfigFraisModal({
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>
+              <label htmlFor="config-montant" style={labelStyle}>
                 Montant total ({deviseSymbol})
               </label>
               <input
+                id="config-montant"
                 type="number"
                 step="0.01"
                 value={configMontant}
                 onChange={(e) => setConfigMontant(e.target.value)}
+                onFocus={() => setFocusedField("montant")}
+                onBlur={() => setFocusedField(null)}
                 placeholder="Ex: 50000"
-                style={fieldStyle}
+                inputMode="decimal"
+                aria-label={`Montant total en ${deviseSymbol}`}
+                style={fieldStyle("montant")}
               />
             </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexDirection: isMobile ? "column" : "row",
+              }}
+            >
               <button
                 type="button"
                 onClick={onClose}
+                onTouchStart={pressBtn("cancel")}
+                onTouchEnd={releaseBtn}
+                onTouchCancel={releaseBtn}
                 style={{
                   flex: 1,
                   padding: "14px 16px",
@@ -1184,6 +1449,14 @@ export function ConfigFraisModal({
                   fontWeight: 600,
                   fontSize: 14,
                   cursor: "pointer",
+                  minHeight: MOBILE_TAP,
+                  transform:
+                    pressedBtn === "cancel" ? "scale(0.97)" : "scale(1)",
+                  transition: "transform 0.1s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
+                  boxSizing: "border-box",
                 }}
               >
                 Annuler
@@ -1191,6 +1464,13 @@ export function ConfigFraisModal({
               <button
                 type="submit"
                 disabled={submitting || !configClasse || !configMontant}
+                onTouchStart={
+                  !submitting && configClasse && configMontant
+                    ? pressBtn("submit")
+                    : undefined
+                }
+                onTouchEnd={releaseBtn}
+                onTouchCancel={releaseBtn}
                 style={{
                   flex: 2,
                   padding: "14px 16px",
@@ -1199,9 +1479,9 @@ export function ConfigFraisModal({
                   background:
                     submitting || !configClasse || !configMontant
                       ? "#A5B4FC"
-                      : dark
-                      ? "#818CF8"
-                      : "#4F46E5",
+                      : pressedBtn === "submit"
+                      ? "#4338CA"
+                      : accent,
                   color: "#FFFFFF",
                   fontWeight: 700,
                   fontSize: 14,
@@ -1213,24 +1493,37 @@ export function ConfigFraisModal({
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 6,
+                  minHeight: MOBILE_TAP,
+                  transform:
+                    pressedBtn === "submit" &&
+                    !submitting &&
+                    configClasse &&
+                    configMontant
+                      ? "scale(0.97)"
+                      : "scale(1)",
+                  transition: "transform 0.1s ease, background 0.12s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
+                  boxSizing: "border-box",
                 }}
               >
-                {submitting && <Loader size={16} className="fm-spin" />}
+                {submitting && (
+                  <Loader size={16} className="fm-spin" aria-hidden="true" />
+                )}
                 {submitting ? "Enregistrement…" : "Enregistrer"}
               </button>
             </div>
           </form>
         </div>
       </div>
-
-      <style>{fmStyles}</style>
     </>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // SOUS-COMPOSANT : Ajout individuel
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function AddFraisIndividuel({
   eleves,
   fraisClasses,
@@ -1257,6 +1550,14 @@ function AddFraisIndividuel({
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [searchEleve, setSearchEleve] = useState("");
+  // ✨ Feedback tap + focus
+  const [pressedBtn, setPressedBtn] = useState(null);
+  const [focusedField, setFocusedField] = useState(null);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
+
+  const accent = dark ? "#818CF8" : "#4F46E5";
 
   const elevesFiltresRecherche = useMemo(() => {
     if (!searchEleve.trim()) return eleves;
@@ -1313,18 +1614,32 @@ function AddFraisIndividuel({
     }
   };
 
-  const inputStyle = (hasError = false) => ({
+  // ✨ inputStyle avec focus + 16px mobile
+  const inputStyle = (fieldName, hasError = false) => ({
     width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
+    padding: "12px 14px",
     border: `1px solid ${
-      hasError ? "#EF4444" : dark ? "#334155" : "#E2E8F0"
+      hasError
+        ? "#EF4444"
+        : focusedField === fieldName
+        ? accent
+        : dark
+        ? "#334155"
+        : "#E2E8F0"
     }`,
     borderRadius: 10,
-    fontSize: isMobile ? 15 : 14,
+    fontSize: 16,
     outline: "none",
     background: dark ? "#0F172A" : "#F8FAFC",
     color: dark ? "#F1F5F9" : "#1E293B",
     boxSizing: "border-box",
+    fontFamily: "inherit",
+    minHeight: MOBILE_TAP,
+    transition: "border-color 0.15s ease",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
   });
 
   const labelStyle = {
@@ -1354,15 +1669,24 @@ function AddFraisIndividuel({
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: dark ? "#94A3B8" : "#64748B",
+                  pointerEvents: "none",
                 }}
+                aria-hidden="true"
               />
               <input
                 type="text"
                 placeholder="Rechercher un élève…"
                 value={searchEleve}
                 onChange={(e) => setSearchEleve(e.target.value)}
+                onFocus={() => setFocusedField("searchEleve")}
+                onBlur={() => setFocusedField(null)}
+                inputMode="search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+                aria-label="Rechercher un élève"
                 style={{
-                  ...inputStyle(!!errors.selectedEleve),
+                  ...inputStyle("searchEleve", !!errors.selectedEleve),
                   paddingLeft: 36,
                 }}
               />
@@ -1376,36 +1700,57 @@ function AddFraisIndividuel({
                   border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                   borderRadius: 10,
                   background: dark ? "#1E293B" : "#FFFFFF",
+                  overscrollBehavior: "contain",
+                  WebkitOverflowScrolling: "touch",
                 }}
               >
-                {elevesFiltresRecherche.slice(0, 20).map((e) => (
-                  <button
-                    key={e._id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedEleve(e._id);
-                      setSearchEleve("");
-                      setErrors({});
-                    }}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      border: "none",
-                      borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                      background: "transparent",
-                      color: dark ? "#F1F5F9" : "#1E293B",
-                      cursor: "pointer",
-                      fontSize: 14,
-                    }}
-                  >
-                    {e.nom} {e.postnom} {e.prenom}{" "}
-                    <span style={{ color: dark ? "#94A3B8" : "#64748B" }}>
-                      ({e.classe})
-                    </span>
-                  </button>
-                ))}
+                {elevesFiltresRecherche.slice(0, 20).map((e) => {
+                  const isPressed = pressedBtn === `eleve-${e._id}`;
+                  return (
+                    <button
+                      key={e._id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedEleve(e._id);
+                        setSearchEleve("");
+                        setErrors({});
+                      }}
+                      onTouchStart={pressBtn(`eleve-${e._id}`)}
+                      onTouchEnd={releaseBtn}
+                      onTouchCancel={releaseBtn}
+                      aria-label={`Sélectionner ${e.nom} ${e.postnom}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "12px",
+                        border: "none",
+                        borderBottom: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                        background: isPressed
+                          ? dark
+                            ? "#312E81"
+                            : "#EEF2FF"
+                          : "transparent",
+                        color: dark ? "#F1F5F9" : "#1E293B",
+                        cursor: "pointer",
+                        fontSize: 14,
+                        minHeight: MOBILE_TAP,
+                        transform: isPressed ? "scale(0.985)" : "scale(1)",
+                        transition: "background 0.12s ease, transform 0.1s ease",
+                        WebkitTapHighlightColor: "transparent",
+                        touchAction: "manipulation",
+                        fontFamily: "inherit",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      {e.nom} {e.postnom} {e.prenom}{" "}
+                      <span style={{ color: dark ? "#94A3B8" : "#64748B", marginLeft: 4 }}>
+                        ({e.classe})
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </>
@@ -1421,6 +1766,7 @@ function AddFraisIndividuel({
               borderRadius: 10,
               background: dark ? "#0F172A" : "#F8FAFC",
               color: dark ? "#F1F5F9" : "#1E293B",
+              boxSizing: "border-box",
             }}
           >
             <span
@@ -1442,16 +1788,28 @@ function AddFraisIndividuel({
                 setSelectedEleve("");
                 setSearchEleve("");
               }}
+              onTouchStart={pressBtn("change-eleve")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              aria-label="Changer d'élève"
               style={{
                 background: dark ? "#1E293B" : "#FFFFFF",
                 border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                 borderRadius: 8,
-                padding: "6px 12px",
+                padding: "8px 12px",
                 color: dark ? "#F1F5F9" : "#1E293B",
                 cursor: "pointer",
                 fontSize: 12,
                 fontWeight: 600,
                 flexShrink: 0,
+                minHeight: MOBILE_TAP,
+                transform:
+                  pressedBtn === "change-eleve" ? "scale(0.96)" : "scale(1)",
+                transition: "transform 0.1s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
               }}
             >
               Changer
@@ -1460,6 +1818,7 @@ function AddFraisIndividuel({
         )}
         {errors.selectedEleve && (
           <div
+            role="alert"
             style={{ color: "#EF4444", fontSize: 12, marginTop: 6 }}
           >
             {errors.selectedEleve}
@@ -1479,8 +1838,9 @@ function AddFraisIndividuel({
               : "Non défini"
           }
           readOnly
+          aria-label="Montant total"
           style={{
-            ...inputStyle(false),
+            ...inputStyle("montantTotal", false),
             opacity: 0.7,
             cursor: "not-allowed",
           }}
@@ -1501,10 +1861,15 @@ function AddFraisIndividuel({
             setMontantPaye(e.target.value);
             setErrors((prev) => ({ ...prev, montantPaye: undefined }));
           }}
-          style={inputStyle(!!errors.montantPaye)}
+          onFocus={() => setFocusedField("montantPaye")}
+          onBlur={() => setFocusedField(null)}
+          inputMode="decimal"
+          aria-label={`Montant payé en ${deviseSymbol}`}
+          style={inputStyle("montantPaye", !!errors.montantPaye)}
         />
         {errors.montantPaye && (
           <div
+            role="alert"
             style={{ color: "#EF4444", fontSize: 12, marginTop: 6 }}
           >
             {errors.montantPaye}
@@ -1517,8 +1882,12 @@ function AddFraisIndividuel({
         <input
           value={commentaire}
           onChange={(e) => setCommentaire(e.target.value)}
+          onFocus={() => setFocusedField("commentaire")}
+          onBlur={() => setFocusedField(null)}
           placeholder="Ex: Frais de scolarité"
-          style={inputStyle(false)}
+          autoComplete="off"
+          aria-label="Commentaire"
+          style={inputStyle("commentaire")}
         />
       </div>
 
@@ -1532,8 +1901,15 @@ function AddFraisIndividuel({
         <button
           type="submit"
           disabled={submitting}
+          onTouchStart={!submitting ? pressBtn("submit") : undefined}
+          onTouchEnd={releaseBtn}
+          onTouchCancel={releaseBtn}
           style={{
-            background: dark ? "#818CF8" : "#4F46E5",
+            background: submitting
+              ? "#A5B4FC"
+              : pressedBtn === "submit"
+              ? "#4338CA"
+              : accent,
             color: "white",
             border: "none",
             borderRadius: 12,
@@ -1547,9 +1923,17 @@ function AddFraisIndividuel({
             gap: 8,
             fontSize: 14,
             opacity: submitting ? 0.7 : 1,
+            minHeight: MOBILE_TAP,
+            transform:
+              pressedBtn === "submit" && !submitting ? "scale(0.97)" : "scale(1)",
+            transition: "transform 0.1s ease, background 0.12s ease",
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
           }}
         >
-          {submitting && <Loader size={16} className="fm-spin" />}
+          {submitting && <Loader size={16} className="fm-spin" aria-hidden="true" />}
           {submitting
             ? "Enregistrement…"
             : editId
@@ -1567,6 +1951,9 @@ function AddFraisIndividuel({
               setErrors({});
               if (onSuccess) onSuccess();
             }}
+            onTouchStart={pressBtn("cancel-edit")}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
             style={{
               background: dark ? "#334155" : "#F1F5F9",
               border: "none",
@@ -1576,6 +1963,14 @@ function AddFraisIndividuel({
               color: dark ? "#F1F5F9" : "#1E293B",
               fontWeight: 600,
               fontSize: 14,
+              minHeight: MOBILE_TAP,
+              transform:
+                pressedBtn === "cancel-edit" ? "scale(0.97)" : "scale(1)",
+              transition: "transform 0.1s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           >
             Annuler
@@ -1586,9 +1981,9 @@ function AddFraisIndividuel({
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // SOUS-COMPOSANT : Ajout groupé
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function AddFraisGroupe({
   eleves,
   fraisClasses,
@@ -1607,6 +2002,14 @@ function AddFraisGroupe({
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [searchEleve, setSearchEleve] = useState("");
+  // ✨ Feedback tap + focus
+  const [pressedBtn, setPressedBtn] = useState(null);
+  const [focusedField, setFocusedField] = useState(null);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
+
+  const accent = dark ? "#818CF8" : "#4F46E5";
 
   const elevesFiltresRecherche = useMemo(() => {
     if (!searchEleve.trim()) return eleves;
@@ -1678,18 +2081,31 @@ function AddFraisGroupe({
     }
   };
 
-  const inputStyle = (hasError = false) => ({
+  const inputStyle = (fieldName, hasError = false) => ({
     width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
+    padding: "12px 14px",
     border: `1px solid ${
-      hasError ? "#EF4444" : dark ? "#334155" : "#E2E8F0"
+      hasError
+        ? "#EF4444"
+        : focusedField === fieldName
+        ? accent
+        : dark
+        ? "#334155"
+        : "#E2E8F0"
     }`,
     borderRadius: 10,
-    fontSize: isMobile ? 15 : 14,
+    fontSize: 16,
     outline: "none",
     background: dark ? "#0F172A" : "#F8FAFC",
     color: dark ? "#F1F5F9" : "#1E293B",
     boxSizing: "border-box",
+    fontFamily: "inherit",
+    minHeight: MOBILE_TAP,
+    transition: "border-color 0.15s ease",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
   });
 
   const labelStyle = {
@@ -1702,9 +2118,15 @@ function AddFraisGroupe({
     letterSpacing: 0.3,
   };
 
+  const canSubmit =
+    !submitting &&
+    selectedEleveIds.length > 0 &&
+    montantPaye &&
+    montantTotalMoyen !== null;
+
   return (
     <form onSubmit={handleSubmit}>
-      {/* Liste élèves */}
+      {/* En-tête liste */}
       <div
         style={{
           display: "flex",
@@ -1727,17 +2149,32 @@ function AddFraisGroupe({
           Élèves · {selectedEleveIds.length} sélectionné
           {selectedEleveIds.length > 1 ? "s" : ""}
         </span>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          {/* ✨ Boutons Tout/Aucun avec zone tap 40px */}
           <button
             type="button"
             onClick={selectAll}
+            onTouchStart={pressBtn("select-all")}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
+            aria-label="Tout sélectionner"
             style={{
-              background: "none",
+              background: "transparent",
               border: "none",
-              color: dark ? "#818CF8" : "#4F46E5",
+              color: accent,
               cursor: "pointer",
               fontSize: 12,
               fontWeight: 600,
+              padding: "8px 12px",
+              minHeight: 40,
+              borderRadius: 8,
+              transform:
+                pressedBtn === "select-all" ? "scale(0.96)" : "scale(1)",
+              transition: "transform 0.1s ease, background 0.12s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           >
             Tout
@@ -1745,13 +2182,27 @@ function AddFraisGroupe({
           <button
             type="button"
             onClick={deselectAll}
+            onTouchStart={pressBtn("deselect-all")}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
+            aria-label="Tout désélectionner"
             style={{
-              background: "none",
+              background: "transparent",
               border: "none",
               color: dark ? "#94A3B8" : "#64748B",
               cursor: "pointer",
               fontSize: 12,
               fontWeight: 600,
+              padding: "8px 12px",
+              minHeight: 40,
+              borderRadius: 8,
+              transform:
+                pressedBtn === "deselect-all" ? "scale(0.96)" : "scale(1)",
+              transition: "transform 0.1s ease, background 0.12s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
             }}
           >
             Aucun
@@ -1768,14 +2219,23 @@ function AddFraisGroupe({
             top: "50%",
             transform: "translateY(-50%)",
             color: dark ? "#94A3B8" : "#64748B",
+            pointerEvents: "none",
           }}
+          aria-hidden="true"
         />
         <input
           type="text"
           placeholder="Rechercher un élève…"
           value={searchEleve}
           onChange={(e) => setSearchEleve(e.target.value)}
-          style={{ ...inputStyle(false), paddingLeft: 36 }}
+          onFocus={() => setFocusedField("search")}
+          onBlur={() => setFocusedField(null)}
+          inputMode="search"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck="false"
+          aria-label="Rechercher un élève"
+          style={{ ...inputStyle("search"), paddingLeft: 36 }}
         />
       </div>
 
@@ -1794,6 +2254,9 @@ function AddFraisGroupe({
           padding: 6,
           marginBottom: 8,
           background: dark ? "#0F172A" : "#F8FAFC",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+          boxSizing: "border-box",
         }}
       >
         {elevesFiltresRecherche.length === 0 && (
@@ -1817,8 +2280,8 @@ function AddFraisGroupe({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
-                padding: "8px 10px",
+                gap: 10,
+                padding: "10px 12px",
                 fontSize: 13.5,
                 cursor: "pointer",
                 borderRadius: 8,
@@ -1827,19 +2290,26 @@ function AddFraisGroupe({
                     ? "#312E81"
                     : "#EEF2FF"
                   : "transparent",
+                minHeight: MOBILE_TAP,
+                boxSizing: "border-box",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
               }}
             >
               <input
                 type="checkbox"
                 checked={isSelected}
                 onChange={() => toggleEleve(e._id)}
+                aria-label={`Sélectionner ${e.nom}`}
                 style={{
-                  width: 18,
-                  height: 18,
-                  accentColor: dark ? "#818CF8" : "#4F46E5",
+                  width: 20,
+                  height: 20,
+                  accentColor: accent,
+                  flexShrink: 0,
+                  cursor: "pointer",
                 }}
               />
-              <span style={{ color: dark ? "#F1F5F9" : "#1E293B" }}>
+              <span style={{ color: dark ? "#F1F5F9" : "#1E293B", minWidth: 0 }}>
                 {e.nom} {e.postnom} {e.prenom}{" "}
                 <span style={{ color: dark ? "#94A3B8" : "#64748B" }}>
                   ({e.classe})
@@ -1851,6 +2321,7 @@ function AddFraisGroupe({
       </div>
       {errors.selectedEleveIds && (
         <div
+          role="alert"
           style={{ color: "#EF4444", fontSize: 12, marginBottom: 12 }}
         >
           {errors.selectedEleveIds}
@@ -1872,8 +2343,9 @@ function AddFraisGroupe({
               : "Sélectionnez des élèves"
           }
           readOnly
+          aria-label="Montant total"
           style={{
-            ...inputStyle(false),
+            ...inputStyle("montantTotal", false),
             opacity: 0.7,
             cursor: "not-allowed",
           }}
@@ -1895,10 +2367,15 @@ function AddFraisGroupe({
             setMontantPaye(e.target.value);
             setErrors((prev) => ({ ...prev, montantPaye: undefined }));
           }}
-          style={inputStyle(!!errors.montantPaye)}
+          onFocus={() => setFocusedField("montantPaye")}
+          onBlur={() => setFocusedField(null)}
+          inputMode="decimal"
+          aria-label={`Montant payé en ${deviseSymbol}`}
+          style={inputStyle("montantPaye", !!errors.montantPaye)}
         />
         {errors.montantPaye && (
           <div
+            role="alert"
             style={{ color: "#EF4444", fontSize: 12, marginTop: 6 }}
           >
             {errors.montantPaye}
@@ -1912,50 +2389,50 @@ function AddFraisGroupe({
         <input
           value={commentaire}
           onChange={(e) => setCommentaire(e.target.value)}
+          onFocus={() => setFocusedField("commentaire")}
+          onBlur={() => setFocusedField(null)}
           placeholder="Ex: Frais de scolarité"
-          style={inputStyle(false)}
+          autoComplete="off"
+          aria-label="Commentaire"
+          style={inputStyle("commentaire")}
         />
       </div>
 
       <button
         type="submit"
-        disabled={
-          submitting ||
-          selectedEleveIds.length === 0 ||
-          !montantPaye ||
-          montantTotalMoyen === null
-        }
+        disabled={!canSubmit}
+        onTouchStart={canSubmit ? pressBtn("submit") : undefined}
+        onTouchEnd={releaseBtn}
+        onTouchCancel={releaseBtn}
         style={{
           width: "100%",
-          background:
-            submitting ||
-            selectedEleveIds.length === 0 ||
-            !montantPaye ||
-            montantTotalMoyen === null
-              ? "#A5B4FC"
-              : dark
-              ? "#818CF8"
-              : "#4F46E5",
+          background: !canSubmit
+            ? "#A5B4FC"
+            : pressedBtn === "submit"
+            ? "#4338CA"
+            : accent,
           color: "white",
           border: "none",
           borderRadius: 12,
           padding: "14px 18px",
           fontWeight: 700,
-          cursor:
-            submitting ||
-            selectedEleveIds.length === 0 ||
-            !montantPaye ||
-            montantTotalMoyen === null
-              ? "not-allowed"
-              : "pointer",
+          cursor: !canSubmit ? "not-allowed" : "pointer",
           fontSize: 14,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
+          minHeight: MOBILE_TAP,
+          transform:
+            pressedBtn === "submit" && canSubmit ? "scale(0.97)" : "scale(1)",
+          transition: "transform 0.1s ease, background 0.12s ease",
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
+          fontFamily: "inherit",
+          boxSizing: "border-box",
         }}
       >
-        {submitting && <Loader size={16} className="fm-spin" />}
+        {submitting && <Loader size={16} className="fm-spin" aria-hidden="true" />}
         {submitting
           ? "Application…"
           : `Appliquer à ${selectedEleveIds.length} élève(s)`}

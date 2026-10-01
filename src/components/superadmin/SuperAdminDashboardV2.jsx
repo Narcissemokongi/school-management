@@ -7,6 +7,7 @@ import {
   DollarSign, Megaphone, Activity, AlertTriangle,
 } from "lucide-react";
 import { useStyles } from "@/styles/theme";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAppStore } from "@/store/appStore";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -27,80 +28,23 @@ import { ImpayesSection } from "./sections/ImpayesSection";
 
 // ════════════════════════════════════════════════════════════════════
 // CONFIG DES SECTIONS — permissions granulaires
-// Seul "superadmins" reste OWNER strict.
 // ════════════════════════════════════════════════════════════════════
 const SECTIONS_CONFIG = [
-  {
-    id: "overview",
-    label: "Vue d'ensemble",
-    icon: <LayoutDashboard size={20} />,
-    module: "stats",
-    legacyPermission: "gestion_statistiques",
-  },
-  {
-    id: "schools",
-    label: "Écoles",
-    icon: <School size={20} />,
-    module: "ecoles",
-    legacyPermission: "gestion_ecoles",
-  },
-  {
-    id: "abonnements",
-    label: "Abonnements",
-    icon: <CreditCard size={20} />,
-    module: "abonnements",
-  },
-  {
-    id: "finances",
-    label: "Finances",
-    icon: <DollarSign size={20} />,
-    module: "finances",
-  },
-  {
-    id: "impayes",
-    label: "Impayés",
-    icon: <AlertTriangle size={20} />,
-    module: "impayes",
-  },
-  {
-    id: "annonces",
-    label: "Annonces",
-    icon: <Megaphone size={20} />,
-    module: "annonces",
-  },
-  {
-    id: "audit",
-    label: "Journal d'audit",
-    icon: <Activity size={20} />,
-    module: "audit",
-  },
-  {
-    id: "pending",
-    label: "Demandes",
-    icon: <Clock size={20} />,
-    module: "demandes",
-    legacyPermission: "gestion_demandes",
-  },
-  // 🔒 OWNER strict (gestion des super admins = sensible)
-  {
-    id: "superadmins",
-    label: "Super Admins",
-    icon: <ShieldCheck size={20} />,
-    ownerOnly: true,
-  },
-  {
-    id: "settings",
-    label: "Paramètres",
-    icon: <Settings size={20} />,
-    module: "parametres",
-    legacyPermission: "gestion_parametres",
-  },
+  { id: "overview", label: "Vue d'ensemble", icon: <LayoutDashboard size={20} />, module: "stats", legacyPermission: "gestion_statistiques" },
+  { id: "schools", label: "Écoles", icon: <School size={20} />, module: "ecoles", legacyPermission: "gestion_ecoles" },
+  { id: "abonnements", label: "Abonnements", icon: <CreditCard size={20} />, module: "abonnements" },
+  { id: "finances", label: "Finances", icon: <DollarSign size={20} />, module: "finances" },
+  { id: "impayes", label: "Impayés", icon: <AlertTriangle size={20} />, module: "impayes" },
+  { id: "annonces", label: "Annonces", icon: <Megaphone size={20} />, module: "annonces" },
+  { id: "audit", label: "Journal d'audit", icon: <Activity size={20} />, module: "audit" },
+  { id: "pending", label: "Demandes", icon: <Clock size={20} />, module: "demandes", legacyPermission: "gestion_demandes" },
+  { id: "superadmins", label: "Super Admins", icon: <ShieldCheck size={20} />, ownerOnly: true },
+  { id: "settings", label: "Paramètres", icon: <Settings size={20} />, module: "parametres", legacyPermission: "gestion_parametres" },
 ];
 
 // ════════════════════════════════════════════════════════════════════
-// HELPERS — Permissions
+// HELPERS
 // ════════════════════════════════════════════════════════════════════
-
 const LEGACY_TO_MODULE = {
   gestion_statistiques: "stats",
   gestion_ecoles: "ecoles",
@@ -115,73 +59,46 @@ function checkIsOwner(user) {
   return user.role === "superAdmin" && user.isOwner === true;
 }
 
-/**
- * Accès à une section (legacy OU granulaire).
- */
 function checkSectionAccess(user, section) {
   if (!user) return false;
   if (checkIsOwner(user)) return true;
   if (user.role !== "superAdmin") return false;
-
   const perms = user.permissions ?? [];
-
-  if (section.legacyPermission && perms.includes(section.legacyPermission)) {
-    return true;
-  }
-
+  if (section.legacyPermission && perms.includes(section.legacyPermission)) return true;
   if (section.module) {
     const prefix = `${section.module}.`;
     if (perms.some((p) => p.startsWith(prefix))) return true;
   }
-
   return false;
 }
 
-/**
- * Vérifie une permission (large : au moins une action du module).
- */
 function checkHasPermission(user, permission) {
   if (!user) return false;
   if (checkIsOwner(user)) return true;
   if (user.role !== "superAdmin") return false;
-
   const perms = user.permissions ?? [];
-
   if (perms.includes(permission)) return true;
-
   if (permission.includes(".")) {
     const [module] = permission.split(".");
     if (perms.some((p) => p.startsWith(`${module}.`))) return true;
   }
-
   const mappedModule = LEGACY_TO_MODULE[permission];
-  if (mappedModule && perms.some((p) => p.startsWith(`${mappedModule}.`))) {
-    return true;
-  }
-
+  if (mappedModule && perms.some((p) => p.startsWith(`${mappedModule}.`))) return true;
   return false;
 }
 
-/**
- * Vérifie une permission EXACTE (pour write/delete).
- * Legacy = write complet pour le module.
- */
 function checkExactPermission(user, permission) {
   if (!user) return false;
   if (checkIsOwner(user)) return true;
   if (user.role !== "superAdmin") return false;
-
   const perms = user.permissions ?? [];
-
   if (perms.includes(permission)) return true;
-
   const [module, action] = permission.split(".");
   if (["write", "delete"].includes(action)) {
     for (const [legacy, mod] of Object.entries(LEGACY_TO_MODULE)) {
       if (mod === module && perms.includes(legacy)) return true;
     }
   }
-
   return false;
 }
 
@@ -194,22 +111,38 @@ function getVisibleSections(user) {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// ✨ Détection iOS (pour dvh)
+// ════════════════════════════════════════════════════════════════════
+function getIsIOS() {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+}
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT
 // ════════════════════════════════════════════════════════════════════
 export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
   const { dark, toggle } = useStyles();
+  const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
   const userId = user?._id;
+
+  // ✨ Hauteur adaptée iOS
+  const fullHeight = useMemo(() => (getIsIOS() ? "100dvh" : "100vh"), []);
 
   const isOwner = useMemo(() => checkIsOwner(user), [user]);
   const visibleSections = useMemo(() => getVisibleSections(user), [user]);
 
-  // Navigation
   const [activeSection, setActiveSection] = useState(
     visibleSections[0]?.id ?? "overview"
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [drilldownEcoleId, setDrilldownEcoleId] = useState(null);
+
+  // ✨ Ferme le drawer quand on change de section
+  useEffect(() => {
+    if (isMobile) setMobileNavOpen(false);
+  }, [activeSection, isMobile]);
 
   useEffect(() => {
     if (visibleSections.length === 0) return;
@@ -219,7 +152,7 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
     }
   }, [visibleSections, activeSection]);
 
-  // Queries — skip si section non visible (évite erreurs de permission)
+  // Queries
   const canViewSchools = visibleSections.some((s) => s.id === "schools");
   const canViewOverview = visibleSections.some((s) => s.id === "overview");
   const canViewPending = visibleSections.some((s) => s.id === "pending");
@@ -241,15 +174,11 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
   const stats = useMemo(() => statsRaw ?? {}, [statsRaw]);
   const pending = useMemo(() => pendingRaw ?? [], [pendingRaw]);
 
-  // Zustand
   const pendingFilterRole = useAppStore((s) => s.superadminPendingFilterRole);
-  const setPendingFilterRole = useAppStore(
-    (s) => s.setSuperadminPendingFilterRole
-  );
+  const setPendingFilterRole = useAppStore((s) => s.setSuperadminPendingFilterRole);
   const pendingSearch = useAppStore((s) => s.superadminPendingSearch);
   const setPendingSearch = useAppStore((s) => s.setSuperadminPendingSearch);
 
-  // Mutations écoles
   const addEcoleM = useMutation(api.ecoles.add);
   const removeEcoleM = useMutation(api.ecoles.remove);
   const suspendEcoleM = useMutation(api.ecoles.suspendEcole);
@@ -292,28 +221,19 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
       statsRaw === undefined ||
       pendingRaw === undefined);
 
-  // ────────────────────────────────────────────────
-  // Permissions dérivées (pour passer aux sections)
-  // ────────────────────────────────────────────────
   const canCreateEcole = checkExactPermission(user, "ecoles.write") ||
     checkHasPermission(user, "gestion_ecoles");
   const canDeleteEcole = checkExactPermission(user, "ecoles.delete") ||
     checkHasPermission(user, "gestion_ecoles");
-
   const canWriteAnnonces = checkExactPermission(user, "annonces.write") ||
     checkHasPermission(user, "gestion_annonces");
   const canDeleteAnnonces = checkExactPermission(user, "annonces.delete") ||
     checkHasPermission(user, "gestion_annonces");
-
   const canWriteImpayes = checkExactPermission(user, "impayes.write") ||
     checkHasPermission(user, "gestion_impayes");
-
   const canWriteAbonnements = checkExactPermission(user, "abonnements.write") ||
     checkHasPermission(user, "gestion_abonnements");
 
-  // ────────────────────────────────────────────────
-  // Rendu section
-  // ────────────────────────────────────────────────
   const renderSection = () => {
     if (isLoading) {
       return (
@@ -341,7 +261,6 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
             onNavigate={setActiveSection}
           />
         );
-
       case "schools":
         return (
           <SchoolsSection
@@ -356,31 +275,12 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
             canDelete={canDeleteEcole}
           />
         );
-
       case "abonnements":
-        return (
-          <GestionAbonnements
-            user={user}
-            canWrite={canWriteAbonnements}
-          />
-        );
-
+        return <GestionAbonnements user={user} canWrite={canWriteAbonnements} />;
       case "finances":
-        return (
-          <FinancesSection
-            userId={userId}
-            onDrilldown={setDrilldownEcoleId}
-          />
-        );
-
+        return <FinancesSection userId={userId} onDrilldown={setDrilldownEcoleId} />;
       case "impayes":
-        return (
-          <ImpayesSection
-            userId={userId}
-            canWrite={canWriteImpayes}
-          />
-        );
-
+        return <ImpayesSection userId={userId} canWrite={canWriteImpayes} />;
       case "annonces":
         return (
           <AnnoncesSection
@@ -389,10 +289,8 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
             canDelete={canDeleteAnnonces}
           />
         );
-
       case "audit":
         return <AuditSection userId={userId} />;
-
       case "pending":
         return (
           <PendingSection
@@ -404,13 +302,10 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
             setFilterRole={setPendingFilterRole}
           />
         );
-
       case "superadmins":
         return <GestionSuperAdmins user={user} />;
-
       case "settings":
         return <SettingsTab user={user} />;
-
       default:
         return null;
     }
@@ -421,19 +316,22 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
     return (
       <div
         style={{
-          minHeight: "100vh",
+          minHeight: fullHeight,
+          height: fullHeight,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: 24,
+          padding: `calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px))`,
           background: dark ? "#0F172A" : "#F8FAFC",
+          boxSizing: "border-box",
         }}
       >
         <div
           style={{
             maxWidth: 480,
+            width: "100%",
             textAlign: "center",
-            padding: 32,
+            padding: isMobile ? 24 : 32,
             borderRadius: 16,
             background: dark ? "#1E293B" : "#FFFFFF",
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
@@ -442,7 +340,7 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
           <ShieldCheck size={48} color="#94A3B8" style={{ marginBottom: 16 }} />
           <h2
             style={{
-              fontSize: 20,
+              fontSize: isMobile ? 18 : 20,
               fontWeight: 700,
               color: dark ? "#F1F5F9" : "#1E293B",
               margin: "0 0 8px",
@@ -459,13 +357,15 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
             onClick={onLogout}
             style={{
               marginTop: 20,
-              padding: "10px 20px",
+              padding: "12px 24px",
               borderRadius: 8,
               background: "#EF4444",
               color: "#FFFFFF",
               border: "none",
               cursor: "pointer",
               fontWeight: 600,
+              minHeight: 44,
+              WebkitTapHighlightColor: "transparent",
             }}
           >
             Déconnexion
@@ -477,7 +377,16 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
 
   // Rendu principal
   return (
-    <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
+    <div
+      style={{
+        display: "flex",
+        minHeight: fullHeight,
+        height: fullHeight,
+        width: "100%",
+        overflow: "hidden",
+        boxSizing: "border-box",
+      }}
+    >
       <SuperAdminSidebar
         sections={sectionsWithBadges}
         activeSection={activeSection}
@@ -497,9 +406,18 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
         className="sad-print-area"
         style={{
           flex: 1,
-          padding: "24px 32px",
+          padding: isMobile
+            ? `calc(12px + env(safe-area-inset-top, 0px)) 14px calc(20px + env(safe-area-inset-bottom, 0px))`
+            : "24px 32px",
           minWidth: 0,
           width: "100%",
+          overflowX: "hidden",
+          overflowY: "auto",
+          minHeight: 0,
+          height: "100%",
+          boxSizing: "border-box",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
         }}
       >
         {drilldownEcoleId ? (
@@ -555,13 +473,15 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
 // SOUS-COMPOSANT — Access Denied
 // ════════════════════════════════════════════════════════════════════
 function AccessDeniedSection({ title, isOwner }) {
+  const isMobile = useIsMobile();
+
   return (
     <div
       style={{
         maxWidth: 480,
-        margin: "60px auto",
+        margin: isMobile ? "32px auto" : "60px auto",
         textAlign: "center",
-        padding: 32,
+        padding: isMobile ? 20 : 32,
         borderRadius: 16,
         background: "#FEF3C7",
         border: "1px solid #FDE68A",
@@ -570,7 +490,7 @@ function AccessDeniedSection({ title, isOwner }) {
       <ShieldCheck size={40} color="#92400E" style={{ marginBottom: 12 }} />
       <h3
         style={{
-          fontSize: 17,
+          fontSize: isMobile ? 15.5 : 17,
           fontWeight: 700,
           color: "#92400E",
           margin: "0 0 8px",
@@ -578,7 +498,13 @@ function AccessDeniedSection({ title, isOwner }) {
       >
         Section « {title} » non accessible
       </h3>
-      <p style={{ fontSize: 13.5, color: "#78350F", margin: 0 }}>
+      <p
+        style={{
+          fontSize: isMobile ? 13 : 13.5,
+          color: "#78350F",
+          margin: 0,
+        }}
+      >
         {isOwner
           ? "Cette section n'est pas disponible actuellement."
           : "Vous n'avez pas la permission requise pour accéder à cette section."}

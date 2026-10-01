@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 // ════════════════════════════════════════════════════════════════════
 // Helpers internes
@@ -99,15 +100,31 @@ export const createParentLinkRequest = mutation({
     eleveMatricule: v.string(),
   },
   handler: async (ctx, args) => {
+    // ✅ FIX SÉCURITÉ : rate limiting anti-spam (5 tentatives / minute par parent)
+    const { allowed } = await ctx.runMutation(internal.rateLimit.checkRateLimit, {
+      key: `parentLinkRequest:${args.parentId}`,
+      maxRequests: 5,
+      windowMs: 60_000,
+    });
+    if (!allowed) {
+      throw new Error("Trop de demandes. Veuillez patienter une minute.");
+    }
+
     const parent = await ctx.db.get(args.parentId);
     if (!parent || parent.role !== "parent") {
       throw new Error("Parent introuvable");
     }
 
+    // ✅ FIX SÉCURITÉ : valider la longueur du matricule
+    const matricule = args.eleveMatricule.trim().toUpperCase();
+    if (!matricule || matricule.length < 4 || matricule.length > 20) {
+      throw new Error("Matricule invalide.");
+    }
+
     const eleve = await ctx.db
       .query("eleves")
       .withIndex("by_code", (q) =>
-        q.eq("code", args.eleveMatricule.toUpperCase())
+        q.eq("code", matricule)
       )
       .first();
     if (!eleve) throw new Error("Matricule invalide.");

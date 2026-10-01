@@ -241,7 +241,15 @@ export const login = mutation({
       .query("users")
       .withIndex("by_login", (q) => q.eq("login", args.login))
       .unique();
-    if (!user) return null;
+
+    if (!user) {
+      // ✅ FIX SÉCURITÉ : timing side-channel — effectuer un hash factice
+      // pour que le temps de réponse soit identique qu'un user existe ou non.
+      // Sans cela, un attaquant peut énumérer les logins valides par mesure
+      // de temps (PBKDF2 prend ~200ms, retour immédiat trahit l'absence).
+      await verifyPassword(args.password, "1:AAAAAAAAAAAAAAAA:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
+      return null;
+    }
 
     if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
       const remainingMs = new Date(user.lockedUntil).getTime() - Date.now();
@@ -393,7 +401,15 @@ export const getPasswordFormat = query({
       .query("users")
       .withIndex("by_login", (q) => q.eq("login", args.login))
       .unique();
-    if (!user) return null;
+
+    if (!user) {
+      // ✅ FIX SÉCURITÉ : timing side-channel — effectuer un hash factice
+      // pour que le temps de réponse soit identique qu'un user existe ou non.
+      // Sans cela, un attaquant peut énumérer les logins valides par mesure
+      // de temps (PBKDF2 prend ~200ms, retour immédiat trahit l'absence).
+      await verifyPassword(args.password, "1:AAAAAAAAAAAAAAAA:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
+      return null;
+    }
     return user.password.includes(":") ? "hash" : "plain";
   },
 });

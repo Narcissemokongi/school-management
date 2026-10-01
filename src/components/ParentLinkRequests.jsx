@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+// src/components/ParentLinkRequests.jsx
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -12,6 +13,32 @@ import {
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const PLRKeyframes = (
+  <style>{`
+    @keyframes plr-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .plr-spin { animation: plr-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .plr-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
 export function ParentLinkRequests({ user, ecoleId }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -24,9 +51,12 @@ export function ParentLinkRequests({ user, ecoleId }) {
   const pageSize = 10;
   const [processingIds, setProcessingIds] = useState(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  // ✨ Feedback tap sur boutons
+  const [pressedBtn, setPressedBtn] = useState(null);
 
-  // ── Fix #1 : ne plus masquer undefined avec ?? [] ────────────────
-  // ── Fix backend : la nouvelle signature exige `adminId`, plus `ecoleId`
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
+
   const rawRequests = useQuery(
     api.parentLinks.listAll,
     user?._id
@@ -39,7 +69,7 @@ export function ParentLinkRequests({ user, ecoleId }) {
   const reject = useMutation(api.parentLinks.rejectParentLinkRequest);
   const { confirm, dialogProps } = useConfirm();
 
-  // ── Fix #5 : dedupe des IDs (évite d'envoyer 30× le même parent)
+  // Dedupe des IDs
   const parentIds = useMemo(
     () => [...new Set(requests.map((r) => r.parentId))],
     [requests]
@@ -60,7 +90,6 @@ export function ParentLinkRequests({ user, ecoleId }) {
   const parents = rawParents ?? [];
   const eleves = rawEleves ?? [];
 
-  // ── Fix #1 (bis) : état de chargement de l'enrichissement
   const enrichmentLoading =
     rawRequests === undefined ||
     (parentIds.length > 0 && rawParents === undefined) ||
@@ -112,11 +141,19 @@ export function ParentLinkRequests({ user, ecoleId }) {
         valA = new Date(a.createdAt).getTime();
         valB = new Date(b.createdAt).getTime();
       } else if (sortBy === "parent") {
-        valA = a.parent ? `${a.parent.nom} ${a.parent.postnom}`.toLowerCase() : "";
-        valB = b.parent ? `${b.parent.nom} ${b.parent.postnom}`.toLowerCase() : "";
+        valA = a.parent
+          ? `${a.parent.nom} ${a.parent.postnom}`.toLowerCase()
+          : "";
+        valB = b.parent
+          ? `${b.parent.nom} ${b.parent.postnom}`.toLowerCase()
+          : "";
       } else if (sortBy === "eleve") {
-        valA = a.eleve ? `${a.eleve.nom} ${a.eleve.postnom}`.toLowerCase() : "";
-        valB = b.eleve ? `${b.eleve.nom} ${b.eleve.postnom}`.toLowerCase() : "";
+        valA = a.eleve
+          ? `${a.eleve.nom} ${a.eleve.postnom}`.toLowerCase()
+          : "";
+        valB = b.eleve
+          ? `${b.eleve.nom} ${b.eleve.postnom}`.toLowerCase()
+          : "";
       }
       if (valA < valB) return sortOrder === "asc" ? -1 : 1;
       if (valA > valB) return sortOrder === "asc" ? 1 : -1;
@@ -132,14 +169,16 @@ export function ParentLinkRequests({ user, ecoleId }) {
     safeCurrentPage * pageSize
   );
 
-  // ── Fix #4 : toasts amicaux (pas de fuite d'erreur backend) ──────
   const friendlyError = (err, action) => {
     console.error(`[ParentLinkRequests] ${action} failed:`, err);
     toast.error(`Échec : impossible de ${action}`);
   };
 
   const handleApprove = async (id) => {
-    const ok = await confirm("Approuver", "Voulez-vous approuver cette demande ?");
+    const ok = await confirm(
+      "Approuver",
+      "Voulez-vous approuver cette demande ?"
+    );
     if (!ok) return;
     setProcessingIds((prev) => new Set(prev).add(id));
     try {
@@ -157,7 +196,10 @@ export function ParentLinkRequests({ user, ecoleId }) {
   };
 
   const handleReject = async (id) => {
-    const ok = await confirm("Rejeter", "Voulez-vous rejeter cette demande ?");
+    const ok = await confirm(
+      "Rejeter",
+      "Voulez-vous rejeter cette demande ?"
+    );
     if (!ok) return;
     setProcessingIds((prev) => new Set(prev).add(id));
     try {
@@ -174,9 +216,6 @@ export function ParentLinkRequests({ user, ecoleId }) {
     }
   };
 
-  // ── Fix #3 : "Tout approuver" approuve vraiment TOUT le filtré
-  //    (pas seulement la page courante), avec un compte clair.
-  //    Batch de 5 pour ne pas surcharger Convex.
   const runInBatches = async (items, fn, batchSize = 5) => {
     for (let i = 0; i < items.length; i += batchSize) {
       await Promise.all(items.slice(i, i + batchSize).map(fn));
@@ -238,34 +277,48 @@ export function ParentLinkRequests({ user, ecoleId }) {
     }
   };
 
-  // ── Fix #1 (ter) : loader basé sur la bonne variable ─────────────
+  // ════════════════════════════════════════════════════════════════
+  // LOADING
+  // ════════════════════════════════════════════════════════════════
   if (enrichmentLoading) {
     return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          padding: 60,
-          color: dark ? "#94A3B8" : "#64748B",
-          gap: 12,
-        }}
-      >
-        <Loader className="animate-spin" size={24} />
-        <span>Chargement des demandes…</span>
-      </div>
+      <>
+        {PLRKeyframes}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 60,
+            color: dark ? "#94A3B8" : "#64748B",
+            gap: 12,
+          }}
+        >
+          <Loader className="plr-spin" size={24} aria-hidden="true" />
+          <span>Chargement des demandes…</span>
+        </div>
+      </>
     );
   }
 
-  // Styles adaptatifs
-  const containerPadding = isMobile ? "16px 12px" : "24px 16px";
+  // ════════════════════════════════════════════════════════════════
+  // STYLES
+  // ════════════════════════════════════════════════════════════════
+  const containerPadding = isMobile
+    ? `calc(16px + ${SAFE_TOP}) calc(12px + ${SAFE_RIGHT}) calc(16px + ${SAFE_BOTTOM}) calc(12px + ${SAFE_LEFT})`
+    : "24px 16px";
   const titleSize = isMobile ? 20 : 24;
   const headerMarginBottom = isMobile ? 16 : 24;
+
+  // Styles adaptatifs
   const searchBarFlexDirection = isMobile ? "column" : "row";
   const searchBarGap = isMobile ? 8 : 12;
   const searchInputPadding = isMobile
-    ? "12px 12px 12px 40px"
-    : "8px 12px 8px 40px";
+    ? "12px 40px 12px 40px"
+    : "8px 40px 8px 40px";
   const searchInputFontSize = isMobile ? 16 : 14;
   const selectPadding = isMobile ? "12px 14px" : "8px 12px";
   const selectFontSize = isMobile ? 16 : 14;
@@ -275,13 +328,12 @@ export function ParentLinkRequests({ user, ecoleId }) {
   const cardFlexDirection = isMobile ? "column" : "row";
   const cardAlignItems = isMobile ? "stretch" : "center";
   const cardGap = isMobile ? 8 : 12;
-  const actionButtonPadding = isMobile ? "10px 12px" : "8px 16px";
+  const actionButtonPadding = isMobile ? "12px 14px" : "8px 16px";
   const actionButtonFontSize = 14;
   const bulkActionsFlexDirection = isMobile ? "column" : "row";
-  const paginationButtonPadding = isMobile ? "10px 12px" : "6px 10px";
+  const paginationButtonPadding = isMobile ? "12px 14px" : "6px 10px";
   const paginationFontSize = isMobile ? 14 : 13;
 
-  // ── Fix #6 : styles ellipsis pour noms longs
   const nameStyle = {
     fontWeight: 500,
     color: dark ? "#F1F5F9" : "#1E293B",
@@ -295,475 +347,613 @@ export function ParentLinkRequests({ user, ecoleId }) {
 
   const cardColumnStyle = {
     flex: 1,
-    minWidth: 0, // ← permet à ellipsis de fonctionner
+    minWidth: 0,
   };
 
-  return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: containerPadding }}>
-      <h2
-        style={{
-          fontSize: titleSize,
-          fontWeight: 700,
-          marginBottom: headerMarginBottom,
-          color: dark ? "#F1F5F9" : "#1E293B",
-        }}
-      >
-        Demandes d'association parent-enfant
-      </h2>
+  // Helper bouton de base
+  const btnStyle = (pressedKey, extra = {}) => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    border: "none",
+    cursor: "pointer",
+    fontWeight: 600,
+    fontFamily: "inherit",
+    transform: pressedBtn === pressedKey ? "scale(0.97)" : "scale(1)",
+    transition: "transform 0.1s ease, background 0.12s ease, opacity 0.15s ease",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+    boxSizing: "border-box",
+    minHeight: isMobile ? MOBILE_TAP : undefined,
+    ...extra,
+  });
 
+  return (
+    <>
+      {PLRKeyframes}
       <div
         style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: searchBarGap,
-          marginBottom: 16,
-          flexDirection: searchBarFlexDirection,
+          maxWidth: 1000,
+          margin: "0 auto",
+          padding: containerPadding,
+          boxSizing: "border-box",
         }}
       >
-        <div
+        <h2
           style={{
-            flex: 1,
-            minWidth: isMobile ? "100%" : 200,
-            position: "relative",
+            fontSize: titleSize,
+            fontWeight: 700,
+            marginBottom: headerMarginBottom,
+            color: dark ? "#F1F5F9" : "#1E293B",
+            lineHeight: 1.2,
           }}
         >
-          <Search
-            size={16}
+          Demandes d'association parent-enfant
+        </h2>
+
+        {/* ═══ Barre de recherche + filtres ═══ */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: searchBarGap,
+            marginBottom: 16,
+            flexDirection: searchBarFlexDirection,
+          }}
+        >
+          <div
             style={{
-              position: "absolute",
-              left: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: dark ? "#94A3B8" : "#9CA3AF",
+              flex: 1,
+              minWidth: isMobile ? "100%" : 200,
+              position: "relative",
             }}
-          />
-          <input
-            type="search"
-            placeholder="Rechercher parent ou élève..."
-            value={searchTerm}
+          >
+            <Search
+              size={16}
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: dark ? "#94A3B8" : "#9CA3AF",
+                pointerEvents: "none",
+              }}
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              placeholder="Rechercher parent ou élève..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              inputMode="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
+              style={{
+                width: "100%",
+                padding: searchInputPadding,
+                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                borderRadius: 8,
+                background: dark ? "#0F172A" : "#F9FAFB",
+                color: dark ? "#F1F5F9" : "#1E293B",
+                fontSize: searchInputFontSize,
+                outline: "none",
+                boxSizing: "border-box",
+                fontFamily: "inherit",
+                minHeight: isMobile ? MOBILE_TAP : undefined,
+                WebkitAppearance: "none",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+              }}
+            />
+            {searchTerm && (
+              // ✨ Clear X : zone 44×44px
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                aria-label="Effacer la recherche"
+                style={{
+                  position: "absolute",
+                  right: isMobile ? 2 : 6,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: dark ? "#94A3B8" : "#64748B",
+                  padding: 0,
+                  width: isMobile ? MOBILE_TAP : 32,
+                  height: isMobile ? MOBILE_TAP : 32,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 8,
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                }}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          <select
+            value={statusFilter}
             onChange={(e) => {
-              setSearchTerm(e.target.value);
+              setStatusFilter(e.target.value);
               setCurrentPage(1);
             }}
             style={{
-              width: "100%",
-              padding: searchInputPadding,
+              padding: selectPadding,
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               borderRadius: 8,
               background: dark ? "#0F172A" : "#F9FAFB",
               color: dark ? "#F1F5F9" : "#1E293B",
-              fontSize: searchInputFontSize,
-              outline: "none",
+              fontSize: selectFontSize,
+              cursor: "pointer",
+              width: isMobile ? "100%" : "auto",
+              fontFamily: "inherit",
+              minHeight: isMobile ? MOBILE_TAP : undefined,
+              WebkitAppearance: "none",
+              appearance: "none",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
               boxSizing: "border-box",
             }}
-          />
-          {searchTerm && (
+          >
+            <option value="pending">En attente</option>
+            <option value="approved">Approuvées</option>
+            <option value="rejected">Rejetées</option>
+            <option value="all">Toutes</option>
+          </select>
+
+          <div
+            style={{
+              display: "flex",
+              gap: sortButtonsGap,
+              flexDirection: sortButtonsFlexDirection,
+              width: isMobile ? "100%" : "auto",
+            }}
+          >
+            <SortButton
+              label="Date"
+              field="date"
+              currentSort={sortBy}
+              currentOrder={sortOrder}
+              onClick={toggleSort}
+              isMobile={isMobile}
+              dark={dark}
+              pressedBtn={pressedBtn}
+              pressBtn={pressBtn}
+              releaseBtn={releaseBtn}
+            />
+            <SortButton
+              label="Parent"
+              field="parent"
+              currentSort={sortBy}
+              currentOrder={sortOrder}
+              onClick={toggleSort}
+              isMobile={isMobile}
+              dark={dark}
+              pressedBtn={pressedBtn}
+              pressBtn={pressBtn}
+              releaseBtn={releaseBtn}
+            />
+            <SortButton
+              label="Élève"
+              field="eleve"
+              currentSort={sortBy}
+              currentOrder={sortOrder}
+              onClick={toggleSort}
+              isMobile={isMobile}
+              dark={dark}
+              pressedBtn={pressedBtn}
+              pressBtn={pressBtn}
+              releaseBtn={releaseBtn}
+            />
+          </div>
+        </div>
+
+        {/* ═══ Bulk actions ═══ */}
+        {statusFilter === "pending" && paginated.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 16,
+              flexDirection: bulkActionsFlexDirection,
+              width: isMobile ? "100%" : "auto",
+            }}
+          >
             <button
-              onClick={() => setSearchTerm("")}
+              type="button"
+              onClick={handleApproveAll}
+              disabled={bulkProcessing}
+              onTouchStart={pressBtn("approveAll")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={btnStyle("approveAll", {
+                padding: isMobile ? "12px 16px" : "8px 16px",
+                background: bulkProcessing ? "#94A3B8" : "#10B981",
+                color: "white",
+                borderRadius: 8,
+                cursor: bulkProcessing ? "not-allowed" : "pointer",
+                fontSize: actionButtonFontSize,
+                width: isMobile ? "100%" : "auto",
+              })}
+            >
+              {bulkProcessing ? (
+                <Loader size={18} className="plr-spin" aria-hidden="true" />
+              ) : (
+                <CheckSquare size={18} aria-hidden="true" />
+              )}
+              Tout approuver
+            </button>
+            <button
+              type="button"
+              onClick={handleRejectAll}
+              disabled={bulkProcessing}
+              onTouchStart={pressBtn("rejectAll")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={btnStyle("rejectAll", {
+                padding: isMobile ? "12px 16px" : "8px 16px",
+                background: bulkProcessing ? "#94A3B8" : "#EF4444",
+                color: "white",
+                borderRadius: 8,
+                cursor: bulkProcessing ? "not-allowed" : "pointer",
+                fontSize: actionButtonFontSize,
+                width: isMobile ? "100%" : "auto",
+              })}
+            >
+              {bulkProcessing ? (
+                <Loader size={18} className="plr-spin" aria-hidden="true" />
+              ) : (
+                <Square size={18} aria-hidden="true" />
+              )}
+              Tout rejeter
+            </button>
+          </div>
+        )}
+
+        {/* ═══ Liste ═══ */}
+        <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
+          {paginated.map((req) => (
+            <div
+              key={req._id}
               style={{
-                position: "absolute",
-                right: 8,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: dark ? "#94A3B8" : "#64748B",
+                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                borderRadius: 12,
+                padding: cardPadding,
+                background: dark ? "#1E293B" : "#FFFFFF",
+                display: "flex",
+                flexDirection: cardFlexDirection,
+                justifyContent: "space-between",
+                alignItems: cardAlignItems,
+                flexWrap: "wrap",
+                gap: cardGap,
+                boxSizing: "border-box",
               }}
             >
-              <X size={16} />
-            </button>
-          )}
-        </div>
-
-        <select
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-          style={{
-            padding: selectPadding,
-            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-            borderRadius: 8,
-            background: dark ? "#0F172A" : "#F9FAFB",
-            color: dark ? "#F1F5F9" : "#1E293B",
-            fontSize: selectFontSize,
-            cursor: "pointer",
-            width: isMobile ? "100%" : "auto",
-          }}
-        >
-          <option value="pending">En attente</option>
-          <option value="approved">Approuvées</option>
-          <option value="rejected">Rejetées</option>
-          <option value="all">Toutes</option>
-        </select>
-
-        <div
-          style={{
-            display: "flex",
-            gap: sortButtonsGap,
-            flexDirection: sortButtonsFlexDirection,
-            width: isMobile ? "100%" : "auto",
-          }}
-        >
-          <SortButton label="Date" field="date" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} dark={dark} />
-          <SortButton label="Parent" field="parent" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} dark={dark} />
-          <SortButton label="Élève" field="eleve" currentSort={sortBy} currentOrder={sortOrder} onClick={toggleSort} isMobile={isMobile} dark={dark} />
-        </div>
-      </div>
-
-      {statusFilter === "pending" && paginated.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 16,
-            flexDirection: bulkActionsFlexDirection,
-            width: isMobile ? "100%" : "auto",
-          }}
-        >
-          <button
-            onClick={handleApproveAll}
-            disabled={bulkProcessing}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              padding: isMobile ? "12px 16px" : "8px 16px",
-              background: "#10B981",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: bulkProcessing ? "not-allowed" : "pointer",
-              fontWeight: 600,
-              fontSize: actionButtonFontSize,
-              width: isMobile ? "100%" : "auto",
-            }}
-          >
-            {bulkProcessing ? (
-              <Loader size={18} className="animate-spin" />
-            ) : (
-              <CheckSquare size={18} />
-            )}
-            Tout approuver
-          </button>
-          <button
-            onClick={handleRejectAll}
-            disabled={bulkProcessing}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              padding: isMobile ? "12px 16px" : "8px 16px",
-              background: "#EF4444",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: bulkProcessing ? "not-allowed" : "pointer",
-              fontWeight: 600,
-              fontSize: actionButtonFontSize,
-              width: isMobile ? "100%" : "auto",
-            }}
-          >
-            {bulkProcessing ? (
-              <Loader size={18} className="animate-spin" />
-            ) : (
-              <Square size={18} />
-            )}
-            Tout rejeter
-          </button>
-        </div>
-      )}
-
-      <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
-        {paginated.map((req) => (
-          <div
-            key={req._id}
-            style={{
-              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-              borderRadius: 12,
-              padding: cardPadding,
-              background: dark ? "#1E293B" : "#FFFFFF",
-              display: "flex",
-              flexDirection: cardFlexDirection,
-              justifyContent: "space-between",
-              alignItems: cardAlignItems,
-              flexWrap: "wrap",
-              gap: cardGap,
-            }}
-          >
-            <div style={cardColumnStyle}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  marginBottom: 4,
-                  flexWrap: "wrap",
-                  minWidth: 0,
-                }}
-              >
-                <User
-                  size={16}
-                  style={{ color: dark ? "#94A3B8" : "#64748B", flexShrink: 0 }}
-                />
-                <span style={nameStyle}>
-                  {req.parent
-                    ? `${req.parent.nom} ${req.parent.postnom || ""}`
-                    : "Parent inconnu"}
-                </span>
-                {req.parent?.email && (
+              <div style={cardColumnStyle}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 4,
+                    flexWrap: "wrap",
+                    minWidth: 0,
+                  }}
+                >
+                  <User
+                    size={16}
+                    style={{
+                      color: dark ? "#94A3B8" : "#64748B",
+                      flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span style={nameStyle}>
+                    {req.parent
+                      ? `${req.parent.nom} ${req.parent.postnom || ""}`
+                      : "Parent inconnu"}
+                  </span>
+                  {req.parent?.email && (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: dark ? "#94A3B8" : "#64748B",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: isMobile ? "100%" : 220,
+                      }}
+                    >
+                      <Mail size={12} aria-hidden="true" /> {req.parent.email}
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 4,
+                    flexWrap: "wrap",
+                    minWidth: 0,
+                  }}
+                >
+                  <GraduationCap
+                    size={16}
+                    style={{
+                      color: dark ? "#94A3B8" : "#64748B",
+                      flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span style={nameStyle}>
+                    {req.eleve
+                      ? `${req.eleve.nom} ${req.eleve.postnom || ""}`
+                      : "Élève inconnu"}
+                    {req.eleve?.classe && ` (${req.eleve.classe})`}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Calendar
+                    size={14}
+                    style={{ color: dark ? "#94A3B8" : "#64748B" }}
+                    aria-hidden="true"
+                  />
                   <span
                     style={{
                       fontSize: 12,
                       color: dark ? "#94A3B8" : "#64748B",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      maxWidth: isMobile ? "100%" : 220,
                     }}
                   >
-                    <Mail size={12} /> {req.parent.email}
+                    {new Date(req.createdAt).toLocaleDateString("fr-FR")}
                   </span>
-                )}
+                </div>
               </div>
+
+              {/* ═══ Actions ═══ */}
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
                   gap: 8,
-                  marginBottom: 4,
-                  flexWrap: "wrap",
-                  minWidth: 0,
+                  flexShrink: 0,
+                  flexDirection: isMobile ? "column" : "row",
+                  width: isMobile ? "100%" : "auto",
                 }}
               >
-                <GraduationCap
-                  size={16}
-                  style={{ color: dark ? "#94A3B8" : "#64748B", flexShrink: 0 }}
-                />
-                <span style={nameStyle}>
-                  {req.eleve
-                    ? `${req.eleve.nom} ${req.eleve.postnom || ""}`
-                    : "Élève inconnu"}
-                  {req.eleve?.classe && ` (${req.eleve.classe})`}
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Calendar
-                  size={14}
-                  style={{ color: dark ? "#94A3B8" : "#64748B" }}
-                />
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: dark ? "#94A3B8" : "#64748B",
-                  }}
-                >
-                  {new Date(req.createdAt).toLocaleDateString("fr-FR")}
-                </span>
-              </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                flexShrink: 0,
-                flexDirection: isMobile ? "column" : "row",
-                width: isMobile ? "100%" : "auto",
-              }}
-            >
-              {req.status === "pending" && (
-                <>
-                  <button
-                    onClick={() => handleApprove(req._id)}
-                    disabled={processingIds.has(req._id)}
+                {req.status === "pending" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleApprove(req._id)}
+                      disabled={processingIds.has(req._id)}
+                      onTouchStart={pressBtn(`approve-${req._id}`)}
+                      onTouchEnd={releaseBtn}
+                      onTouchCancel={releaseBtn}
+                      style={btnStyle(`approve-${req._id}`, {
+                        padding: actionButtonPadding,
+                        background: processingIds.has(req._id)
+                          ? "#94A3B8"
+                          : "#10B981",
+                        color: "white",
+                        borderRadius: 8,
+                        cursor: processingIds.has(req._id)
+                          ? "not-allowed"
+                          : "pointer",
+                        fontSize: actionButtonFontSize,
+                        width: isMobile ? "100%" : "auto",
+                      })}
+                    >
+                      {processingIds.has(req._id) ? (
+                        <Loader
+                          size={16}
+                          className="plr-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <CheckCircle2 size={18} aria-hidden="true" />
+                      )}
+                      Approuver
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReject(req._id)}
+                      disabled={processingIds.has(req._id)}
+                      onTouchStart={pressBtn(`reject-${req._id}`)}
+                      onTouchEnd={releaseBtn}
+                      onTouchCancel={releaseBtn}
+                      style={btnStyle(`reject-${req._id}`, {
+                        padding: actionButtonPadding,
+                        background: processingIds.has(req._id)
+                          ? "#94A3B8"
+                          : "#EF4444",
+                        color: "white",
+                        borderRadius: 8,
+                        cursor: processingIds.has(req._id)
+                          ? "not-allowed"
+                          : "pointer",
+                        fontSize: actionButtonFontSize,
+                        width: isMobile ? "100%" : "auto",
+                      })}
+                    >
+                      {processingIds.has(req._id) ? (
+                        <Loader
+                          size={16}
+                          className="plr-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <XCircle size={18} aria-hidden="true" />
+                      )}
+                      Rejeter
+                    </button>
+                  </>
+                )}
+                {req.status === "approved" && (
+                  <span
                     style={{
+                      color: "#10B981",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      gap: 6,
-                      padding: actionButtonPadding,
-                      background: processingIds.has(req._id)
-                        ? "#94A3B8"
-                        : "#10B981",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: processingIds.has(req._id)
-                        ? "not-allowed"
-                        : "pointer",
+                      gap: 4,
+                      fontWeight: 500,
                       fontSize: actionButtonFontSize,
-                      width: isMobile ? "100%" : "auto",
                     }}
                   >
-                    {processingIds.has(req._id) ? (
-                      <Loader size={16} className="animate-spin" />
-                    ) : (
-                      <CheckCircle2 size={18} />
-                    )}
-                    Approuver
-                  </button>
-                  <button
-                    onClick={() => handleReject(req._id)}
-                    disabled={processingIds.has(req._id)}
+                    <CheckCircle2 size={16} aria-hidden="true" /> Approuvée
+                  </span>
+                )}
+                {req.status === "rejected" && (
+                  <span
                     style={{
+                      color: "#EF4444",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      gap: 6,
-                      padding: actionButtonPadding,
-                      background: processingIds.has(req._id)
-                        ? "#94A3B8"
-                        : "#EF4444",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: processingIds.has(req._id)
-                        ? "not-allowed"
-                        : "pointer",
+                      gap: 4,
+                      fontWeight: 500,
                       fontSize: actionButtonFontSize,
-                      width: isMobile ? "100%" : "auto",
                     }}
                   >
-                    {processingIds.has(req._id) ? (
-                      <Loader size={16} className="animate-spin" />
-                    ) : (
-                      <XCircle size={18} />
-                    )}
-                    Rejeter
-                  </button>
-                </>
-              )}
-              {req.status === "approved" && (
-                <span
-                  style={{
-                    color: "#10B981",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    fontWeight: 500,
-                    fontSize: actionButtonFontSize,
-                  }}
-                >
-                  <CheckCircle2 size={16} /> Approuvée
-                </span>
-              )}
-              {req.status === "rejected" && (
-                <span
-                  style={{
-                    color: "#EF4444",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    fontWeight: 500,
-                    fontSize: actionButtonFontSize,
-                  }}
-                >
-                  <XCircle size={16} /> Rejetée
-                </span>
-              )}
+                    <XCircle size={16} aria-hidden="true" /> Rejetée
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      {paginated.length === 0 && !enrichmentLoading && (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "40px 20px",
-            color: dark ? "#94A3B8" : "#64748B",
-          }}
-        >
+        {/* ═══ Empty state ═══ */}
+        {paginated.length === 0 && !enrichmentLoading && (
           <div
             style={{
-              width: 64,
-              height: 64,
-              borderRadius: "50%",
-              background: dark ? "#1E293B" : "#F1F5F9",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 16px",
-            }}
-          >
-            <User size={28} />
-          </div>
-          <p style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>
-            Aucune demande
-          </p>
-          <p style={{ fontSize: 13 }}>
-            {searchTerm
-              ? "Aucun résultat pour votre recherche."
-              : "Rien à afficher pour ce filtre."}
-          </p>
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 16,
-          }}
-        >
-          <button
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={safeCurrentPage === 1}
-            style={{
-              padding: paginationButtonPadding,
-              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-              borderRadius: 6,
-              background: "transparent",
-              cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer",
-              color: dark ? "#F1F5F9" : "#1E293B",
-              fontSize: paginationFontSize,
-            }}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span
-            style={{
-              fontSize: paginationFontSize,
+              textAlign: "center",
+              padding: "40px 20px",
               color: dark ? "#94A3B8" : "#64748B",
             }}
           >
-            Page {safeCurrentPage} / {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={safeCurrentPage === totalPages}
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                background: dark ? "#1E293B" : "#F1F5F9",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px",
+              }}
+              aria-hidden="true"
+            >
+              <User size={28} />
+            </div>
+            <p style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>
+              Aucune demande
+            </p>
+            <p style={{ fontSize: 13 }}>
+              {searchTerm
+                ? "Aucun résultat pour votre recherche."
+                : "Rien à afficher pour ce filtre."}
+            </p>
+          </div>
+        )}
+
+        {/* ═══ Pagination ═══ */}
+        {totalPages > 1 && (
+          <div
             style={{
-              padding: paginationButtonPadding,
-              border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-              borderRadius: 6,
-              background: "transparent",
-              cursor:
-                safeCurrentPage === totalPages ? "not-allowed" : "pointer",
-              color: dark ? "#F1F5F9" : "#1E293B",
-              fontSize: paginationFontSize,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 16,
             }}
           >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage === 1}
+              aria-label="Page précédente"
+              style={{
+                padding: paginationButtonPadding,
+                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                borderRadius: 6,
+                background: "transparent",
+                cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer",
+                color: dark ? "#F1F5F9" : "#1E293B",
+                fontSize: paginationFontSize,
+                minWidth: MOBILE_TAP,
+                minHeight: MOBILE_TAP,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span
+              style={{
+                fontSize: paginationFontSize,
+                color: dark ? "#94A3B8" : "#64748B",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              Page {safeCurrentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setCurrentPage((p) => Math.min(totalPages, p + 1))
+              }
+              disabled={safeCurrentPage === totalPages}
+              aria-label="Page suivante"
+              style={{
+                padding: paginationButtonPadding,
+                border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+                borderRadius: 6,
+                background: "transparent",
+                cursor:
+                  safeCurrentPage === totalPages
+                    ? "not-allowed"
+                    : "pointer",
+                color: dark ? "#F1F5F9" : "#1E293B",
+                fontSize: paginationFontSize,
+                minWidth: MOBILE_TAP,
+                minHeight: MOBILE_TAP,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
 
-      <ConfirmDialog {...dialogProps} />
-    </div>
+        <ConfirmDialog {...dialogProps} />
+      </div>
+    </>
   );
 }
 
-// ── Fix #2 : SortButton prend `dark` + utilise ArrowUpDown ─────────
+// ════════════════════════════════════════════════════════════════════
+// SORT BUTTON
+// ════════════════════════════════════════════════════════════════════
 function SortButton({
   label,
   field,
@@ -772,8 +962,12 @@ function SortButton({
   onClick,
   isMobile,
   dark,
+  pressedBtn,
+  pressBtn,
+  releaseBtn,
 }) {
   const isActive = currentSort === field;
+  const isPressed = pressedBtn === `sort-${field}`;
   const IconComponent = !isActive
     ? ArrowUpDown
     : currentOrder === "asc"
@@ -782,7 +976,13 @@ function SortButton({
 
   return (
     <button
+      type="button"
       onClick={() => onClick(field)}
+      onTouchStart={pressBtn(`sort-${field}`)}
+      onTouchEnd={releaseBtn}
+      onTouchCancel={releaseBtn}
+      aria-pressed={isActive}
+      aria-label={`Trier par ${label}`}
       style={{
         display: "flex",
         alignItems: "center",
@@ -809,10 +1009,23 @@ function SortButton({
         cursor: "pointer",
         fontSize: isMobile ? 14 : 13,
         flex: isMobile ? 1 : "none",
+        fontFamily: "inherit",
+        // ✨ Feedback tap
+        transform: isPressed ? "scale(0.96)" : "scale(1)",
+        transition: "transform 0.1s ease, background 0.12s ease",
+        // ✨ Mobile
+        minHeight: isMobile ? MOBILE_TAP : undefined,
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        boxSizing: "border-box",
       }}
     >
       {label}
-      <IconComponent size={14} style={isActive ? undefined : { opacity: 0.5 }} />
+      <IconComponent
+        size={14}
+        style={isActive ? undefined : { opacity: 0.5 }}
+        aria-hidden="true"
+      />
     </button>
   );
 }

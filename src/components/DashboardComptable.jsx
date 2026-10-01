@@ -9,7 +9,15 @@ import {
 } from "lucide-react";
 
 // ============================================================
-// KEYFRAMES (injectés dans toutes les branches)
+// CONSTANTES MODULE-LEVEL
+// ============================================================
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+// ============================================================
+// KEYFRAMES (module-level)
 // ============================================================
 const Keyframes = (
   <style>{`
@@ -44,7 +52,8 @@ function formatMontant(value, devise) {
 // ============================================================
 function StatCard({ icon, label, value, color, dark, isMobile }) {
   return (
-    <div
+    <article
+      aria-label={`${label} : ${value}`}
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 12,
@@ -58,9 +67,11 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
         gap: 10,
         minWidth: isMobile ? 140 : "auto",
         flex: isMobile ? "0 0 auto" : 1,
+        minHeight: 44,
       }}
     >
       <div
+        aria-hidden="true"
         style={{
           width: 32,
           height: 32,
@@ -93,12 +104,13 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
             fontWeight: 700,
             lineHeight: 1.15,
             whiteSpace: "nowrap",
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {value}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -149,6 +161,7 @@ function ClasseBarRow({ stat, devise, deviseSymbol, dark, isMobile }) {
               color: textSecondary,
               marginLeft: 6,
               fontSize: isMobile ? 11 : 12,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             ({stat.nbEleves})
@@ -159,9 +172,9 @@ function ClasseBarRow({ stat, devise, deviseSymbol, dark, isMobile }) {
             fontSize: isMobile ? 11 : 12,
             color: textSecondary,
             whiteSpace: "nowrap",
+            fontVariantNumeric: "tabular-nums",
           }}
         >
-          {/* ✅ Utilise `devise` (corrige le bug du "CDF" hardcodé) */}
           {formatMontant(stat.paye, devise)} /{" "}
           {formatMontant(stat.total, devise)} {deviseSymbol}
           <span
@@ -175,7 +188,13 @@ function ClasseBarRow({ stat, devise, deviseSymbol, dark, isMobile }) {
           </span>
         </span>
       </div>
+      {/* ✅ A11y — progressbar pour lecteur d'écran */}
       <div
+        role="progressbar"
+        aria-label={`${stat.classe} : ${stat.taux}% payé (${formatMontant(stat.paye, devise)} sur ${formatMontant(stat.total, devise)} ${deviseSymbol})`}
+        aria-valuenow={stat.taux}
+        aria-valuemin={0}
+        aria-valuemax={100}
         style={{
           height: 6,
           background: mutedBg,
@@ -184,6 +203,7 @@ function ClasseBarRow({ stat, devise, deviseSymbol, dark, isMobile }) {
         }}
       >
         <div
+          aria-hidden="true"
           style={{
             width: `${stat.taux}%`,
             height: "100%",
@@ -201,18 +221,13 @@ function ClasseBarRow({ stat, devise, deviseSymbol, dark, isMobile }) {
 // COMPOSANT PRINCIPAL
 // ============================================================
 export function DashboardComptable({
-  ecoleId,
-  eleves,
-  anneeId,
-  anneeActive,
-  user,
+  ecoleId, eleves, anneeId, anneeActive, user,
 }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
 
   const userId = user?._id;
 
-  // ✅ userId ajouté + garde
   const ecole = useQuery(
     api.ecoles.get,
     ecoleId && userId ? { ecoleId, userId } : "skip"
@@ -227,11 +242,9 @@ export function DashboardComptable({
       : "skip"
   );
 
-  // ✅ Mémoïsation
   const frais = useMemo(() => fraisRaw ?? [], [fraisRaw]);
   const elevesList = useMemo(() => eleves ?? [], [eleves]);
 
-  // ✅ Map pour lookup O(1)
   const elevesById = useMemo(
     () => new Map(elevesList.map((e) => [e._id, e])),
     [elevesList]
@@ -254,8 +267,6 @@ export function DashboardComptable({
     return { totalFrais, totalPaye, reste, nbElevesAvecFrais, tauxPaiement };
   }, [frais]);
 
-  // ✅ Stats par classe — utilise Map, mémoïsé
-  // ✅ Appelé AVANT tout early return (règle des Hooks)
   const statsParClasse = useMemo(() => {
     const map = {};
     frais.forEach((f) => {
@@ -303,6 +314,7 @@ export function DashboardComptable({
       <>
         {Keyframes}
         <div
+          role="alert"
           style={{
             display: "flex",
             justifyContent: "center",
@@ -323,6 +335,9 @@ export function DashboardComptable({
       <>
         {Keyframes}
         <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
           style={{
             display: "flex",
             justifyContent: "center",
@@ -330,7 +345,15 @@ export function DashboardComptable({
             minHeight: 300,
           }}
         >
-          <Loader size={32} className="dc-spin" style={{ color: accent }} />
+          <Loader
+            size={32}
+            className="dc-spin"
+            style={{ color: accent }}
+            aria-hidden="true"
+          />
+          <span style={{ position: "absolute", left: -9999 }}>
+            Chargement du tableau de bord comptable
+          </span>
         </div>
       </>
     );
@@ -389,50 +412,15 @@ export function DashboardComptable({
             marginBottom: isMobile ? 14 : 20,
             overflowX: isMobile ? "auto" : "visible",
             paddingBottom: isMobile ? 4 : 0,
-            WebkitOverflowScrolling: "touch",
             scrollbarWidth: "none",
+            ...SCROLL_AREA,
           }}
         >
-          <StatCard
-            icon={<DollarSign size={16} />}
-            label="Total dû"
-            value={`${formatMontant(totalFrais, devise)} ${deviseSymbol}`}
-            color={accent}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<CheckCircle size={16} />}
-            label="Total payé"
-            value={`${formatMontant(totalPaye, devise)} ${deviseSymbol}`}
-            color={success}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<Clock size={16} />}
-            label="Reste à payer"
-            value={`${formatMontant(reste, devise)} ${deviseSymbol}`}
-            color={reste > 0 ? danger : success}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<TrendingUp size={16} />}
-            label="Taux de paiement"
-            value={`${tauxPaiement}%`}
-            color={warning}
-            dark={dark}
-            isMobile={isMobile}
-          />
-          <StatCard
-            icon={<Users size={16} />}
-            label="Élèves avec frais"
-            value={nbElevesAvecFrais}
-            color="#6366F1"
-            dark={dark}
-            isMobile={isMobile}
-          />
+          <StatCard icon={<DollarSign size={16} />} label="Total dû" value={`${formatMontant(totalFrais, devise)} ${deviseSymbol}`} color={accent} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<CheckCircle size={16} />} label="Total payé" value={`${formatMontant(totalPaye, devise)} ${deviseSymbol}`} color={success} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<Clock size={16} />} label="Reste à payer" value={`${formatMontant(reste, devise)} ${deviseSymbol}`} color={reste > 0 ? danger : success} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<TrendingUp size={16} />} label="Taux de paiement" value={`${tauxPaiement}%`} color={warning} dark={dark} isMobile={isMobile} />
+          <StatCard icon={<Users size={16} />} label="Élèves avec frais" value={nbElevesAvecFrais} color="#6366F1" dark={dark} isMobile={isMobile} />
         </div>
 
         {/* ==================== RÉPARTITION PAR CLASSE ==================== */}
@@ -457,6 +445,7 @@ export function DashboardComptable({
             }}
           >
             <div
+              aria-hidden="true"
               style={{
                 width: 28,
                 height: 28,
@@ -498,6 +487,8 @@ export function DashboardComptable({
           {/* Liste */}
           {statsParClasse.length === 0 ? (
             <div
+              role="status"
+              aria-live="polite"
               style={{
                 textAlign: "center",
                 padding: isMobile ? 24 : 40,
@@ -505,6 +496,7 @@ export function DashboardComptable({
               }}
             >
               <div
+                aria-hidden="true"
                 style={{
                   width: 48,
                   height: 48,

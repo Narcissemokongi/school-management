@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+// src/components/LoginScreen.jsx
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -9,10 +10,39 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ✨ Taille minimale tap target mobile
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
 // COMPTE À REBOURS pour le renvoi de code
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 const RESEND_COOLDOWN_S = 30;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const LoginKeyframes = (
+  <style>{`
+    @keyframes lg-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .lg-spin {
+      animation: lg-spin 1s linear infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lg-spin { animation: none !important; }
+    }
+  `}</style>
+);
 
 export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const { dark } = useStyles();
@@ -31,33 +61,42 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const [sendingCode, setSendingCode] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
+  // ✨ Focus states (remplacent les mutations DOM)
+  const [focusedField, setFocusedField] = useState(null);
+  // ✨ Feedback tap
+  const [pressedBtn, setPressedBtn] = useState(null);
+
   const codeInputRef = useRef(null);
 
   const authenticate = useMutation(api.users.login);
   const sendLoginCode = useMutation(api.twoFactorEmail.sendLoginCode);
   const verifyLoginCode = useMutation(api.twoFactorEmail.verifyLoginCode);
 
-  // ============================================================
+  // ✨ Handlers touch génériques
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
+
+  // ════════════════════════════════════════════════════════════════════
   // Effet : compte à rebours du renvoi
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   // Effet : focus auto sur le champ code en 2FA
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (step === "twoFactor") {
       codeInputRef.current?.focus();
     }
   }, [step]);
 
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   // SOUMISSION DES IDENTIFIANTS
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   const handleCredentialsSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
@@ -89,7 +128,6 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
         onLogin(user);
       }
     } catch (err) {
-      // ✅ Guard : err.message peut être absent
       const msg =
         (err && typeof err === "object" && err.message) ||
         (typeof err === "string" ? err : "") ||
@@ -104,9 +142,9 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
     }
   };
 
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   // SOUMISSION DU CODE 2FA
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   const handleTwoFactorSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
@@ -132,9 +170,9 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
     }
   };
 
-  // ============================================================
-  // RENVOYER LE CODE (avec cooldown + feedback)
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
+  // RENVOYER LE CODE
+  // ════════════════════════════════════════════════════════════════════
   const handleResendCode = useCallback(async () => {
     if (sendingCode || resendCooldown > 0) return;
     setSendingCode(true);
@@ -159,9 +197,9 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
     }
   }, [sendingCode, resendCooldown, sendLoginCode, userId, dark]);
 
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   // STYLES
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   const containerBg = dark ? "#0F172A" : "#F3F4F6";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
@@ -172,6 +210,8 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const inputText = dark ? "#F1F5F9" : "#111827";
   const inputBorder = dark ? "#334155" : "#E2E8F0";
   const buttonBg = dark ? "#818CF8" : "#4F46E5";
+  const buttonBgHover = dark ? "#6366F1" : "#4338CA";
+  const buttonDisabled = "#A5B4FC";
   const accent = dark ? "#818CF8" : "#4F46E5";
   const errorBg =
     errorType === "locked"
@@ -192,73 +232,62 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const linkColor = accent;
   const iconColor = dark ? "#94A3B8" : "#9CA3AF";
 
-  const inputFontSize = isMobile ? 16 : 14;
-  const cardPadding = isMobile ? "32px 20px" : "40px 32px";
+  const inputFontSize = isMobile ? 16 : 14; // 16px évite le zoom iOS
+  const cardPadding = isMobile ? "28px 20px" : "40px 32px";
   const logoSize = isMobile ? 64 : 72;
 
-  const commonInputStyle = (hasRightPadding = false) => ({
-    width: "100%",
-    padding: hasRightPadding
-      ? "12px 42px 12px 42px"
-      : "12px 14px 12px 42px",
-    border: `1.5px solid ${inputBorder}`,
-    borderRadius: 10,
-    fontSize: inputFontSize,
-    outline: "none",
-    background: inputBg,
-    color: inputText,
-    transition: "border-color 0.2s, background-color 0.3s, color 0.3s",
-    boxSizing: "border-box",
-  });
+  // ✨ inputStyle fonctionnel (focus par state, pas par DOM)
+  const inputStyle = useCallback(
+    (fieldName, hasRightPadding = false) => ({
+      width: "100%",
+      padding: hasRightPadding
+        ? `12px ${MOBILE_TAP}px 12px 42px`
+        : "12px 14px 12px 42px",
+      border: `1.5px solid ${
+        focusedField === fieldName ? accent : inputBorder
+      }`,
+      borderRadius: 10,
+      fontSize: inputFontSize,
+      outline: "none",
+      background: inputBg,
+      color: inputText,
+      transition: "border-color 0.2s ease",
+      boxSizing: "border-box",
+      fontFamily: "inherit",
+      WebkitAppearance: "none",
+      minHeight: isMobile ? MOBILE_TAP : undefined,
+      // ✨ Neutralise tap delay
+      WebkitTapHighlightColor: "transparent",
+      touchAction: "manipulation",
+    }),
+    [focusedField, inputFontSize, inputBg, inputText, inputBorder, accent, isMobile]
+  );
 
-  const commonButtonStyle = {
-    width: "100%",
-    padding: "12px 0",
-    background: loading ? "#A5B4FC" : buttonBg,
-    color: "#FFFFFF",
-    border: "none",
-    borderRadius: 10,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: loading ? "not-allowed" : "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    boxShadow: dark
-      ? "0 4px 12px rgba(0,0,0,0.3)"
-      : "0 4px 12px rgba(79,70,229,0.2)",
-    transition: "background 0.2s",
-  };
-
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   // RENDU
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   return (
     <div
       style={{
+        // ✨ 100dvh pour iOS + safe-area
         minHeight: "100vh",
+        height: isMobile ? "100dvh" : undefined,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         background: containerBg,
-        padding: isMobile ? "16px" : "24px",
+        // ✨ Safe-area partout
+        padding: isMobile
+          ? `calc(16px + ${SAFE_TOP}) calc(16px + ${SAFE_RIGHT}) calc(16px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_LEFT})`
+          : "24px",
         transition: "background-color 0.3s",
+        boxSizing: "border-box",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        overscrollBehavior: "contain",
       }}
     >
-      {/* Keyframes préfixés lg-* */}
-      <style>{`
-        @keyframes lg-spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        .lg-spin {
-          animation: lg-spin 1s linear infinite;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .lg-spin { animation: none !important; }
-        }
-      `}</style>
+      {LoginKeyframes}
 
       <div
         style={{
@@ -272,9 +301,10 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
           width: "100%",
           maxWidth: 420,
           transition: "background-color 0.3s, border-color 0.3s",
+          boxSizing: "border-box",
         }}
       >
-        {/* En-tête */}
+        {/* ═══ En-tête ═══ */}
         <div style={{ textAlign: "center", marginBottom: isMobile ? 24 : 32 }}>
           <img
             src="/logo.png"
@@ -311,9 +341,9 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
           </p>
         </div>
 
-        {/* ==================== ÉTAPE 1 : IDENTIFIANTS ==================== */}
+        {/* ═══ ÉTAPE 1 : IDENTIFIANTS ═══ */}
         {step === "credentials" && (
-          <form onSubmit={handleCredentialsSubmit}>
+          <form onSubmit={handleCredentialsSubmit} autoComplete="off">
             {/* Identifiant */}
             <div style={{ marginBottom: 20 }}>
               <label
@@ -349,13 +379,16 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     setLogin(e.target.value);
                     if (error) setError("");
                   }}
+                  onFocus={() => setFocusedField("login")}
+                  onBlur={() => setFocusedField(null)}
                   autoComplete="username"
                   autoFocus
-                  style={commonInputStyle()}
-                  onFocus={(e) =>
-                    (e.target.style.borderColor = accent)
-                  }
-                  onBlur={(e) => (e.target.style.borderColor = inputBorder)}
+                  inputMode="text"
+                  enterKeyHint="next"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck="false"
+                  style={inputStyle("login")}
                 />
               </div>
             </div>
@@ -384,6 +417,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     transform: "translateY(-50%)",
                     color: iconColor,
                     pointerEvents: "none",
+                    zIndex: 1,
                   }}
                 />
                 <input
@@ -395,16 +429,19 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     setPassword(e.target.value);
                     if (error) setError("");
                   }}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
                   autoComplete="current-password"
-                  style={commonInputStyle(true)}
-                  onFocus={(e) =>
-                    (e.target.style.borderColor = accent)
-                  }
-                  onBlur={(e) => (e.target.style.borderColor = inputBorder)}
+                  enterKeyHint="go"
+                  style={inputStyle("password", true)}
                 />
+                {/* ✨ Bouton toggle password : zone 44×44px */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  onTouchStart={pressBtn("toggle-pwd")}
+                  onTouchEnd={releaseBtn}
+                  onTouchCancel={releaseBtn}
                   aria-label={
                     showPassword
                       ? "Masquer le mot de passe"
@@ -412,25 +449,37 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                   }
                   style={{
                     position: "absolute",
-                    right: 12,
+                    right: isMobile ? 4 : 8,
                     top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
+                    transform: `translateY(-50%) scale(${
+                      pressedBtn === "toggle-pwd" ? 0.9 : 1
+                    })`,
+                    background: "transparent",
                     border: "none",
                     color: iconColor,
                     cursor: "pointer",
-                    padding: 4,
+                    padding: 0,
+                    // ✨ Zone tap 44×44
+                    width: isMobile ? MOBILE_TAP : 36,
+                    height: isMobile ? MOBILE_TAP : 36,
                     display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 8,
+                    transition: "transform 0.1s ease",
+                    WebkitTapHighlightColor: "transparent",
+                    touchAction: "manipulation",
                   }}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
 
-            {/* Message d'erreur */}
+            {/* Erreur */}
             {error && (
               <div
+                role="alert"
                 style={{
                   padding: "10px 14px",
                   borderRadius: 8,
@@ -445,18 +494,54 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                 }}
               >
                 {errorType === "locked" ? (
-                  <Clock size={16} />
+                  <Clock size={16} style={{ flexShrink: 0 }} />
                 ) : (
-                  <AlertCircle size={16} />
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
                 )}
                 <span>{error}</span>
               </div>
             )}
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              style={commonButtonStyle}
+              onTouchStart={!loading ? pressBtn("submit") : undefined}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={{
+                width: "100%",
+                padding: "12px 0",
+                background: loading
+                  ? buttonDisabled
+                  : pressedBtn === "submit"
+                  ? buttonBgHover
+                  : buttonBg,
+                color: "#FFFFFF",
+                border: "none",
+                borderRadius: 10,
+                fontSize: 16,
+                fontWeight: 600,
+                cursor: loading ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                boxShadow: dark
+                  ? "0 4px 12px rgba(0,0,0,0.3)"
+                  : "0 4px 12px rgba(79,70,229,0.2)",
+                transition:
+                  "background 0.12s ease, transform 0.1s ease, box-shadow 0.15s ease",
+                transform:
+                  pressedBtn === "submit" && !loading
+                    ? "scale(0.98)"
+                    : "scale(1)",
+                minHeight: MOBILE_TAP,
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
+              }}
             >
               {loading ? (
                 <>
@@ -472,9 +557,9 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
           </form>
         )}
 
-        {/* ==================== ÉTAPE 2 : 2FA ==================== */}
+        {/* ═══ ÉTAPE 2 : 2FA ═══ */}
         {step === "twoFactor" && (
-          <form onSubmit={handleTwoFactorSubmit}>
+          <form onSubmit={handleTwoFactorSubmit} autoComplete="off">
             <div style={{ marginBottom: 20 }}>
               <label
                 htmlFor="code-input"
@@ -511,22 +596,25 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
                     if (error) setError("");
                   }}
+                  onFocus={() => setFocusedField("code")}
+                  onBlur={() => setFocusedField(null)}
                   maxLength={6}
                   autoComplete="one-time-code"
+                  enterKeyHint="done"
                   style={{
-                    ...commonInputStyle(),
-                    fontSize: 16,
+                    ...inputStyle("code"),
+                    fontSize: 18,
                     letterSpacing: "4px",
                     textAlign: "center",
+                    fontWeight: 600,
                   }}
-                  onFocus={(e) => (e.target.style.borderColor = accent)}
-                  onBlur={(e) => (e.target.style.borderColor = inputBorder)}
                 />
               </div>
             </div>
 
             {error && (
               <div
+                role="alert"
                 style={{
                   padding: "10px 14px",
                   borderRadius: 8,
@@ -540,20 +628,58 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                   color: errorText,
                 }}
               >
-                <AlertCircle size={16} />
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
                 <span>{error}</span>
               </div>
             )}
 
+            {/* Submit 2FA */}
             <button
               type="submit"
               disabled={loading || code.length !== 6}
+              onTouchStart={
+                !loading && code.length === 6
+                  ? pressBtn("verify")
+                  : undefined
+              }
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
               style={{
-                ...commonButtonStyle,
+                width: "100%",
+                padding: "12px 0",
                 background:
-                  loading || code.length !== 6 ? "#A5B4FC" : buttonBg,
+                  loading || code.length !== 6
+                    ? buttonDisabled
+                    : pressedBtn === "verify"
+                    ? buttonBgHover
+                    : buttonBg,
+                color: "#FFFFFF",
+                border: "none",
+                borderRadius: 10,
+                fontSize: 16,
+                fontWeight: 600,
                 cursor:
                   loading || code.length !== 6 ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                boxShadow: dark
+                  ? "0 4px 12px rgba(0,0,0,0.3)"
+                  : "0 4px 12px rgba(79,70,229,0.2)",
+                transition:
+                  "background 0.12s ease, transform 0.1s ease, box-shadow 0.15s ease",
+                transform:
+                  pressedBtn === "verify" &&
+                  !loading &&
+                  code.length === 6
+                    ? "scale(0.98)"
+                    : "scale(1)",
+                minHeight: MOBILE_TAP,
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
               }}
             >
               {loading ? (
@@ -566,13 +692,21 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
               )}
             </button>
 
+            {/* Renvoyer le code — ✨ zone tap 44px */}
             <button
               type="button"
               onClick={handleResendCode}
               disabled={sendingCode || resendCooldown > 0}
+              onTouchStart={
+                !sendingCode && resendCooldown === 0
+                  ? pressBtn("resend")
+                  : undefined
+              }
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
               style={{
                 marginTop: 12,
-                background: "none",
+                background: "transparent",
                 border: "none",
                 color:
                   sendingCode || resendCooldown > 0
@@ -586,6 +720,20 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                 fontWeight: 500,
                 textDecoration: "underline",
                 width: "100%",
+                // ✨ Zone tap 44px
+                minHeight: MOBILE_TAP,
+                padding: "10px 12px",
+                borderRadius: 8,
+                transform:
+                  pressedBtn === "resend" &&
+                  !sendingCode &&
+                  resendCooldown === 0
+                    ? "scale(0.98)"
+                    : "scale(1)",
+                transition: "transform 0.1s ease, background 0.12s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
               }}
             >
               {sendingCode
@@ -597,31 +745,51 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
           </form>
         )}
 
-        {/* Lien vers l'inscription */}
+        {/* ═══ Lien inscription ═══ */}
         {step === "credentials" && (
           <div style={{ marginTop: 20, textAlign: "center" }}>
-            <p style={{ color: textSecondary, fontSize: 14, margin: 0 }}>
-              Pas de compte ?{" "}
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onSwitchToRegister();
-                }}
+            <p
+              style={{
+                color: textSecondary,
+                fontSize: 14,
+                margin: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                flexWrap: "wrap",
+              }}
+            >
+              Pas de compte ?
+              <button
+                type="button"
+                onClick={onSwitchToRegister}
+                onTouchStart={pressBtn("register-link")}
+                onTouchEnd={releaseBtn}
+                onTouchCancel={releaseBtn}
                 style={{
+                  background: "transparent",
+                  border: "none",
                   color: linkColor,
-                  textDecoration: "none",
-                  fontWeight: 500,
+                  textDecoration: "underline",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 14,
+                  padding: "6px 4px",
+                  // ✨ Zone tap verticale agrandie
+                  minHeight: 40,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  transform:
+                    pressedBtn === "register-link" ? "scale(0.97)" : "scale(1)",
+                  transition: "transform 0.1s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
                 }}
-                onMouseEnter={(e) =>
-                  (e.target.style.textDecoration = "underline")
-                }
-                onMouseLeave={(e) =>
-                  (e.target.style.textDecoration = "none")
-                }
               >
                 Créer un compte
-              </a>
+              </button>
             </p>
           </div>
         )}

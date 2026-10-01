@@ -5,6 +5,13 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { Paperclip, Send, X, Loader } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
+// SAFE-AREA helpers
+// ════════════════════════════════════════════════════════════════════
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level
 // ════════════════════════════════════════════════════════════════════
 const ChatInputKeyframes = (
@@ -26,7 +33,7 @@ const ChatInputKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// TOKENS — même système que le reste de la messagerie
+// TOKENS
 // ════════════════════════════════════════════════════════════════════
 function buildTokens(dark) {
   return {
@@ -41,6 +48,7 @@ function buildTokens(dark) {
     primarySoft: dark ? "#312E81" : "#EEF2FF",
     primarySoftText: dark ? "#C7D2FE" : "#4F46E5",
     ghostHover: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+    ghostActive: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
     disabledBg: dark ? "#334155" : "#E2E8F0",
     disabledText: dark ? "#64748B" : "#94A3B8",
     danger: dark ? "#F87171" : "#EF4444",
@@ -53,7 +61,9 @@ function buildTokens(dark) {
 // SOUS-COMPOSANTS
 // ════════════════════════════════════════════════════════════════════
 
-/** Bouton icône rond avec hover + focus + taille tactile */
+/**
+ * Bouton icône rond — ✨ feedback tap + hover + focus
+ */
 function CircleIconButton({
   icon,
   label,
@@ -63,34 +73,46 @@ function CircleIconButton({
   variant = "ghost",
   size = 44,
 }) {
+  const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
-  const bg = disabled
-    ? "transparent"
-    : variant === "primary"
-    ? hovered
+  let bg;
+  let color;
+
+  if (disabled) {
+    // ✨ Send désactivé : fond gris (au lieu de transparent)
+    bg = variant === "primary" ? tokens.disabledBg : "transparent";
+    color = tokens.disabledText;
+  } else if (variant === "primary") {
+    bg = pressed
       ? `linear-gradient(135deg, ${tokens.primaryHover}, ${tokens.primary})`
-      : `linear-gradient(135deg, ${tokens.primary}, ${tokens.primaryHover})`
-    : hovered
-    ? tokens.ghostHover
-    : "transparent";
-
-  const color = disabled
-    ? tokens.disabledText
-    : variant === "primary"
-    ? "#FFFFFF"
-    : tokens.textMuted;
+      : hovered
+      ? `linear-gradient(135deg, ${tokens.primaryHover}, ${tokens.primary})`
+      : `linear-gradient(135deg, ${tokens.primary}, ${tokens.primaryHover})`;
+    color = "#FFFFFF";
+  } else {
+    bg = pressed
+      ? tokens.ghostActive
+      : hovered
+      ? tokens.ghostHover
+      : "transparent";
+    color = tokens.textMuted;
+  }
 
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
       style={{
         background: bg,
         border: "none",
@@ -103,15 +125,19 @@ function CircleIconButton({
         cursor: disabled ? "not-allowed" : "pointer",
         color,
         flexShrink: 0,
-        transition: "background 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease",
+        transition:
+          "background 0.12s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
+        transform: pressed && !disabled ? "scale(0.92)" : "scale(1)",
         boxShadow:
-          variant === "primary" && !disabled && !hovered
+          variant === "primary" && !disabled && !pressed
             ? "0 4px 12px rgba(79,70,229,0.25)"
             : "none",
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: 2,
-        opacity: disabled ? 0.6 : 1,
+        opacity: disabled ? 0.75 : 1,
         padding: 0,
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
       }}
       title={label}
       aria-label={label}
@@ -121,9 +147,15 @@ function CircleIconButton({
   );
 }
 
-/** Chip d'une pièce jointe en attente d'envoi */
+/**
+ * Chip d'une pièce jointe en attente
+ * ✨ Bouton X plus gros sur mobile (tap target)
+ */
 function AttachmentChip({ attachment, onRemove, tokens, isMobile }) {
   const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const removeSize = isMobile ? 28 : 22;
 
   return (
     <span
@@ -131,24 +163,26 @@ function AttachmentChip({ attachment, onRemove, tokens, isMobile }) {
       style={{
         background: tokens.primarySoft,
         color: tokens.primarySoftText,
-        padding: isMobile ? "5px 10px" : "4px 10px",
-        borderRadius: 10,
-        fontSize: 11.5,
+        padding: isMobile ? "4px 6px 4px 12px" : "4px 4px 4px 10px",
+        borderRadius: 14,
+        fontSize: isMobile ? 12.5 : 11.5,
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
+        gap: isMobile ? 8 : 6,
         maxWidth: "100%",
         minWidth: 0,
+        minHeight: isMobile ? 36 : 28,
+        boxSizing: "border-box",
       }}
     >
-      <Paperclip size={12} style={{ flexShrink: 0 }} />
+      <Paperclip size={isMobile ? 13 : 12} style={{ flexShrink: 0 }} />
       <span
         style={{
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
           minWidth: 0,
-          maxWidth: 140,
+          maxWidth: isMobile ? 160 : 140,
         }}
         title={attachment.nom}
       >
@@ -157,26 +191,37 @@ function AttachmentChip({ attachment, onRemove, tokens, isMobile }) {
       <button
         type="button"
         onClick={onRemove}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={() => !isMobile && setHovered(true)}
+        onMouseLeave={() => !isMobile && setHovered(false)}
+        onTouchStart={() => setPressed(true)}
+        onTouchEnd={() => setPressed(false)}
+        onTouchCancel={() => setPressed(false)}
         style={{
-          background: hovered ? "rgba(0,0,0,0.08)" : "transparent",
+          background: pressed
+            ? "rgba(0,0,0,0.15)"
+            : hovered
+            ? "rgba(0,0,0,0.1)"
+            : "rgba(0,0,0,0.06)",
           border: "none",
           borderRadius: "50%",
           cursor: "pointer",
           color: "inherit",
-          padding: 4,
+          width: removeSize,
+          height: removeSize,
+          padding: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          marginRight: -4,
-          transition: "background 0.15s ease",
+          transition: "background 0.12s ease, transform 0.1s ease",
+          transform: pressed ? "scale(0.85)" : "scale(1)",
           flexShrink: 0,
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
         }}
         aria-label={`Retirer ${attachment.nom}`}
         title={`Retirer ${attachment.nom}`}
       >
-        <X size={12} />
+        <X size={isMobile ? 14 : 12} />
       </button>
     </span>
   );
@@ -208,38 +253,65 @@ export function ChatInput({
   const hasText = Boolean(message?.trim());
   const disabled = !hasText && !hasAttachments;
 
-  // ✅ Tailles tactiles : 44×44 sur mobile
   const buttonSize = isMobile ? 44 : 40;
   const inputFontSize = isMobile ? 16 : 14; // 16px évite le zoom iOS
 
   // ════════════════════════════════════════════════════════════════════
-  // AUTO-RESIZE du textarea (max ~5 lignes)
+  // ✨ AUTO-RESIZE du textarea — RÉELLEMENT IMPLÉMENTÉ
+  // Grandit jusqu'à ~5 lignes (maxHeight: 120px), puis scroll interne
   // ════════════════════════════════════════════════════════════════════
-  // ✅ Scroll le textarea dans la vue au focus (utile sur mobile)
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    // Reset puis mesure
+    el.style.height = "auto";
+    const nextHeight = Math.min(el.scrollHeight, 120);
+    el.style.height = `${nextHeight}px`;
+  }, [message]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ Scroll dans la vue au focus (attend l'ouverture du clavier mobile)
+  // Utilise visualViewport si dispo pour attendre la vraie taille dispo
+  // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (!textareaFocused) return;
     const el = textareaRef.current;
     if (!el) return;
-    // Petit délai pour laisser le clavier mobile s'ouvrir
-    const t = setTimeout(() => {
+
+    const scrollIntoViewSafely = () => {
       el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }, 150);
-    return () => clearTimeout(t);
-  }, [textareaFocused]);
+    };
+
+    // Fallback timeout
+    const timeoutId = setTimeout(scrollIntoViewSafely, 250);
+
+    // Sur mobile, attendre que le clavier ait fini de s'ouvrir
+    if (isMobile && typeof window !== "undefined" && window.visualViewport) {
+      const vv = window.visualViewport;
+      const handler = () => scrollIntoViewSafely();
+      vv.addEventListener("resize", handler, { once: true });
+      return () => {
+        clearTimeout(timeoutId);
+        vv.removeEventListener("resize", handler);
+      };
+    }
+
+    return () => clearTimeout(timeoutId);
+  }, [textareaFocused, isMobile]);
 
   // ════════════════════════════════════════════════════════════════════
   // HANDLERS
   // ════════════════════════════════════════════════════════════════════
   const handleKeyDown = useCallback(
     (e) => {
-      // Enter (sans Shift) → envoyer
+      // Enter (sans Shift) → envoyer (desktop uniquement, mobile = ⏎ normal)
       if (e.key === "Enter" && !e.shiftKey && !isMobile) {
         e.preventDefault();
         if (!disabled) onSend();
       }
-      // Escape → vider le brouillon (avec confirmation si texte)
+      // Escape → retirer le focus sans vider
       if (e.key === "Escape" && message?.trim()) {
-        // On ne vide pas brutalement — on retire juste le focus
         textareaRef.current?.blur();
       }
     },
@@ -256,7 +328,6 @@ export function ChatInput({
   const handleSendClick = useCallback(() => {
     if (disabled) return;
     onSend();
-    // Refocus après envoi (sauf mobile où le clavier se ferme)
     if (!isMobile) {
       requestAnimationFrame(() => textareaRef.current?.focus());
     }
@@ -275,10 +346,9 @@ export function ChatInput({
       {ChatInputKeyframes}
       <div
         style={{
-          padding: isMobile ? "8px 12px" : "10px 16px",
-          paddingBottom: isMobile
-            ? "calc(8px + env(safe-area-inset-bottom, 0px))"
-            : 10,
+          padding: isMobile
+            ? `8px calc(12px + ${SAFE_LEFT}) calc(8px + ${SAFE_BOTTOM}) calc(12px + ${SAFE_RIGHT})`
+            : "10px 16px",
           borderTop: `1px solid ${tokens.border}`,
           background: tokens.surface,
           display: "flex",
@@ -308,6 +378,7 @@ export function ChatInput({
               ref={fileInputRef}
               style={{ display: "none" }}
               onChange={handleFileChange}
+              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
               aria-hidden="true"
             />
           </>
@@ -325,6 +396,8 @@ export function ChatInput({
             padding: isMobile ? "8px 14px" : "8px 16px",
             minWidth: 0,
             transition: "border-color 0.15s ease",
+            // ✨ empêche le conteneur de "bouncer" quand il y a des chips
+            overscrollBehavior: "none",
           }}
         >
           {/* Pièces jointes en attente */}
@@ -335,11 +408,13 @@ export function ChatInput({
                 gap: 6,
                 marginBottom: 6,
                 flexWrap: "wrap",
+                // ✨ pas de scroll parasite
+                overscrollBehavior: "contain",
               }}
             >
               {piecesJointes.map((pj, idx) => (
                 <AttachmentChip
-                  key={`${pj.url || pj.nom}-${idx}`}
+                  key={`${pj.storageId || pj.url || pj.nom}-${idx}`}
                   attachment={pj}
                   onRemove={() => handleRemoveAttachment(idx)}
                   tokens={tokens}
@@ -367,6 +442,9 @@ export function ChatInput({
               boxSizing: "border-box",
               padding: 0,
               minHeight: 22,
+              // ✨ Mobile : évite zoom + tap delay
+              WebkitAppearance: "none",
+              touchAction: "manipulation",
             }}
             placeholder={placeholder}
             value={message}
@@ -375,6 +453,13 @@ export function ChatInput({
             onFocus={() => setTextareaFocused(true)}
             onBlur={() => setTextareaFocused(false)}
             aria-label={placeholder}
+            // ✨ Mobile : clavier "Envoyer" au lieu de "Retour"
+            enterKeyHint={isMobile ? "send" : "enter"}
+            inputMode="text"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="sentences"
+            spellCheck="true"
           />
         </div>
 

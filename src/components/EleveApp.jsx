@@ -1,5 +1,6 @@
-import { useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+// src/components/EleveApp.jsx
+import { useMemo, useCallback, useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -22,35 +23,28 @@ import {
   GraduationCap, Award, Trophy, Medal, Star, ClipboardList,
 } from "lucide-react";
 
-// ✅ Onglets valides (source de vérité pour valider le param URL)
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES
+// ════════════════════════════════════════════════════════════════════
 const VALID_TABS = [
-  "accueil",
-  "notes",
-  "absences",
-  "emploi",
-  "examens",
-  "bulletin",
-  "frais",
-  "classement",
-  "messagerie",
-  "appels",
-  "profil",
-  "aide",
-  "mentions",
-  "confidentialite",
+  "accueil", "notes", "absences", "emploi", "examens", "bulletin",
+  "frais", "classement", "messagerie", "appels", "profil", "aide",
+  "mentions", "confidentialite",
 ];
 
-// ✅ Onglets qui nécessitent une année active
 const TABS_REQUIRING_YEAR = ["accueil", "notes", "absences", "emploi"];
+const TABS_FULL_HEIGHT = ["messagerie", "appels"];
 
-// ============================================================
+// 🐛 DEBUG — mets à `false` quand tout fonctionne
+const DEBUG = true;
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT : Classement de l'élève
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function ClassementEleve({ ecoleId, anneeId, classe, eleveId, userId }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
 
-  // ✅ userId ajouté aux 2 queries + garde stricte
   const classementRaw = useQuery(
     api.classement.getClassement,
     ecoleId && anneeId && classe && userId
@@ -73,16 +67,13 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId, userId }) {
     ? "0 1px 3px rgba(0,0,0,0.3)"
     : "0 1px 3px rgba(0,0,0,0.05)";
 
-  // ✅ top3 mémoïsé (avant les early returns)
   const top3 = useMemo(() => classement.slice(0, 3), [classement]);
 
-  // ✅ Élève courant mémoïsé
   const eleve = useMemo(
     () => classement.find((e) => e._id === eleveId),
     [classement, eleveId]
   );
 
-  // ✅ Mention mémoïsée
   const mention = useMemo(() => {
     if (!eleve || !ecole) return "";
     const moy = eleve.moyenneGenerale;
@@ -95,7 +86,6 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId, userId }) {
     return "";
   }, [eleve, ecole]);
 
-  // ===== EARLY RETURNS (après tous les hooks) =====
   if (!classe) {
     return <p style={{ color: textPrimary }}>Veuillez sélectionner une classe.</p>;
   }
@@ -125,7 +115,6 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId, userId }) {
         Mon classement
       </h2>
 
-      {/* Carte personnelle */}
       <div
         style={{
           background: cardBg,
@@ -140,60 +129,33 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId, userId }) {
           border: `1px solid ${cardBorder}`,
         }}
       >
-        <Trophy size={isMobile ? 30 : 40} color={accent} />
+        <Trophy size={isMobile ? 30 : 40} color={accent} aria-hidden="true" />
         <div style={{ flex: 1 }}>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: isMobile ? 16 : 18,
-              color: textPrimary,
-            }}
-          >
+          <div style={{ fontWeight: 700, fontSize: isMobile ? 16 : 18, color: textPrimary }}>
             {eleve.nom} {eleve.postnom}
           </div>
           <div style={{ color: textSecondary, fontSize: isMobile ? 13 : 14 }}>
             Rang : <strong>{eleve.rang}</strong> / {classement.length}
           </div>
-          <div
-            style={{
-              color: accent,
-              fontWeight: 600,
-              fontSize: isMobile ? 12 : 13,
-              marginTop: 4,
-            }}
-          >
+          <div style={{ color: accent, fontWeight: 600, fontSize: isMobile ? 12 : 13, marginTop: 4 }}>
             {mention || "Aucune mention"}
           </div>
         </div>
-        <div
-          style={{
-            fontSize: isMobile ? 20 : 24,
-            fontWeight: 800,
-            color: accent,
-          }}
-        >
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: accent, fontVariantNumeric: "tabular-nums" }}>
           {eleve.moyenneGenerale.toFixed(1)}%
         </div>
       </div>
 
-      {/* Top 3 */}
-      <h3
-        style={{
-          fontSize: isMobile ? 18 : 20,
-          fontWeight: 600,
-          marginBottom: isMobile ? 12 : 16,
-          color: textPrimary,
-        }}
-      >
+      <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: isMobile ? 12 : 16, color: textPrimary }}>
         Top 3 de la classe
       </h3>
       <div style={{ display: "grid", gap: isMobile ? 8 : 12 }}>
         {top3.map((e, idx) => {
           const couleurs = ["#FFD700", "#C0C0C0", "#CD7F32"];
           const icones = [
-            <Trophy size={isMobile ? 20 : 24} key="1" />,
-            <Medal size={isMobile ? 20 : 24} key="2" />,
-            <Star size={isMobile ? 20 : 24} key="3" />,
+            <Trophy size={isMobile ? 20 : 24} key="1" aria-hidden="true" />,
+            <Medal size={isMobile ? 20 : 24} key="2" aria-hidden="true" />,
+            <Star size={isMobile ? 20 : 24} key="3" aria-hidden="true" />,
           ];
           return (
             <div
@@ -212,31 +174,14 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId, userId }) {
             >
               <div style={{ color: couleurs[idx] }}>{icones[idx]}</div>
               <div style={{ flex: 1 }}>
-                <div
-                  style={{
-                    fontWeight: 600,
-                    color: textPrimary,
-                    fontSize: isMobile ? 14 : 16,
-                  }}
-                >
+                <div style={{ fontWeight: 600, color: textPrimary, fontSize: isMobile ? 14 : 16 }}>
                   {e.nom} {e.postnom}
                 </div>
-                <div
-                  style={{
-                    fontSize: isMobile ? 12 : 13,
-                    color: textSecondary,
-                  }}
-                >
+                <div style={{ fontSize: isMobile ? 12 : 13, color: textSecondary }}>
                   Moyenne : {e.moyenneGenerale.toFixed(1)}%
                 </div>
               </div>
-              <div
-                style={{
-                  fontSize: isMobile ? 18 : 24,
-                  fontWeight: 800,
-                  color: couleurs[idx],
-                }}
-              >
+              <div style={{ fontSize: isMobile ? 18 : 24, fontWeight: 800, color: couleurs[idx], fontVariantNumeric: "tabular-nums" }}>
                 #{e.rang}
               </div>
             </div>
@@ -247,9 +192,9 @@ function ClassementEleve({ ecoleId, anneeId, classe, eleveId, userId }) {
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL : EleveApp
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function EleveApp({
   user,
   ecoleId,
@@ -261,47 +206,70 @@ export function EleveApp({
 }) {
   const isMobile = useIsMobile();
 
-  // ========== URL ROUTING ==========
-  // ✅ Source de vérité = URL (React Router), pas Zustand
-  const { tab: tabParam } = useParams();
+  // ✅ FIX : useLocation au lieu de useParams
+  const location = useLocation();
   const navigate = useNavigate();
 
-  const tab = useMemo(
-    () => (VALID_TABS.includes(tabParam) ? tabParam : "accueil"),
-    [tabParam]
-  );
+  // ✅ FIX : extrait le tab depuis le pathname (ex: /eleve/notes → "notes")
+  const tab = useMemo(() => {
+    const parts = location.pathname.split("/").filter(Boolean);
+    const candidate = parts[1];
+    if (DEBUG) console.log("[EleveApp] pathname:", location.pathname, "| tab:", candidate);
+    return VALID_TABS.includes(candidate) ? candidate : "accueil";
+  }, [location.pathname]);
 
   const setTab = useCallback(
     (newTab) => {
+      if (DEBUG) console.log("[EleveApp] setTab appelé:", newTab);
       if (VALID_TABS.includes(newTab)) {
         navigate(`/eleve/${newTab}`);
+        if (DEBUG) console.log("[EleveApp] navigate →", `/eleve/${newTab}`);
+      } else {
+        if (DEBUG) console.warn("[EleveApp] tab invalide:", newTab);
       }
     },
     [navigate]
   );
 
-  // ✅ messagingContactId reste en Zustand
-  const messagingContactId = useAppStore((state) => state.messagingContactId);
   const setMessagingContactId = useAppStore(
     (state) => state.setMessagingContactId
   );
 
   const userId = user?._id;
 
-  // ✅ Handler mémoïsé
   const handleNavigateToMessaging = useCallback(
     (contactId) => {
       setMessagingContactId(contactId);
-      setTab("messagerie");
+      if (contactId) {
+        navigate(`/eleve/messagerie/chat/${contactId}`);
+      } else {
+        navigate("/eleve/messagerie");
+      }
     },
-    [setMessagingContactId, setTab]
+    [setMessagingContactId, navigate]
   );
 
-  // ===== Queries =====
   const eleve = useQuery(
     api.eleves.getByUserId,
-    userId && anneeId ? { userId, anneeId } : "skip"
+    userId ? { userId, ...(anneeId ? { anneeId } : {}) } : "skip"
   );
+
+  useEffect(() => {
+    if (DEBUG) {
+      console.log("[EleveApp] DEBUG:", {
+        userId,
+        userRole: user?.role,
+        ecoleId,
+        anneeId,
+        eleveIsUndefined: eleve === undefined,
+        eleveIsNull: eleve === null,
+        eleveData: eleve && typeof eleve === "object"
+          ? { _id: eleve._id, nom: eleve.nom, classe: eleve.classe, userId: eleve.userId }
+          : eleve,
+        tab,
+      });
+    }
+  }, [userId, user?.role, ecoleId, anneeId, eleve, tab]);
 
   const notesRaw = useQuery(
     api.notes.listByEleve,
@@ -326,7 +294,6 @@ export function EleveApp({
     [coursDisponiblesRaw]
   );
 
-  // ✅ Menu mémoïsé
   const menu = useMemo(
     () => [
       { id: "accueil", label: "Accueil", icon: <Home size={20} /> },
@@ -347,7 +314,6 @@ export function EleveApp({
     []
   );
 
-  // ✅ Stats mémoïsées
   const stats = useMemo(() => {
     const totalNotes = notes.length;
     const absencesCount = absences.filter((a) => a.type === "absence").length;
@@ -356,24 +322,14 @@ export function EleveApp({
 
     let moyenneGenerale = "-";
     if (notes.length > 0) {
-      const num = notes.reduce(
-        (sum, n) => sum + n.note * (n.coefficient || 1),
-        0
-      );
+      const num = notes.reduce((sum, n) => sum + n.note * (n.coefficient || 1), 0);
       const den = notes.reduce((sum, n) => sum + (n.coefficient || 1), 0);
       moyenneGenerale = den > 0 ? (num / den).toFixed(2) : "-";
     }
 
-    return {
-      totalNotes,
-      absencesCount,
-      retardsCount,
-      matieresAvecNotes,
-      moyenneGenerale,
-    };
+    return { totalNotes, absencesCount, retardsCount, matieresAvecNotes, moyenneGenerale };
   }, [notes, absences]);
 
-  // ✅ Notes groupées par période
   const notesParPeriode = useMemo(() => {
     const groupes = new Map();
     for (const n of notes) {
@@ -385,140 +341,58 @@ export function EleveApp({
       .map(([periode, notesPeriode]) => {
         let moyenne = "-";
         if (notesPeriode.length > 0) {
-          const num = notesPeriode.reduce(
-            (s, n) => s + n.note * (n.coefficient || 1),
-            0
-          );
-          const den = notesPeriode.reduce(
-            (s, n) => s + (n.coefficient || 1),
-            0
-          );
+          const num = notesPeriode.reduce((s, n) => s + n.note * (n.coefficient || 1), 0);
+          const den = notesPeriode.reduce((s, n) => s + (n.coefficient || 1), 0);
           moyenne = den > 0 ? (num / den).toFixed(2) : "-";
         }
         return { periode, notes: notesPeriode, moyenne };
       });
   }, [notes]);
 
-  // ✅ Absences triées
   const absencesTriees = useMemo(
-    () =>
-      [...absences].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      ),
+    () => [...absences].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [absences]
   );
 
-  // ============================================================
-  // ÉTATS DE CHARGEMENT
-  // ============================================================
   if (eleve === undefined) {
     return (
-      <div
-        style={{
-          maxWidth: 1280,
-          margin: "0 auto",
-          padding: isMobile ? "24px 16px" : "32px 24px",
-          textAlign: "center",
-        }}
-      >
-        <GraduationCap
-          size={isMobile ? 40 : 48}
-          color="#94A3B8"
-          style={{ marginBottom: 16 }}
-        />
-        <h2
-          style={{
-            fontSize: isMobile ? 20 : 24,
-            fontWeight: 600,
-            color: dark ? "#F1F5F9" : "#1E293B",
-            margin: "0 0 8px",
-          }}
-        >
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+        <GraduationCap size={isMobile ? 40 : 48} color="#94A3B8" style={{ marginBottom: 16 }} aria-hidden="true" />
+        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
           Chargement de votre profil…
         </h2>
+        <p style={{ color: dark ? "#94A3B8" : "#64748B", marginTop: 8, fontSize: 13 }}>
+          Si cette page ne charge pas, vérifiez que votre compte est bien associé à un élève.
+        </p>
       </div>
     );
   }
 
   if (eleve === null) {
     return (
-      <div
-        style={{
-          maxWidth: 1280,
-          margin: "0 auto",
-          padding: isMobile ? "24px 16px" : "32px 24px",
-          textAlign: "center",
-        }}
-      >
-        <GraduationCap
-          size={isMobile ? 40 : 48}
-          color="#F59E0B"
-          style={{ marginBottom: 16 }}
-        />
-        <h2
-          style={{
-            fontSize: isMobile ? 20 : 24,
-            fontWeight: 600,
-            color: dark ? "#F1F5F9" : "#1E293B",
-            margin: "0 0 8px",
-          }}
-        >
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+        <GraduationCap size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} aria-hidden="true" />
+        <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
           Aucun élève associé à ce compte
         </h2>
-        <p
-          style={{
-            color: dark ? "#94A3B8" : "#64748B",
-            fontSize: isMobile ? 13 : 14,
-          }}
-        >
-          Veuillez contacter l'administration pour associer votre compte à un
-          élève.
+        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
+          Veuillez contacter l'administration pour associer votre compte à un élève.
         </p>
       </div>
     );
   }
 
-  const {
-    totalNotes,
-    absencesCount,
-    retardsCount,
-    matieresAvecNotes,
-    moyenneGenerale,
-  } = stats;
+  const { totalNotes, absencesCount, retardsCount, matieresAvecNotes, moyenneGenerale } = stats;
 
   const renderContent = () => {
-    // ✅ Utilisation de la constante TABS_REQUIRING_YEAR
     if (!anneeId && TABS_REQUIRING_YEAR.includes(tab)) {
       return (
-        <div
-          style={{
-            maxWidth: 1280,
-            margin: "0 auto",
-            padding: isMobile ? "24px 16px" : "32px 24px",
-            textAlign: "center",
-          }}
-        >
-          <Calendar
-            size={isMobile ? 40 : 48}
-            color="#F59E0B"
-            style={{ marginBottom: 16 }}
-          />
-          <h2
-            style={{
-              fontSize: isMobile ? 20 : 24,
-              fontWeight: 600,
-              color: dark ? "#F1F5F9" : "#1E293B",
-              margin: "0 0 8px",
-            }}
-          >
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+          <Calendar size={isMobile ? 40 : 48} color="#F59E0B" style={{ marginBottom: 16 }} aria-hidden="true" />
+          <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
             Aucune année scolaire active
           </h2>
-          <p
-            style={{
-              color: dark ? "#94A3B8" : "#64748B",
-              fontSize: isMobile ? 13 : 14,
-            }}
-          >
+          <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
             Veuillez contacter l'administration pour activer une année scolaire.
           </p>
         </div>
@@ -528,31 +402,12 @@ export function EleveApp({
     switch (tab) {
       case "accueil":
         return (
-          <div
-            style={{
-              maxWidth: 1280,
-              margin: "0 auto",
-              padding: isMobile ? "16px 12px" : "24px 16px",
-            }}
-          >
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
             <div style={{ marginBottom: isMobile ? 20 : 32 }}>
-              <h2
-                style={{
-                  fontSize: isMobile ? 22 : 28,
-                  fontWeight: 700,
-                  color: dark ? "#F1F5F9" : "#1E293B",
-                  margin: 0,
-                }}
-              >
+              <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
                 Bonjour, {eleve.nom}
               </h2>
-              <p
-                style={{
-                  color: dark ? "#94A3B8" : "#64748B",
-                  marginTop: 4,
-                  fontSize: isMobile ? 13 : 14,
-                }}
-              >
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", marginTop: 4, fontSize: isMobile ? 13 : 14 }}>
                 Classe {eleve.classe} · {anneeActive?.nom}
               </p>
             </div>
@@ -560,102 +415,33 @@ export function EleveApp({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: isMobile
-                  ? "1fr"
-                  : "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: isMobile ? 12 : 16,
+                gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: isMobile ? 8 : 16,
                 marginBottom: isMobile ? 20 : 32,
               }}
             >
-              <StatCard
-                icon={<BookOpen size={isMobile ? 20 : 24} />}
-                value={totalNotes}
-                label="Notes"
-                color={dark ? "#818CF8" : "#4F46E5"}
-                dark={dark}
-              />
-              <StatCard
-                icon={<Award size={isMobile ? 20 : 24} />}
-                value={matieresAvecNotes}
-                label="Matières"
-                color="#10B981"
-                dark={dark}
-              />
-              <StatCard
-                icon={<AlertTriangle size={isMobile ? 20 : 24} />}
-                value={absencesCount}
-                label="Absences"
-                color="#EF4444"
-                dark={dark}
-              />
-              <StatCard
-                icon={<Clock size={isMobile ? 20 : 24} />}
-                value={retardsCount}
-                label="Retards"
-                color="#F59E0B"
-                dark={dark}
-              />
+              <StatCard icon={<BookOpen size={isMobile ? 18 : 24} />} value={totalNotes} label="Notes" color={dark ? "#818CF8" : "#4F46E5"} dark={dark} />
+              <StatCard icon={<Award size={isMobile ? 18 : 24} />} value={matieresAvecNotes} label="Matières" color="#10B981" dark={dark} />
+              <StatCard icon={<AlertTriangle size={isMobile ? 18 : 24} />} value={absencesCount} label="Absences" color="#EF4444" dark={dark} />
+              <StatCard icon={<Clock size={isMobile ? 18 : 24} />} value={retardsCount} label="Retards" color="#F59E0B" dark={dark} />
               {moyenneGenerale !== "-" && (
-                <StatCard
-                  icon={<TrendingUp size={isMobile ? 20 : 24} />}
-                  value={`${moyenneGenerale}/20`}
-                  label="Moyenne générale"
-                  color="#6366F1"
-                  dark={dark}
-                />
+                <StatCard icon={<TrendingUp size={isMobile ? 18 : 24} />} value={`${moyenneGenerale}/20`} label="Moyenne générale" color="#6366F1" dark={dark} />
               )}
             </div>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: isMobile
-                  ? "1fr"
-                  : "repeat(auto-fit, minmax(200px, 1fr))",
-                gap: isMobile ? 12 : 16,
+                gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(200px, 1fr))",
+                gap: isMobile ? 10 : 16,
                 marginBottom: isMobile ? 20 : 32,
               }}
             >
-              <QuickAccessCard
-                icon={<BookOpen size={isMobile ? 24 : 28} />}
-                title="Notes"
-                subtitle="Consulter vos résultats"
-                onClick={() => setTab("notes")}
-                color={dark ? "#818CF8" : "#4F46E5"}
-                dark={dark}
-              />
-              <QuickAccessCard
-                icon={<Calendar size={isMobile ? 24 : 28} />}
-                title="Emploi du temps"
-                subtitle="Voir les horaires"
-                onClick={() => setTab("emploi")}
-                color="#10B981"
-                dark={dark}
-              />
-              <QuickAccessCard
-                icon={<DollarSign size={isMobile ? 24 : 28} />}
-                title="Frais"
-                subtitle="Suivre vos paiements"
-                onClick={() => setTab("frais")}
-                color="#F59E0B"
-                dark={dark}
-              />
-              <QuickAccessCard
-                icon={<FileText size={isMobile ? 24 : 28} />}
-                title="Bulletin"
-                subtitle="Votre bulletin scolaire"
-                onClick={() => setTab("bulletin")}
-                color="#6366F1"
-                dark={dark}
-              />
-              <QuickAccessCard
-                icon={<Award size={isMobile ? 24 : 28} />}
-                title="Classement"
-                subtitle="Voir votre rang"
-                onClick={() => setTab("classement")}
-                color={dark ? "#818CF8" : "#4F46E5"}
-                dark={dark}
-              />
+              <QuickAccessCard icon={<BookOpen size={isMobile ? 22 : 28} />} title="Notes" subtitle="Résultats" onClick={() => setTab("notes")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} isMobile={isMobile} />
+              <QuickAccessCard icon={<Calendar size={isMobile ? 22 : 28} />} title="Emploi" subtitle="Horaires" onClick={() => setTab("emploi")} color="#10B981" dark={dark} isMobile={isMobile} />
+              <QuickAccessCard icon={<DollarSign size={isMobile ? 22 : 28} />} title="Frais" subtitle="Paiements" onClick={() => setTab("frais")} color="#F59E0B" dark={dark} isMobile={isMobile} />
+              <QuickAccessCard icon={<FileText size={isMobile ? 22 : 28} />} title="Bulletin" subtitle="Scolaire" onClick={() => setTab("bulletin")} color="#6366F1" dark={dark} isMobile={isMobile} />
+              <QuickAccessCard icon={<Award size={isMobile ? 22 : 28} />} title="Classement" subtitle="Mon rang" onClick={() => setTab("classement")} color={dark ? "#818CF8" : "#4F46E5"} dark={dark} isMobile={isMobile} />
             </div>
           </div>
         );
@@ -663,57 +449,20 @@ export function EleveApp({
       case "notes":
         if (notes.length === 0) {
           return (
-            <div
-              style={{
-                maxWidth: 800,
-                margin: "0 auto",
-                padding: isMobile ? "24px 16px" : "32px 24px",
-                textAlign: "center",
-              }}
-            >
-              <BookOpen
-                size={isMobile ? 40 : 48}
-                color="#94A3B8"
-                style={{ marginBottom: 16 }}
-              />
-              <h2
-                style={{
-                  fontSize: isMobile ? 20 : 24,
-                  fontWeight: 600,
-                  color: dark ? "#F1F5F9" : "#1E293B",
-                  margin: "0 0 8px",
-                }}
-              >
+            <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+              <BookOpen size={isMobile ? 40 : 48} color="#94A3B8" style={{ marginBottom: 16 }} aria-hidden="true" />
+              <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
                 Aucune note disponible
               </h2>
-              <p
-                style={{
-                  color: dark ? "#94A3B8" : "#64748B",
-                  fontSize: isMobile ? 13 : 14,
-                }}
-              >
-                Vos notes seront affichées ici dès qu'elles seront saisies par
-                vos enseignants.
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
+                Vos notes seront affichées ici dès qu'elles seront saisies par vos enseignants.
               </p>
             </div>
           );
         }
         return (
-          <div
-            style={{
-              maxWidth: 900,
-              margin: "0 auto",
-              padding: isMobile ? "16px 12px" : "24px 16px",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: isMobile ? 22 : 28,
-                fontWeight: 700,
-                color: dark ? "#F1F5F9" : "#1E293B",
-                marginBottom: isMobile ? 16 : 24,
-              }}
-            >
+          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+            <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: isMobile ? 16 : 24 }}>
               Mes notes
             </h2>
             {notesParPeriode.map(({ periode, notes: notesPeriode, moyenne }) => (
@@ -729,23 +478,10 @@ export function EleveApp({
                     marginBottom: isMobile ? 8 : 12,
                   }}
                 >
-                  <h3
-                    style={{
-                      fontSize: isMobile ? 16 : 18,
-                      fontWeight: 600,
-                      color: dark ? "#F1F5F9" : "#1E293B",
-                      margin: 0,
-                    }}
-                  >
+                  <h3 style={{ fontSize: isMobile ? 16 : 18, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: 0 }}>
                     {periode}
                   </h3>
-                  <span
-                    style={{
-                      fontSize: isMobile ? 14 : 16,
-                      fontWeight: 700,
-                      color: dark ? "#818CF8" : "#4F46E5",
-                    }}
-                  >
+                  <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: dark ? "#818CF8" : "#4F46E5", fontVariantNumeric: "tabular-nums" }}>
                     Moyenne {moyenne}/20
                   </span>
                 </div>
@@ -765,49 +501,20 @@ export function EleveApp({
                       }}
                     >
                       <div>
-                        <div
-                          style={{
-                            fontWeight: 500,
-                            fontSize: isMobile ? 14 : 15,
-                            color: dark ? "#F1F5F9" : "#1E293B",
-                          }}
-                        >
+                        <div style={{ fontWeight: 500, fontSize: isMobile ? 14 : 15, color: dark ? "#F1F5F9" : "#1E293B" }}>
                           {n.matiere}
                         </div>
-                        <div
-                          style={{
-                            fontSize: isMobile ? 11 : 12,
-                            color: dark ? "#94A3B8" : "#64748B",
-                          }}
-                        >
+                        <div style={{ fontSize: isMobile ? 11 : 12, color: dark ? "#94A3B8" : "#64748B" }}>
                           Coeff. {n.coefficient}
                         </div>
                       </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {n.appreciation && (
-                          <span
-                            style={{
-                              fontSize: isMobile ? 11 : 12,
-                              color: dark ? "#94A3B8" : "#64748B",
-                              fontStyle: "italic",
-                            }}
-                          >
+                          <span style={{ fontSize: isMobile ? 11 : 12, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>
                             {n.appreciation}
                           </span>
                         )}
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            fontSize: isMobile ? 14 : 16,
-                            color: dark ? "#F1F5F9" : "#1E293B",
-                          }}
-                        >
+                        <span style={{ fontWeight: 700, fontSize: isMobile ? 14 : 16, color: dark ? "#F1F5F9" : "#1E293B", fontVariantNumeric: "tabular-nums" }}>
                           {n.note}/20
                         </span>
                       </div>
@@ -822,56 +529,20 @@ export function EleveApp({
       case "absences":
         if (absences.length === 0) {
           return (
-            <div
-              style={{
-                maxWidth: 800,
-                margin: "0 auto",
-                padding: isMobile ? "24px 16px" : "32px 24px",
-                textAlign: "center",
-              }}
-            >
-              <AlertTriangle
-                size={isMobile ? 40 : 48}
-                color="#10B981"
-                style={{ marginBottom: 16 }}
-              />
-              <h2
-                style={{
-                  fontSize: isMobile ? 20 : 24,
-                  fontWeight: 600,
-                  color: dark ? "#F1F5F9" : "#1E293B",
-                  margin: "0 0 8px",
-                }}
-              >
+            <div style={{ maxWidth: 800, margin: "0 auto", padding: isMobile ? "24px 16px" : "32px 24px", textAlign: "center" }}>
+              <AlertTriangle size={isMobile ? 40 : 48} color="#10B981" style={{ marginBottom: 16 }} aria-hidden="true" />
+              <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: dark ? "#F1F5F9" : "#1E293B", margin: "0 0 8px" }}>
                 Aucune absence ou retard
               </h2>
-              <p
-                style={{
-                  color: dark ? "#94A3B8" : "#64748B",
-                  fontSize: isMobile ? 13 : 14,
-                }}
-              >
+              <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: isMobile ? 13 : 14 }}>
                 Félicitations ! Vous êtes assidu(e).
               </p>
             </div>
           );
         }
         return (
-          <div
-            style={{
-              maxWidth: 900,
-              margin: "0 auto",
-              padding: isMobile ? "16px 12px" : "24px 16px",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: isMobile ? 22 : 28,
-                fontWeight: 700,
-                color: dark ? "#F1F5F9" : "#1E293B",
-                marginBottom: isMobile ? 16 : 24,
-              }}
-            >
+          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
+            <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: isMobile ? 16 : 24 }}>
               Absences & Retards
             </h2>
             <div style={{ display: "grid", gap: isMobile ? 6 : 8 }}>
@@ -889,57 +560,25 @@ export function EleveApp({
                     border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span
                       style={{
                         padding: "4px 10px",
                         borderRadius: 12,
                         fontSize: isMobile ? 11 : 12,
                         fontWeight: 600,
-                        background:
-                          a.type === "absence"
-                            ? dark
-                              ? "#7F1D1D"
-                              : "#FEE2E2"
-                            : dark
-                            ? "#78350F"
-                            : "#FEF3C7",
-                        color:
-                          a.type === "absence"
-                            ? dark
-                              ? "#F87171"
-                              : "#B91C1C"
-                            : dark
-                            ? "#FBBF24"
-                            : "#92400E",
+                        background: a.type === "absence" ? (dark ? "#7F1D1D" : "#FEE2E2") : (dark ? "#78350F" : "#FEF3C7"),
+                        color: a.type === "absence" ? (dark ? "#F87171" : "#B91C1C") : (dark ? "#FBBF24" : "#92400E"),
                       }}
                     >
                       {a.type === "absence" ? "Absence" : "Retard"}
                     </span>
-                    <span
-                      style={{
-                        fontSize: isMobile ? 13 : 14,
-                        fontWeight: 500,
-                        color: dark ? "#F1F5F9" : "#1E293B",
-                      }}
-                    >
+                    <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 500, color: dark ? "#F1F5F9" : "#1E293B", fontVariantNumeric: "tabular-nums" }}>
                       {a.date}
                     </span>
                   </div>
                   {a.commentaire && (
-                    <span
-                      style={{
-                        fontSize: isMobile ? 12 : 13,
-                        color: dark ? "#94A3B8" : "#64748B",
-                        fontStyle: "italic",
-                      }}
-                    >
+                    <span style={{ fontSize: isMobile ? 12 : 13, color: dark ? "#94A3B8" : "#64748B", fontStyle: "italic" }}>
                       {a.commentaire}
                     </span>
                   )}
@@ -950,33 +589,13 @@ export function EleveApp({
         );
 
       case "emploi":
-        return (
-          <ConsultationEmploiDuTemps
-            ecoleId={ecoleId}
-            classe={eleve.classe}
-            anneeId={anneeId}
-            user={user}
-          />
-        );
+        return <ConsultationEmploiDuTemps ecoleId={ecoleId} classe={eleve.classe} anneeId={anneeId} user={user} />;
 
       case "messagerie":
-        return (
-          <MessagerieApp
-            user={user}
-            ecoleId={ecoleId}
-            initialSelectedUserId={messagingContactId}
-          />
-        );
+        return <MessagerieApp user={user} ecoleId={ecoleId} />;
 
       case "appels":
-        return (
-          <Appels
-            user={user}
-            ecoleId={ecoleId}
-            anneeId={anneeId}
-            onNavigateToMessaging={handleNavigateToMessaging}
-          />
-        );
+        return <Appels user={user} ecoleId={ecoleId} anneeId={anneeId} onNavigateToMessaging={handleNavigateToMessaging} />;
 
       case "profil":
         return <ProfilUtilisateur user={user} />;
@@ -1006,30 +625,17 @@ export function EleveApp({
         return <FraisEnfant eleveId={eleve._id} user={user} />;
 
       case "examens":
-        return (
-          <ConsultationExamens
-            ecoleId={ecoleId}
-            anneeId={anneeId}
-            classe={eleve.classe}
-            user={user}
-          />
-        );
+        return <ConsultationExamens ecoleId={ecoleId} anneeId={anneeId} classe={eleve.classe} user={user} />;
 
       case "classement":
-        return (
-          <ClassementEleve
-            ecoleId={ecoleId}
-            anneeId={anneeId}
-            classe={eleve.classe}
-            eleveId={eleve._id}
-            userId={userId}
-          />
-        );
+        return <ClassementEleve ecoleId={ecoleId} anneeId={anneeId} classe={eleve.classe} eleveId={eleve._id} userId={userId} />;
 
       default:
         return null;
     }
   };
+
+  const needsFullHeight = TABS_FULL_HEIGHT.includes(tab);
 
   return (
     <Layout
@@ -1041,36 +647,42 @@ export function EleveApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {!anneeId && TABS_REQUIRING_YEAR.includes(tab) && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            background: dark ? "#78350F" : "#FEF3C7",
-            color: dark ? "#FBBF24" : "#92400E",
-            padding: isMobile ? "10px 12px" : "10px 20px",
-            fontSize: isMobile ? 12 : 13,
-            fontWeight: 500,
-            borderRadius: "0 0 12px 12px",
-            margin: isMobile ? "0 12px 12px" : "0 24px 16px",
-          }}
-        >
-          <AlertTriangle size={14} style={{ flexShrink: 0 }} />
-          <span>
-            Aucune année scolaire active. Certaines données sont indisponibles.
-          </span>
-        </div>
-      )}
-      {renderContent()}
+      <div
+        style={
+          needsFullHeight
+            ? { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, height: "100%", width: "100%", overflow: "hidden" }
+            : undefined
+        }
+      >
+        {!anneeId && TABS_REQUIRING_YEAR.includes(tab) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              background: dark ? "#78350F" : "#FEF3C7",
+              color: dark ? "#FBBF24" : "#92400E",
+              padding: isMobile ? "10px 12px" : "10px 20px",
+              fontSize: isMobile ? 12 : 13,
+              fontWeight: 500,
+              borderRadius: "0 0 12px 12px",
+              margin: isMobile ? "0 12px 12px" : "0 24px 16px",
+            }}
+          >
+            <AlertTriangle size={14} style={{ flexShrink: 0 }} aria-hidden="true" />
+            <span>Aucune année scolaire active. Certaines données sont indisponibles.</span>
+          </div>
+        )}
+        {renderContent()}
+      </div>
     </Layout>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANTS UTILITAIRES
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function StatCard({ icon, value, label, color, dark }) {
   const isMobile = useIsMobile();
 
@@ -1078,47 +690,38 @@ function StatCard({ icon, value, label, color, dark }) {
     <div
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
-        borderRadius: 16,
-        padding: isMobile ? 14 : 20,
+        borderRadius: 12,
+        padding: isMobile ? "10px 12px" : 20,
         display: "flex",
         alignItems: "center",
-        gap: isMobile ? 12 : 16,
-        boxShadow: dark
-          ? "0 1px 3px rgba(0,0,0,0.3)"
-          : "0 1px 3px rgba(0,0,0,0.05)",
+        gap: isMobile ? 8 : 16,
+        boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)",
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        minWidth: 0,
+        boxSizing: "border-box",
       }}
     >
       <div
+        aria-hidden="true"
         style={{
-          width: isMobile ? 40 : 48,
-          height: isMobile ? 40 : 48,
+          width: isMobile ? 32 : 48,
+          height: isMobile ? 32 : 48,
           background: `${color}${dark ? "33" : "15"}`,
-          borderRadius: 12,
+          borderRadius: 10,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: color,
+          flexShrink: 0,
         }}
       >
         {icon}
       </div>
-      <div>
-        <div
-          style={{
-            fontSize: isMobile ? 18 : 24,
-            fontWeight: 700,
-            color: dark ? "#F1F5F9" : "#1E293B",
-          }}
-        >
+      <div style={{ minWidth: 0, overflow: "hidden" }}>
+        <div style={{ fontSize: isMobile ? 16 : 24, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B", lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>
           {value}
         </div>
-        <div
-          style={{
-            fontSize: isMobile ? 12 : 14,
-            color: dark ? "#94A3B8" : "#64748B",
-          }}
-        >
+        <div style={{ fontSize: isMobile ? 10.5 : 14, color: dark ? "#94A3B8" : "#64748B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {label}
         </div>
       </div>
@@ -1126,76 +729,79 @@ function StatCard({ icon, value, label, color, dark }) {
   );
 }
 
-function QuickAccessCard({ icon, title, subtitle, onClick, color, dark }) {
-  const isMobile = useIsMobile();
+function QuickAccessCard({ icon, title, subtitle, onClick, color, dark, isMobile }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
+  const baseShadow = dark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.05)";
+  const hoverShadow = dark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(0,0,0,0.08)";
 
   return (
     <div
       onClick={onClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
+      onKeyDown={handleKeyDown}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
+      aria-label={`${title} — ${subtitle}`}
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
-        borderRadius: 16,
-        padding: isMobile ? 14 : 20,
+        borderRadius: 14,
+        padding: isMobile ? 12 : 20,
         textAlign: "center",
-        boxShadow: dark
-          ? "0 1px 3px rgba(0,0,0,0.3)"
-          : "0 1px 3px rgba(0,0,0,0.05)",
+        boxShadow: pressed ? baseShadow : hovered && !isMobile ? hoverShadow : baseShadow,
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         cursor: "pointer",
-        transition: "box-shadow 0.15s, transform 0.1s",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = dark
-          ? "0 2px 8px rgba(0,0,0,0.5)"
-          : "0 2px 8px rgba(0,0,0,0.08)";
-        e.currentTarget.style.transform = "translateY(-2px)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = dark
-          ? "0 1px 3px rgba(0,0,0,0.3)"
-          : "0 1px 3px rgba(0,0,0,0.05)";
-        e.currentTarget.style.transform = "translateY(0)";
+        transition: "box-shadow 0.15s ease, transform 0.1s ease, background 0.12s ease",
+        transform: pressed ? "scale(0.97)" : hovered && !isMobile ? "translateY(-2px)" : "translateY(0)",
+        outline: focused ? `2px solid ${color}` : "none",
+        outlineOffset: 2,
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        minHeight: isMobile ? 100 : undefined,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box",
       }}
     >
       <div
         style={{
-          width: isMobile ? 48 : 56,
-          height: isMobile ? 48 : 56,
-          borderRadius: 14,
+          width: isMobile ? 42 : 56,
+          height: isMobile ? 42 : 56,
+          borderRadius: 12,
           background: `${color}${dark ? "33" : "15"}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          margin: "0 auto 12px",
+          marginBottom: isMobile ? 8 : 12,
           color: color,
+          flexShrink: 0,
         }}
+        aria-hidden="true"
       >
         {icon}
       </div>
-      <div
-        style={{
-          fontWeight: 600,
-          fontSize: isMobile ? 14 : 16,
-          color: dark ? "#F1F5F9" : "#1E293B",
-          marginBottom: 4,
-        }}
-      >
+      <div style={{ fontWeight: 600, fontSize: isMobile ? 13 : 16, color: dark ? "#F1F5F9" : "#1E293B", marginBottom: 2, lineHeight: 1.2 }}>
         {title}
       </div>
-      <div
-        style={{
-          fontSize: isMobile ? 12 : 13,
-          color: dark ? "#94A3B8" : "#64748B",
-        }}
-      >
+      <div style={{ fontSize: isMobile ? 11 : 13, color: dark ? "#94A3B8" : "#64748B", lineHeight: 1.2 }}>
         {subtitle}
       </div>
     </div>

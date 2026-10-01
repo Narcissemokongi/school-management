@@ -1,5 +1,5 @@
 // src/components/GestionAbonnements.jsx
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useId } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -9,13 +9,44 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import {
   Search, CheckCircle, Clock, XCircle, AlertTriangle,
   CreditCard, Users, DollarSign, RefreshCw, Ban, Play,
-  X, Calendar,
-  Lock, // ✨ NOUVEAU
+  X, Calendar, Lock, Loader,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES module-level
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const SAFE_BOTTOM = {
+  paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "textarea:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL
 // ════════════════════════════════════════════════════════════════════
 const GestionAbonnementsKeyframes = (
   <style>{`
@@ -92,7 +123,7 @@ function formatDate(iso) {
 
 function formatMontant(montant, devise = "USD") {
   if (typeof montant !== "number") return `0 ${devise}`;
-  return `${montant.toLocaleString()} ${devise}`;
+  return `${montant.toLocaleString("fr-FR")} ${devise}`;
 }
 
 function getErrorMessage(err, fallback = "Une erreur est survenue") {
@@ -103,12 +134,76 @@ function getErrorMessage(err, fallback = "Une erreur est survenue") {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// HOOK — Focus trap
+// ════════════════════════════════════════════════════════════════════
+function useFocusTrap(panelRef, isOpen) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const handleTab = (e) => {
+      if (e.key !== "Tab") return;
+      const focusables = panel.querySelectorAll(FOCUSABLE_SELECTOR);
+      if (focusables.length === 0) { e.preventDefault(); return; }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    panel.addEventListener("keydown", handleTab);
+    return () => panel.removeEventListener("keydown", handleTab);
+  }, [panelRef, isOpen]);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PRESSABLE — feedback tap + focus ring
+// ════════════════════════════════════════════════════════════════════
+function Pressable({
+  onClick, style, children, disabled = false, type = "button",
+  focusColor, ariaLabel, ariaBusy, ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      aria-busy={ariaBusy}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setPressed(false); setHovered(false); }}
+      onPointerCancel={() => setPressed(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      data-hovered={hovered ? "true" : undefined}
+      style={{
+        ...TAP_BASE,
+        transform: pressed && !disabled ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.2s, border-color 0.2s, color 0.2s",
+        ...(focused && !disabled && focusColor ? FOCUS_RING(focusColor) : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
-export function GestionAbonnements({
-  user,
-  canWrite = true, // ✨ NOUVEAU
-}) {
+export function GestionAbonnements({ user, canWrite = true }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
@@ -120,10 +215,9 @@ export function GestionAbonnements({
   const [showPaiementModal, setShowPaiementModal] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  // ════════════════════════════════════════════════════════════════════
-  // QUERIES
-  // ════════════════════════════════════════════════════════════════════
+  // Queries
   const args = useMemo(() => (userId ? { userId } : "skip"), [userId]);
 
   const abonnementsRaw = useQuery(api.abonnements.listAll, args);
@@ -135,29 +229,27 @@ export function GestionAbonnements({
 
   const isLoading = abonnementsRaw === undefined || stats === undefined;
 
-  // ════════════════════════════════════════════════════════════════════
-  // MUTATIONS
-  // ════════════════════════════════════════════════════════════════════
+  // Mutations
   const enregistrerPaiement = useMutation(api.abonnements.enregistrerPaiement);
   const recalculerFormule = useMutation(api.abonnements.recalculerFormule);
   const suspendre = useMutation(api.abonnements.suspendre);
   const reactiver = useMutation(api.abonnements.reactiver);
   const creerPourEcole = useMutation(api.abonnements.creerPourEcole);
 
-  // ════════════════════════════════════════════════════════════════════
-  // COULEURS
-  // ════════════════════════════════════════════════════════════════════
-  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
-  const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const inputBg = dark ? "#0F172A" : "#F8FAFC";
-  const accent = dark ? "#818CF8" : "#4F46E5";
-  const hoverBg = dark ? "#26334D" : "#F8FAFC";
+  // Couleurs
+  const colors = useMemo(() => ({
+    textPrimary: dark ? "#F1F5F9" : "#1E293B",
+    textSecondary: dark ? "#94A3B8" : "#64748B",
+    cardBg: dark ? "#1E293B" : "#FFFFFF",
+    cardBorder: dark ? "#334155" : "#E2E8F0",
+    inputBg: dark ? "#0F172A" : "#F8FAFC",
+    accent: dark ? "#818CF8" : "#4F46E5",
+    hoverBg: dark ? "#26334D" : "#F8FAFC",
+  }), [dark]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // FILTRES
-  // ════════════════════════════════════════════════════════════════════
+  const { textPrimary, textSecondary, cardBg, cardBorder, inputBg, accent, hoverBg } = colors;
+
+  // Filtres
   const abonnementsFiltres = useMemo(() => {
     let filtered = abonnements;
     if (searchTerm.trim()) {
@@ -174,130 +266,109 @@ export function GestionAbonnements({
     return filtered;
   }, [abonnements, searchTerm, statutFilter]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // HANDLERS (avec gardes canWrite)
-  // ════════════════════════════════════════════════════════════════════
-  const handleRecalculer = useCallback(
-    async (abonnementId, ecoleNom) => {
-      if (!canWrite) {
-        toast.error("Permission requise : abonnements.write");
-        return;
-      }
-      const ok = await confirm(
-        "Recalculer la formule",
-        `Recalculer la formule de ${ecoleNom} selon le nombre actuel d'utilisateurs ?`
-      );
-      if (!ok) return;
+  // Handlers
+  const handleRecalculer = useCallback(async (abonnementId, ecoleNom) => {
+    if (!canWrite) {
+      toast.error("Permission requise : abonnements.write");
+      return;
+    }
+    const ok = await confirm(
+      "Recalculer la formule",
+      `Recalculer la formule de ${ecoleNom} selon le nombre actuel d'utilisateurs ?`
+    );
+    if (!ok) return;
+    setBusyId(abonnementId);
+    try {
+      const res = await recalculerFormule({ abonnementId, userId });
+      toast.success(`Formule mise à jour : ${res.formule} → ${res.montant} USD/mois`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }, [confirm, recalculerFormule, userId, canWrite]);
 
-      setBusyId(abonnementId);
-      try {
-        const res = await recalculerFormule({ abonnementId, userId });
-        toast.success(
-          `Formule mise à jour : ${res.formule} → ${res.montant} USD/mois`
-        );
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-      } finally {
-        setBusyId(null);
-      }
-    },
-    [confirm, recalculerFormule, userId, canWrite]
-  );
+  const handleSuspendre = useCallback(async (abonnementId, ecoleNom) => {
+    if (!canWrite) {
+      toast.error("Permission requise : abonnements.write");
+      return;
+    }
+    const ok = await confirm(
+      "Suspendre l'abonnement",
+      `Suspendre l'abonnement de ${ecoleNom} ? L'école perdra l'accès à la plateforme.`
+    );
+    if (!ok) return;
+    setBusyId(abonnementId);
+    try {
+      await suspendre({ abonnementId, userId });
+      toast.success("Abonnement suspendu");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }, [confirm, suspendre, userId, canWrite]);
 
-  const handleSuspendre = useCallback(
-    async (abonnementId, ecoleNom) => {
-      if (!canWrite) {
-        toast.error("Permission requise : abonnements.write");
-        return;
-      }
-      const ok = await confirm(
-        "Suspendre l'abonnement",
-        `Suspendre l'abonnement de ${ecoleNom} ? L'école perdra l'accès à la plateforme.`
-      );
-      if (!ok) return;
+  const handleReactiver = useCallback(async (abonnementId) => {
+    if (!canWrite) {
+      toast.error("Permission requise : abonnements.write");
+      return;
+    }
+    setBusyId(abonnementId);
+    try {
+      await reactiver({ abonnementId, userId });
+      toast.success("Abonnement réactivé");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }, [reactiver, userId, canWrite]);
 
-      setBusyId(abonnementId);
-      try {
-        await suspendre({ abonnementId, userId });
-        toast.success("Abonnement suspendu");
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-      } finally {
-        setBusyId(null);
-      }
-    },
-    [confirm, suspendre, userId, canWrite]
-  );
+  const handleSavePaiement = useCallback(async (abonnementId, payload) => {
+    if (!canWrite) {
+      toast.error("Permission requise : abonnements.write");
+      throw new Error("Permission refusée");
+    }
+    try {
+      const res = await enregistrerPaiement({ abonnementId, userId, ...payload });
+      toast.success(`Paiement enregistré — nouvelle échéance : ${formatDate(res.prochaineEcheance)}`);
+      setShowPaiementModal(null);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+      throw err;
+    }
+  }, [enregistrerPaiement, userId, canWrite]);
 
-  const handleReactiver = useCallback(
-    async (abonnementId) => {
-      if (!canWrite) {
-        toast.error("Permission requise : abonnements.write");
-        return;
-      }
-      setBusyId(abonnementId);
-      try {
-        await reactiver({ abonnementId, userId });
-        toast.success("Abonnement réactivé");
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-      } finally {
-        setBusyId(null);
-      }
-    },
-    [reactiver, userId, canWrite]
-  );
-
-  const handleSavePaiement = useCallback(
-    async (abonnementId, payload) => {
-      if (!canWrite) {
-        toast.error("Permission requise : abonnements.write");
-        throw new Error("Permission refusée");
-      }
-      try {
-        const res = await enregistrerPaiement({
-          abonnementId,
-          userId,
-          ...payload,
-        });
-        toast.success(
-          `Paiement enregistré — nouvelle échéance : ${formatDate(res.prochaineEcheance)}`
-        );
-        setShowPaiementModal(null);
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-        throw err;
-      }
-    },
-    [enregistrerPaiement, userId, canWrite]
-  );
-
-  const handleCreateAbonnement = useCallback(
-    async (payload) => {
-      if (!canWrite) {
-        toast.error("Permission requise : abonnements.write");
-        throw new Error("Permission refusée");
-      }
-      try {
-        await creerPourEcole({ ...payload, userId });
-        toast.success("Abonnement créé");
-        setShowCreateModal(false);
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-        throw err;
-      }
-    },
-    [creerPourEcole, userId, canWrite]
-  );
+  const handleCreateAbonnement = useCallback(async (payload) => {
+    if (!canWrite) {
+      toast.error("Permission requise : abonnements.write");
+      throw new Error("Permission refusée");
+    }
+    try {
+      await creerPourEcole({ ...payload, userId });
+      toast.success("Abonnement créé");
+      setShowCreateModal(false);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+      throw err;
+    }
+  }, [creerPourEcole, userId, canWrite]);
 
   // ════════════════════════════════════════════════════════════════════
-  // RENDU
+  // GARDE : session invalide
   // ════════════════════════════════════════════════════════════════════
   if (!user || !userId) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: textSecondary }}>
-        Session invalide.
-      </div>
+      <>
+        {GestionAbonnementsKeyframes}
+        <div
+          role="alert"
+          style={{ padding: 40, textAlign: "center", color: textSecondary }}
+        >
+          Session invalide.
+        </div>
+      </>
     );
   }
 
@@ -313,9 +384,10 @@ export function GestionAbonnements({
     >
       {GestionAbonnementsKeyframes}
 
-      {/* ═══ Bandeau lecture seule ═══ */}
+      {/* ═══════════ Bandeau lecture seule ═══════════ */}
       {!canWrite && (
         <div
+          role="note"
           style={{
             display: "flex",
             alignItems: "center",
@@ -329,7 +401,7 @@ export function GestionAbonnements({
             color: textSecondary,
           }}
         >
-          <Lock size={14} />
+          <Lock size={14} aria-hidden="true" />
           <span>
             <strong style={{ color: textPrimary }}>Mode lecture seule</strong> —
             vous n'avez pas la permission de modifier les abonnements.
@@ -337,7 +409,7 @@ export function GestionAbonnements({
         </div>
       )}
 
-      {/* En-tête */}
+      {/* ═══════════ En-tête ═══════════ */}
       <div
         style={{
           display: "flex",
@@ -360,7 +432,7 @@ export function GestionAbonnements({
               gap: 10,
             }}
           >
-            <CreditCard size={isMobile ? 22 : 26} color={accent} />
+            <CreditCard size={isMobile ? 22 : 26} color={accent} aria-hidden="true" />
             Abonnements LITE
           </h2>
           <p
@@ -375,11 +447,11 @@ export function GestionAbonnements({
           </p>
         </div>
 
-        {/* ✨ Bouton création — canWrite requis */}
         {canWrite && ecoles.length > abonnements.length && (
-          <button
-            type="button"
+          <Pressable
             onClick={() => setShowCreateModal(true)}
+            focusColor={accent}
+            ariaLabel="Créer un nouvel abonnement"
             style={{
               display: "flex",
               alignItems: "center",
@@ -389,19 +461,18 @@ export function GestionAbonnements({
               color: "#FFFFFF",
               border: "none",
               borderRadius: 10,
-              cursor: "pointer",
               fontWeight: 600,
               fontSize: 14,
               whiteSpace: "nowrap",
             }}
           >
-            <CreditCard size={16} />
+            <CreditCard size={16} aria-hidden="true" />
             Nouvel abonnement
-          </button>
+          </Pressable>
         )}
       </div>
 
-      {/* Stats globales */}
+      {/* ═══════════ Stats globales ═══════════ */}
       {stats && (
         <div
           style={{
@@ -414,75 +485,69 @@ export function GestionAbonnements({
           }}
         >
           <StatCard
-            icon={<Users size={18} />}
+            icon={<Users size={18} aria-hidden="true" />}
             value={stats.total}
             label="Établissements"
             color="#4F46E5"
-            dark={dark}
-            cardBg={cardBg}
-            cardBorder={cardBorder}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
+            cardBg={cardBg}
+            cardBorder={cardBorder}
           />
           <StatCard
-            icon={<CheckCircle size={18} />}
+            icon={<CheckCircle size={18} aria-hidden="true" />}
             value={stats.actifs}
             label="Actifs"
             color="#10B981"
-            dark={dark}
-            cardBg={cardBg}
-            cardBorder={cardBorder}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
+            cardBg={cardBg}
+            cardBorder={cardBorder}
           />
           <StatCard
-            icon={<Clock size={18} />}
+            icon={<Clock size={18} aria-hidden="true" />}
             value={stats.enGrace}
             label="En grâce"
             color="#F59E0B"
-            dark={dark}
-            cardBg={cardBg}
-            cardBorder={cardBorder}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
+            cardBg={cardBg}
+            cardBorder={cardBorder}
           />
           <StatCard
-            icon={<Ban size={18} />}
+            icon={<Ban size={18} aria-hidden="true" />}
             value={stats.suspendus}
             label="Suspendus"
             color="#EF4444"
-            dark={dark}
-            cardBg={cardBg}
-            cardBorder={cardBorder}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
+            cardBg={cardBg}
+            cardBorder={cardBorder}
           />
           <StatCard
-            icon={<DollarSign size={18} />}
+            icon={<DollarSign size={18} aria-hidden="true" />}
             value={`${stats.revenuMensuelAttendu} $`}
             label="Revenu attendu/mois"
             color="#6366F1"
-            dark={dark}
-            cardBg={cardBg}
-            cardBorder={cardBorder}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
+            cardBg={cardBg}
+            cardBorder={cardBorder}
           />
           <StatCard
-            icon={<AlertTriangle size={18} />}
+            icon={<AlertTriangle size={18} aria-hidden="true" />}
             value={stats.ecolesImpayees}
             label="Écoles impayées"
             color="#EF4444"
-            dark={dark}
-            cardBg={cardBg}
-            cardBorder={cardBorder}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
+            cardBg={cardBg}
+            cardBorder={cardBorder}
           />
         </div>
       )}
 
-      {/* Filtres */}
+      {/* ═══════════ Filtres ═══════════ */}
       <div
         style={{
           display: "flex",
@@ -498,56 +563,77 @@ export function GestionAbonnements({
             gap: 8,
             padding: "10px 14px",
             borderRadius: 10,
-            border: `1px solid ${cardBorder}`,
+            border: `1px solid ${searchFocused ? accent : cardBorder}`,
             background: cardBg,
             flex: 1,
+            transition: "border-color 0.2s",
+            minHeight: 44,
           }}
         >
-          <Search size={16} color={textSecondary} />
+          <Search size={16} color={textSecondary} aria-hidden="true" />
           <input
+            type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoCorrect="off"
+            spellCheck="false"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             placeholder="Rechercher une école…"
+            aria-label="Rechercher une école"
             style={{
               flex: 1,
               border: "none",
               outline: "none",
               background: "transparent",
               color: textPrimary,
-              fontSize: 14,
+              fontSize: isMobile ? 16 : 14,
+              fontFamily: "inherit",
+              minHeight: 24,
             }}
           />
           {searchTerm && (
-            <button
-              type="button"
+            <Pressable
               onClick={() => setSearchTerm("")}
+              focusColor={accent}
+              ariaLabel="Effacer la recherche"
               style={{
                 background: "none",
                 border: "none",
-                cursor: "pointer",
                 color: textSecondary,
                 display: "flex",
-                padding: 2,
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 8,
+                minWidth: 36,
+                minHeight: 36,
+                marginRight: -4,
               }}
-              aria-label="Effacer la recherche"
             >
-              <X size={14} />
-            </button>
+              <X size={14} aria-hidden="true" />
+            </Pressable>
           )}
         </div>
         <select
           value={statutFilter}
           onChange={(e) => setStatutFilter(e.target.value)}
+          aria-label="Filtrer par statut"
           style={{
+            ...TAP_BASE,
             padding: "10px 14px",
             borderRadius: 10,
             border: `1px solid ${cardBorder}`,
             background: cardBg,
             color: textPrimary,
-            fontSize: 14,
+            fontSize: isMobile ? 16 : 14,
             cursor: "pointer",
             minWidth: isMobile ? "100%" : 180,
             outline: "none",
+            fontFamily: "inherit",
+            appearance: "none",
+            WebkitAppearance: "none",
           }}
         >
           <option value="">Tous les statuts</option>
@@ -558,9 +644,12 @@ export function GestionAbonnements({
         </select>
       </div>
 
-      {/* Liste */}
+      {/* ═══════════ Liste ═══════════ */}
       {isLoading ? (
         <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
           style={{
             background: cardBg,
             borderRadius: 14,
@@ -568,12 +657,19 @@ export function GestionAbonnements({
             padding: 40,
             textAlign: "center",
             color: textSecondary,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
           }}
         >
-          Chargement…
+          <Loader size={20} className="ga-spin" aria-hidden="true" />
+          <span>Chargement…</span>
         </div>
       ) : abonnementsFiltres.length === 0 ? (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             background: cardBg,
             borderRadius: 14,
@@ -588,7 +684,7 @@ export function GestionAbonnements({
             : "Aucun abonnement ne correspond aux filtres."}
         </div>
       ) : (
-        <div className="ga-fade-in" style={{ display: "grid", gap: 10 }}>
+        <div className="ga-fade-in" style={{ display: "grid", gap: 10, ...SCROLL_AREA }}>
           {abonnementsFiltres.map((ab) => (
             <AbonnementCard
               key={ab._id}
@@ -602,7 +698,7 @@ export function GestionAbonnements({
               accent={accent}
               hoverBg={hoverBg}
               busy={busyId === ab._id}
-              canWrite={canWrite} // ✨ NOUVEAU
+              canWrite={canWrite}
               onRecalculer={handleRecalculer}
               onSuspendre={handleSuspendre}
               onReactiver={handleReactiver}
@@ -612,14 +708,12 @@ export function GestionAbonnements({
         </div>
       )}
 
-      {/* ═══ Modal paiement (canWrite requis) ═══ */}
+      {/* ═══════════ Modales ═══════════ */}
       {canWrite && showPaiementModal && (
         <PaiementModal
           abonnement={showPaiementModal}
           onClose={() => setShowPaiementModal(null)}
-          onSave={(payload) =>
-            handleSavePaiement(showPaiementModal._id, payload)
-          }
+          onSave={(payload) => handleSavePaiement(showPaiementModal._id, payload)}
           dark={dark}
           isMobile={isMobile}
           cardBg={cardBg}
@@ -631,7 +725,6 @@ export function GestionAbonnements({
         />
       )}
 
-      {/* ═══ Modal création (canWrite requis) ═══ */}
       {canWrite && showCreateModal && (
         <CreateAbonnementModal
           ecoles={ecoles}
@@ -649,28 +742,21 @@ export function GestionAbonnements({
         />
       )}
 
-      {/* Confirm */}
       <ConfirmDialog {...dialogProps} />
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANTS
+// STAT CARD
 // ════════════════════════════════════════════════════════════════════
-
 function StatCard({
-  icon,
-  value,
-  label,
-  color,
-  cardBg,
-  cardBorder,
-  textPrimary,
-  textSecondary,
+  icon, value, label, color,
+  cardBg, cardBorder, textPrimary, textSecondary,
 }) {
   return (
-    <div
+    <article
+      aria-label={`${label} : ${value}`}
       style={{
         background: cardBg,
         border: `1px solid ${cardBorder}`,
@@ -679,9 +765,11 @@ function StatCard({
         display: "flex",
         alignItems: "center",
         gap: 12,
+        minHeight: 44,
       }}
     >
       <div
+        aria-hidden="true"
         style={{
           width: 36,
           height: 36,
@@ -703,40 +791,27 @@ function StatCard({
             fontWeight: 700,
             color: textPrimary,
             lineHeight: 1.1,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {value}
         </div>
-        <div
-          style={{
-            fontSize: 11,
-            color: textSecondary,
-            marginTop: 2,
-          }}
-        >
+        <div style={{ fontSize: 11, color: textSecondary, marginTop: 2 }}>
           {label}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
+// ════════════════════════════════════════════════════════════════════
+// ABONNEMENT CARD
+// ════════════════════════════════════════════════════════════════════
 function AbonnementCard({
-  abonnement,
-  dark,
-  isMobile,
-  cardBg,
-  cardBorder,
-  textPrimary,
-  textSecondary,
-  accent,
-  hoverBg,
-  busy,
-  canWrite = true, // ✨ NOUVEAU
-  onRecalculer,
-  onSuspendre,
-  onReactiver,
-  onPayer,
+  abonnement, dark, isMobile,
+  cardBg, cardBorder, textPrimary, textSecondary, accent, hoverBg,
+  busy, canWrite = true,
+  onRecalculer, onSuspendre, onReactiver, onPayer,
 }) {
   const cfg = STATUT_CONFIG[abonnement.statut] ?? STATUT_CONFIG.actif;
   const StatusIcon = cfg.icon;
@@ -749,7 +824,7 @@ function AbonnementCard({
     abonnement.nombreUtilisateursActifs ?? abonnement.nombreUtilisateurs ?? 0;
 
   return (
-    <div
+    <article
       style={{
         background: cardBg,
         border: `1px solid ${isImpaye ? "#EF4444" : cardBorder}`,
@@ -774,13 +849,7 @@ function AbonnementCard({
             flexWrap: "wrap",
           }}
         >
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: textPrimary,
-            }}
-          >
+          <span style={{ fontSize: 15, fontWeight: 700, color: textPrimary }}>
             {abonnement.ecoleNom}
           </span>
           {abonnement.ecoleCode && (
@@ -799,6 +868,7 @@ function AbonnementCard({
             </span>
           )}
           <span
+            aria-label={`Statut : ${cfg.label}`}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -812,7 +882,7 @@ function AbonnementCard({
               textTransform: "uppercase",
             }}
           >
-            <StatusIcon size={10} />
+            <StatusIcon size={10} aria-hidden="true" />
             {cfg.label}
           </span>
         </div>
@@ -832,7 +902,13 @@ function AbonnementCard({
           <span>
             {nbUsers} utilisateur{nbUsers > 1 ? "s" : ""}
           </span>
-          <span style={{ color: accent, fontWeight: 700 }}>
+          <span
+            style={{
+              color: accent,
+              fontWeight: 700,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {formatMontant(abonnement.montantMensuel)}/mois
           </span>
         </div>
@@ -869,9 +945,10 @@ function AbonnementCard({
               alignItems: "center",
               gap: 4,
               justifyContent: isMobile ? "flex-start" : "center",
+              fontVariantNumeric: "tabular-nums",
             }}
           >
-            <Calendar size={12} />
+            <Calendar size={12} aria-hidden="true" />
             {formatDate(abonnement.prochaineEcheance)}
           </div>
         </div>
@@ -887,14 +964,20 @@ function AbonnementCard({
             >
               Dernier paiement
             </div>
-            <div style={{ fontSize: 12, color: textSecondary }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: textSecondary,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               {formatDate(abonnement.dernierPaiementDate)}
             </div>
           </div>
         )}
       </div>
 
-      {/* Colonne 3 : Actions (canWrite requis) */}
+      {/* Colonne 3 : Actions */}
       {canWrite && (
         <div
           style={{
@@ -905,62 +988,79 @@ function AbonnementCard({
           }}
         >
           <ActionButton
-            icon={<CreditCard size={14} />}
+            icon={<CreditCard size={14} aria-hidden="true" />}
             label="Paiement"
             onClick={onPayer}
             variant="primary"
             disabled={busy}
+            accent={accent}
+            isMobile={isMobile}
           />
           <ActionButton
-            icon={<RefreshCw size={14} />}
+            icon={<RefreshCw size={14} aria-hidden="true" />}
             label="Recalculer"
             onClick={() => onRecalculer(abonnement._id, abonnement.ecoleNom)}
             disabled={busy}
+            accent={accent}
+            isMobile={isMobile}
+            color={textPrimary}
           />
           {abonnement.statut === "suspendu" ? (
             <ActionButton
-              icon={<Play size={14} />}
+              icon={<Play size={14} aria-hidden="true" />}
               label="Réactiver"
               onClick={() => onReactiver(abonnement._id)}
               variant="success"
               disabled={busy}
+              accent={accent}
+              isMobile={isMobile}
             />
           ) : (
             <ActionButton
-              icon={<Ban size={14} />}
+              icon={<Ban size={14} aria-hidden="true" />}
               label="Suspendre"
               onClick={() => onSuspendre(abonnement._id, abonnement.ecoleNom)}
               variant="danger"
               disabled={busy}
+              accent={accent}
+              isMobile={isMobile}
             />
           )}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
-function ActionButton({ icon, label, onClick, variant = "default", disabled }) {
+// ════════════════════════════════════════════════════════════════════
+// ACTION BUTTON
+// ════════════════════════════════════════════════════════════════════
+function ActionButton({
+  icon, label, onClick, variant = "default",
+  disabled, accent, isMobile, color,
+}) {
   const variants = {
-    primary: { bg: "#4F46E5", color: "#FFFFFF" },
-    success: { bg: "#10B981", color: "#FFFFFF" },
-    danger: { bg: "#EF4444", color: "#FFFFFF" },
-    default: { bg: "transparent", color: "inherit", border: true },
+    primary: { bg: accent, color: "#FFFFFF", border: null },
+    success: { bg: "#10B981", color: "#FFFFFF", border: null },
+    danger: { bg: "#EF4444", color: "#FFFFFF", border: null },
+    default: { bg: "transparent", color: color ?? "inherit", border: color ?? "#94A3B8" },
   };
   const v = variants[variant] ?? variants.default;
 
   return (
-    <button
-      type="button"
+    <Pressable
       onClick={onClick}
       disabled={disabled}
+      focusColor={accent}
+      ariaLabel={label}
       style={{
         display: "inline-flex",
         alignItems: "center",
+        justifyContent: "center",
         gap: 5,
-        padding: "7px 12px",
+        padding: "10px 14px",
         borderRadius: 8,
-        border: v.border ? "1px solid currentColor" : "none",
+        border: v.border ? `1px solid ${v.border}` : "none",
         background: v.bg,
         color: v.color,
         fontSize: 12,
@@ -969,29 +1069,26 @@ function ActionButton({ icon, label, onClick, variant = "default", disabled }) {
         whiteSpace: "nowrap",
         opacity: disabled ? 0.6 : 1,
         fontFamily: "inherit",
+        flex: isMobile ? 1 : "none",
+        minHeight: 44,
       }}
     >
       {icon}
       {label}
-    </button>
+    </Pressable>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════
-// PaiementModal (inchangé)
+// MODAL PAIEMENT
 // ════════════════════════════════════════════════════════════════════
 function PaiementModal({
-  abonnement,
-  onClose,
-  onSave,
-  isMobile,
-  cardBg,
-  cardBorder,
-  textPrimary,
-  textSecondary,
-  inputBg,
-  accent,
+  abonnement, onClose, onSave, isMobile,
+  cardBg, cardBorder, textPrimary, textSecondary, inputBg, accent,
 }) {
+  const titleId = useId();
+  const panelRef = useRef(null);
+
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = new Date();
   nextMonth.setMonth(nextMonth.getMonth() + 1);
@@ -1001,20 +1098,27 @@ function PaiementModal({
   const [methode, setMethode] = useState("");
   const [reference, setReference] = useState("");
   const [periodeDebut, setPeriodeDebut] = useState(today);
-  const [periodeFin, setPeriodeFin] = useState(
-    nextMonth.toISOString().slice(0, 10)
-  );
+  const [periodeFin, setPeriodeFin] = useState(nextMonth.toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useFocusTrap(panelRef, true);
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === "Escape" && !saving) onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [saving, onClose]);
+
   const fieldStyle = {
+    ...TAP_BASE,
     width: "100%",
     padding: 12,
     borderRadius: 10,
     border: `1px solid ${cardBorder}`,
     background: inputBg,
     color: textPrimary,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     boxSizing: "border-box",
     fontFamily: "inherit",
@@ -1054,218 +1158,244 @@ function PaiementModal({
     }
   };
 
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 2000,
-        padding: 16,
-      }}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="ga-slide-up"
-        onClick={(e) => e.stopPropagation()}
+  const content = (
+    <>
+      <h3
+        id={titleId}
         style={{
-          background: cardBg,
-          borderRadius: 16,
-          padding: isMobile ? 18 : 24,
-          width: "100%",
-          maxWidth: 480,
-          maxHeight: "90vh",
-          overflowY: "auto",
-          border: `1px solid ${cardBorder}`,
+          margin: "0 0 4px",
+          fontSize: 17,
+          fontWeight: 700,
+          color: textPrimary,
         }}
       >
-        <h3
+        Enregistrer un paiement
+      </h3>
+      <p style={{ margin: "0 0 18px", fontSize: 12, color: textSecondary }}>
+        {abonnement.ecoleNom} — Formule {abonnement.formule}
+      </p>
+
+      <form onSubmit={handleSubmit}>
+        <div
           style={{
-            margin: "0 0 4px",
-            fontSize: 17,
-            fontWeight: 700,
-            color: textPrimary,
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+            gap: 12,
+            marginBottom: 14,
           }}
         >
-          Enregistrer un paiement
-        </h3>
-        <p style={{ margin: "0 0 18px", fontSize: 12, color: textSecondary }}>
-          {abonnement.ecoleNom} — Formule {abonnement.formule}
-        </p>
-
-        <form onSubmit={handleSubmit}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              marginBottom: 14,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Montant *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={montant}
-                onChange={(e) => setMontant(e.target.value)}
-                required
-                style={fieldStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Devise</label>
-              <select
-                value={devise}
-                onChange={(e) => setDevise(e.target.value)}
-                style={fieldStyle}
-              >
-                <option value="USD">USD</option>
-                <option value="CDF">CDF</option>
-              </select>
-            </div>
+          <div>
+            <label style={labelStyle} htmlFor="paiement-montant">Montant *</label>
+            <input
+              id="paiement-montant"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              value={montant}
+              onChange={(e) => setMontant(e.target.value)}
+              required
+              enterKeyHint="next"
+              style={fieldStyle}
+            />
           </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Méthode de paiement</label>
+          <div>
+            <label style={labelStyle} htmlFor="paiement-devise">Devise</label>
             <select
-              value={methode}
-              onChange={(e) => setMethode(e.target.value)}
+              id="paiement-devise"
+              value={devise}
+              onChange={(e) => setDevise(e.target.value)}
               style={fieldStyle}
             >
-              <option value="">— Sélectionner —</option>
-              <option value="Mobile Money">Mobile Money</option>
-              <option value="Virement bancaire">Virement bancaire</option>
-              <option value="Espèces">Espèces</option>
-              <option value="Chèque">Chèque</option>
+              <option value="USD">USD</option>
+              <option value="CDF">CDF</option>
             </select>
           </div>
+        </div>
 
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Référence (optionnel)</label>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle} htmlFor="paiement-methode">Méthode de paiement</label>
+          <select
+            id="paiement-methode"
+            value={methode}
+            onChange={(e) => setMethode(e.target.value)}
+            style={fieldStyle}
+          >
+            <option value="">— Sélectionner —</option>
+            <option value="Mobile Money">Mobile Money</option>
+            <option value="Virement bancaire">Virement bancaire</option>
+            <option value="Espèces">Espèces</option>
+            <option value="Chèque">Chèque</option>
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle} htmlFor="paiement-reference">Référence (optionnel)</label>
+          <input
+            id="paiement-reference"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="Ex : N° transaction"
+            enterKeyHint="next"
+            style={fieldStyle}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          <div>
+            <label style={labelStyle} htmlFor="paiement-debut">Période du *</label>
             <input
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder="Ex : N° transaction"
+              id="paiement-debut"
+              type="date"
+              value={periodeDebut}
+              onChange={(e) => setPeriodeDebut(e.target.value)}
+              required
               style={fieldStyle}
             />
           </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              marginBottom: 14,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Période du *</label>
-              <input
-                type="date"
-                value={periodeDebut}
-                onChange={(e) => setPeriodeDebut(e.target.value)}
-                required
-                style={fieldStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Au *</label>
-              <input
-                type="date"
-                value={periodeFin}
-                onChange={(e) => setPeriodeFin(e.target.value)}
-                required
-                style={fieldStyle}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Notes (optionnel)</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              style={{
-                ...fieldStyle,
-                resize: "vertical",
-                fontFamily: "inherit",
-              }}
+          <div>
+            <label style={labelStyle} htmlFor="paiement-fin">Au *</label>
+            <input
+              id="paiement-fin"
+              type="date"
+              value={periodeFin}
+              onChange={(e) => setPeriodeFin(e.target.value)}
+              required
+              style={fieldStyle}
             />
           </div>
+        </div>
 
-          <div
+        <div style={{ marginBottom: 18 }}>
+          <label style={labelStyle} htmlFor="paiement-notes">Notes (optionnel)</label>
+          <textarea
+            id="paiement-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            enterKeyHint="done"
+            style={{ ...fieldStyle, resize: "vertical", minHeight: 60 }}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            justifyContent: "flex-end",
+            flexDirection: isMobile ? "column-reverse" : "row",
+          }}
+        >
+          <Pressable
+            onClick={onClose}
+            disabled={saving}
+            focusColor={accent}
             style={{
-              display: "flex",
-              gap: 10,
-              justifyContent: "flex-end",
-              flexDirection: isMobile ? "column-reverse" : "row",
+              padding: "12px 18px",
+              borderRadius: 10,
+              border: `1px solid ${cardBorder}`,
+              background: "transparent",
+              color: textPrimary,
+              fontWeight: 600,
+              fontSize: 14,
+              fontFamily: "inherit",
             }}
           >
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 10,
-                border: `1px solid ${cardBorder}`,
-                background: "transparent",
-                color: textPrimary,
-                cursor: saving ? "not-allowed" : "pointer",
-                fontWeight: 600,
-                fontSize: 14,
-                fontFamily: "inherit",
-              }}
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 10,
-                border: "none",
-                background: saving ? "#A5B4FC" : accent,
-                color: "#FFFFFF",
-                cursor: saving ? "not-allowed" : "pointer",
-                fontWeight: 700,
-                fontSize: 14,
-                fontFamily: "inherit",
-              }}
-            >
-              {saving ? "Enregistrement…" : "Enregistrer"}
-            </button>
-          </div>
-        </form>
+            Annuler
+          </Pressable>
+          <Pressable
+            type="submit"
+            disabled={saving}
+            focusColor={accent}
+            ariaBusy={saving}
+            style={{
+              padding: "12px 18px",
+              borderRadius: 10,
+              border: "none",
+              background: saving ? "#A5B4FC" : accent,
+              color: "#FFFFFF",
+              fontWeight: 700,
+              fontSize: 14,
+              fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            {saving && (
+              <Loader size={14} className="ga-spin" role="status" aria-label="Enregistrement" />
+            )}
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </Pressable>
+        </div>
+      </form>
+    </>
+  );
+
+  return (
+    <>
+      {GestionAbonnementsKeyframes}
+      <div
+        onClick={onClose}
+        className="ga-fade-in"
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          display: "flex",
+          alignItems: isMobile ? "flex-end" : "center",
+          justifyContent: "center",
+          zIndex: 2000,
+          padding: isMobile ? 0 : 16,
+          ...SCROLL_AREA,
+        }}
+      >
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          onClick={(e) => e.stopPropagation()}
+          tabIndex={-1}
+          className="ga-slide-up"
+          style={{
+            background: cardBg,
+            borderRadius: isMobile ? "20px 20px 0 0" : 16,
+            padding: isMobile ? "16px 16px 0" : 24,
+            ...(isMobile ? SAFE_BOTTOM : null),
+            width: "100%",
+            maxWidth: isMobile ? "100%" : 480,
+            maxHeight: "90vh",
+            overflowY: "auto",
+            border: `1px solid ${cardBorder}`,
+            outline: "none",
+            ...SCROLL_AREA,
+          }}
+        >
+          {content}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════
-// CreateAbonnementModal (inchangé)
+// MODAL CRÉATION
 // ════════════════════════════════════════════════════════════════════
 function CreateAbonnementModal({
-  ecoles,
-  abonnementsExistants,
-  onClose,
-  onSave,
-  isMobile,
-  cardBg,
-  cardBorder,
-  textPrimary,
-  textSecondary,
-  inputBg,
-  accent,
+  ecoles, abonnementsExistants, onClose, onSave, isMobile,
+  cardBg, cardBorder, textPrimary, textSecondary, inputBg, accent,
 }) {
+  const titleId = useId();
+  const panelRef = useRef(null);
+
   const today = new Date().toISOString().slice(0, 10);
   const oneYearLater = new Date();
   oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
@@ -1283,14 +1413,23 @@ function CreateAbonnementModal({
   const [delaiGrace, setDelaiGrace] = useState("14");
   const [saving, setSaving] = useState(false);
 
+  useFocusTrap(panelRef, true);
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === "Escape" && !saving) onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [saving, onClose]);
+
   const fieldStyle = {
+    ...TAP_BASE,
     width: "100%",
     padding: 12,
     borderRadius: 10,
     border: `1px solid ${cardBorder}`,
     background: inputBg,
     color: textPrimary,
-    fontSize: 14,
+    fontSize: isMobile ? 16 : 14,
     outline: "none",
     boxSizing: "border-box",
     fontFamily: "inherit",
@@ -1327,177 +1466,210 @@ function CreateAbonnementModal({
     }
   };
 
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 2000,
-        padding: 16,
-      }}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="ga-slide-up"
-        onClick={(e) => e.stopPropagation()}
+  const content = (
+    <>
+      <h3
+        id={titleId}
         style={{
-          background: cardBg,
-          borderRadius: 16,
-          padding: isMobile ? 18 : 24,
-          width: "100%",
-          maxWidth: 480,
-          maxHeight: "90vh",
-          overflowY: "auto",
-          border: `1px solid ${cardBorder}`,
+          margin: "0 0 4px",
+          fontSize: 17,
+          fontWeight: 700,
+          color: textPrimary,
         }}
       >
-        <h3
-          style={{
-            margin: "0 0 4px",
-            fontSize: 17,
-            fontWeight: 700,
-            color: textPrimary,
-          }}
-        >
-          Nouvel abonnement
-        </h3>
-        <p style={{ margin: "0 0 18px", fontSize: 12, color: textSecondary }}>
-          Créer un abonnement pour une école
-        </p>
+        Nouvel abonnement
+      </h3>
+      <p style={{ margin: "0 0 18px", fontSize: 12, color: textSecondary }}>
+        Créer un abonnement pour une école
+      </p>
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>École *</label>
-            <select
-              value={ecoleId}
-              onChange={(e) => setEcoleId(e.target.value)}
-              required
-              style={fieldStyle}
-            >
-              <option value="">— Sélectionner une école —</option>
-              {ecolesDisponibles.map((e) => (
-                <option key={e._id} value={e._id}>
-                  {e.nom} ({e.userCount ?? 0} users)
-                </option>
-              ))}
-            </select>
-            {ecolesDisponibles.length === 0 && (
-              <p
-                style={{
-                  fontSize: 12,
-                  color: textSecondary,
-                  marginTop: 6,
-                  marginBottom: 0,
-                }}
-              >
-                Toutes les écoles ont déjà un abonnement.
-              </p>
-            )}
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              marginBottom: 14,
-            }}
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle} htmlFor="create-ecole">École *</label>
+          <select
+            id="create-ecole"
+            value={ecoleId}
+            onChange={(e) => setEcoleId(e.target.value)}
+            required
+            style={fieldStyle}
           >
-            <div>
-              <label style={labelStyle}>Date de début *</label>
-              <input
-                type="date"
-                value={dateDebut}
-                onChange={(e) => setDateDebut(e.target.value)}
-                required
-                style={fieldStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Date de fin *</label>
-              <input
-                type="date"
-                value={dateFin}
-                onChange={(e) => setDateFin(e.target.value)}
-                required
-                style={fieldStyle}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Délai de grâce (jours)</label>
-            <input
-              type="number"
-              min="0"
-              value={delaiGrace}
-              onChange={(e) => setDelaiGrace(e.target.value)}
-              style={fieldStyle}
-            />
+            <option value="">— Sélectionner une école —</option>
+            {ecolesDisponibles.map((e) => (
+              <option key={e._id} value={e._id}>
+                {e.nom} ({e.userCount ?? 0} users)
+              </option>
+            ))}
+          </select>
+          {ecolesDisponibles.length === 0 && (
             <p
+              role="status"
+              aria-live="polite"
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: textSecondary,
-                marginTop: 4,
+                marginTop: 6,
                 marginBottom: 0,
               }}
             >
-              Nombre de jours avant suspension automatique après l'échéance
+              Toutes les écoles ont déjà un abonnement.
             </p>
-          </div>
+          )}
+        </div>
 
-          <div
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          <div>
+            <label style={labelStyle} htmlFor="create-debut">Date de début *</label>
+            <input
+              id="create-debut"
+              type="date"
+              value={dateDebut}
+              onChange={(e) => setDateDebut(e.target.value)}
+              required
+              style={fieldStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle} htmlFor="create-fin">Date de fin *</label>
+            <input
+              id="create-fin"
+              type="date"
+              value={dateFin}
+              onChange={(e) => setDateFin(e.target.value)}
+              required
+              style={fieldStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <label style={labelStyle} htmlFor="create-grace">Délai de grâce (jours)</label>
+          <input
+            id="create-grace"
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={delaiGrace}
+            onChange={(e) => setDelaiGrace(e.target.value)}
+            enterKeyHint="done"
+            style={fieldStyle}
+          />
+          <p
             style={{
-              display: "flex",
-              gap: 10,
-              justifyContent: "flex-end",
-              flexDirection: isMobile ? "column-reverse" : "row",
+              fontSize: 11,
+              color: textSecondary,
+              marginTop: 4,
+              marginBottom: 0,
             }}
           >
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 10,
-                border: `1px solid ${cardBorder}`,
-                background: "transparent",
-                color: textPrimary,
-                cursor: saving ? "not-allowed" : "pointer",
-                fontWeight: 600,
-                fontSize: 14,
-                fontFamily: "inherit",
-              }}
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={saving || !ecoleId}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 10,
-                border: "none",
-                background: saving || !ecoleId ? "#A5B4FC" : accent,
-                color: "#FFFFFF",
-                cursor: saving || !ecoleId ? "not-allowed" : "pointer",
-                fontWeight: 700,
-                fontSize: 14,
-                fontFamily: "inherit",
-              }}
-            >
-              {saving ? "Création…" : "Créer l'abonnement"}
-            </button>
-          </div>
-        </form>
+            Nombre de jours avant suspension automatique après l'échéance
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            justifyContent: "flex-end",
+            flexDirection: isMobile ? "column-reverse" : "row",
+          }}
+        >
+          <Pressable
+            onClick={onClose}
+            disabled={saving}
+            focusColor={accent}
+            style={{
+              padding: "12px 18px",
+              borderRadius: 10,
+              border: `1px solid ${cardBorder}`,
+              background: "transparent",
+              color: textPrimary,
+              fontWeight: 600,
+              fontSize: 14,
+              fontFamily: "inherit",
+            }}
+          >
+            Annuler
+          </Pressable>
+          <Pressable
+            type="submit"
+            disabled={saving || !ecoleId}
+            focusColor={accent}
+            ariaBusy={saving}
+            style={{
+              padding: "12px 18px",
+              borderRadius: 10,
+              border: "none",
+              background: saving || !ecoleId ? "#A5B4FC" : accent,
+              color: "#FFFFFF",
+              fontWeight: 700,
+              fontSize: 14,
+              fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            {saving && (
+              <Loader size={14} className="ga-spin" role="status" aria-label="Création" />
+            )}
+            {saving ? "Création…" : "Créer l'abonnement"}
+          </Pressable>
+        </div>
+      </form>
+    </>
+  );
+
+  return (
+    <>
+      {GestionAbonnementsKeyframes}
+      <div
+        onClick={onClose}
+        className="ga-fade-in"
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          display: "flex",
+          alignItems: isMobile ? "flex-end" : "center",
+          justifyContent: "center",
+          zIndex: 2000,
+          padding: isMobile ? 0 : 16,
+          ...SCROLL_AREA,
+        }}
+      >
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          onClick={(e) => e.stopPropagation()}
+          tabIndex={-1}
+          className="ga-slide-up"
+          style={{
+            background: cardBg,
+            borderRadius: isMobile ? "20px 20px 0 0" : 16,
+            padding: isMobile ? "16px 16px 0" : 24,
+            ...(isMobile ? SAFE_BOTTOM : null),
+            width: "100%",
+            maxWidth: isMobile ? "100%" : 480,
+            maxHeight: "90vh",
+            overflowY: "auto",
+            border: `1px solid ${cardBorder}`,
+            outline: "none",
+            ...SCROLL_AREA,
+          }}
+        >
+          {content}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

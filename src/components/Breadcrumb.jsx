@@ -1,8 +1,159 @@
 // src/components/Breadcrumb.jsx
+import { useState } from "react";
 import { ChevronRight, Home, MoreHorizontal } from "lucide-react";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT INTERACTIF — hover/focus/pressed via state React
+// ════════════════════════════════════════════════════════════════════
+function BreadcrumbLink({
+  href,
+  onClick,
+  label,
+  icon,
+  isMobile,
+  fontSize,
+  mutedColor,
+  hoverColor,
+  focusColor,
+  children,
+  as = "button",
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const color = hovered || pressed ? hoverColor : mutedColor;
+
+  const baseStyle = {
+    ...TAP_BASE,
+    background: "none",
+    border: "none",
+    color,
+    cursor: "pointer",
+    fontSize,
+    fontWeight: 400,
+    whiteSpace: "nowrap",
+    padding: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: isMobile ? 4 : 6,
+    transition: "color 0.15s, transform 0.1s",
+    textDecoration: "none",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%",
+    fontFamily: "inherit",
+    transform: pressed ? "scale(0.97)" : "scale(1)",
+    ...(focused ? FOCUS_RING(focusColor) : null),
+  };
+
+  const handlers = {
+    onPointerDown: () => setPressed(true),
+    onPointerUp: () => setPressed(false),
+    onPointerLeave: () => {
+      setPressed(false);
+      setHovered(false);
+    },
+    onPointerCancel: () => setPressed(false),
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => setHovered(false),
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+  };
+
+  if (as === "a" && href) {
+    return (
+      <a
+        href={href}
+        onClick={onClick}
+        style={baseStyle}
+        aria-label={`Naviguer vers ${label}`}
+        title={typeof label === "string" ? label : undefined}
+        {...handlers}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={baseStyle}
+      aria-label={`Naviguer vers ${label}`}
+      title={typeof label === "string" ? label : undefined}
+      {...handlers}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// BOUTON HOME — state React
+// ════════════════════════════════════════════════════════════════════
+function HomeButton({ onClick, mutedColor, hoverColor, focusColor, icon }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => {
+        setPressed(false);
+        setHovered(false);
+      }}
+      onPointerCancel={() => setPressed(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        background: "none",
+        border: "none",
+        color: hovered || pressed ? hoverColor : mutedColor,
+        cursor: "pointer",
+        padding: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transition: "color 0.15s, transform 0.1s",
+        flexShrink: 0,
+        transform: pressed ? "scale(0.94)" : "scale(1)",
+        ...(focused ? FOCUS_RING(focusColor) : null),
+      }}
+      aria-label="Retour à l'accueil"
+    >
+      {icon}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export function Breadcrumb({
   items = [],
   onNavigate,
@@ -17,6 +168,7 @@ export function Breadcrumb({
   const mutedColor = dark ? "#94A3B8" : "#64748B";
   const activeColor = dark ? "#F1F5F9" : "#1E293B";
   const hoverColor = dark ? "#CBD5E1" : "#334155";
+  const focusColor = dark ? "#818CF8" : "#4F46E5";
 
   const fontSize = isMobile ? 12 : 14;
   const iconSize = isMobile ? 13 : 14;
@@ -41,26 +193,6 @@ export function Breadcrumb({
     ];
   }
 
-  // ✅ FIX — styles partagés pour les items cliquables
-  const clickableStyle = {
-    background: "none",
-    border: "none",
-    color: mutedColor,
-    cursor: "pointer",
-    fontSize,
-    fontWeight: 400,
-    whiteSpace: "nowrap",
-    padding: 0,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: isMobile ? 4 : 6,
-    transition: "color 0.2s",
-    textDecoration: "none",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    maxWidth: "100%",
-  };
-
   const renderItemContent = (item, isLast) => {
     const clickable = !isLast && (item.onClick || item.href || onNavigate);
     const label = item.label;
@@ -72,13 +204,6 @@ export function Breadcrumb({
       } else if (onNavigate) {
         onNavigate(item.label);
       }
-    };
-
-    const handleMouseEnter = (e) => {
-      if (clickable) e.currentTarget.style.color = hoverColor;
-    };
-    const handleMouseLeave = (e) => {
-      if (clickable) e.currentTarget.style.color = mutedColor;
     };
 
     // Item "…" : non cliquable
@@ -94,12 +219,12 @@ export function Breadcrumb({
           title="Éléments masqués"
           aria-label="Éléments masqués"
         >
-          <MoreHorizontal size={iconSize} />
+          <MoreHorizontal size={iconSize} aria-hidden="true" />
         </span>
       );
     }
 
-    // Dernier élément (non cliquable) — ✅ FIX troncature
+    // Dernier élément (non cliquable) — avec troncature
     if (isLast) {
       return (
         <span
@@ -111,7 +236,6 @@ export function Breadcrumb({
             alignItems: "center",
             gap: isMobile ? 4 : 6,
             fontSize,
-            // ✅ FIX — peut rétrécir et afficher "…" si trop long
             minWidth: 0,
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -121,7 +245,10 @@ export function Breadcrumb({
           title={typeof label === "string" ? label : undefined}
         >
           {item.icon && (
-            <span style={{ display: "inline-flex", flexShrink: 0 }}>
+            <span
+              aria-hidden="true"
+              style={{ display: "inline-flex", flexShrink: 0 }}
+            >
               {item.icon}
             </span>
           )}
@@ -142,7 +269,10 @@ export function Breadcrumb({
     const content = (
       <>
         {item.icon && (
-          <span style={{ display: "inline-flex", flexShrink: 0 }}>
+          <span
+            aria-hidden="true"
+            style={{ display: "inline-flex", flexShrink: 0 }}
+          >
             {item.icon}
           </span>
         )}
@@ -160,34 +290,22 @@ export function Breadcrumb({
       </>
     );
 
-    if (clickable && item.href) {
-      return (
-        <a
-          href={item.href}
-          onClick={handleClick}
-          style={clickableStyle}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          title={typeof label === "string" ? label : undefined}
-        >
-          {content}
-        </a>
-      );
-    }
-
     if (clickable) {
       return (
-        <button
-          type="button"
+        <BreadcrumbLink
+          href={item.href}
           onClick={handleClick}
-          style={clickableStyle}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          aria-label={`Naviguer vers ${label}`}
-          title={typeof label === "string" ? label : undefined}
+          label={label}
+          icon={item.icon}
+          isMobile={isMobile}
+          fontSize={fontSize}
+          mutedColor={mutedColor}
+          hoverColor={hoverColor}
+          focusColor={focusColor}
+          as={item.href ? "a" : "button"}
         >
           {content}
-        </button>
+        </BreadcrumbLink>
       );
     }
 
@@ -216,7 +334,6 @@ export function Breadcrumb({
       aria-label="Fil d'ariane"
       style={{
         marginBottom: isMobile ? 12 : 16,
-        // ✅ FIX — conteneur contraint : pas de débordement horizontal
         overflow: "hidden",
         maxWidth: "100%",
         minWidth: 0,
@@ -229,50 +346,25 @@ export function Breadcrumb({
           gap,
           fontSize,
           color: mutedColor,
-          // ✅ FIX PRINCIPAL — plus de flexWrap → tout sur une seule ligne
           flexWrap: "nowrap",
           listStyle: "none",
           padding: 0,
           margin: 0,
-          // ✅ FIX — contraint pour permettre la troncature des enfants
           overflow: "hidden",
           minWidth: 0,
           maxWidth: "100%",
         }}
       >
         {/* Accueil — jamais tronqué */}
-        <li
-          style={{
-            display: "flex",
-            alignItems: "center",
-            flexShrink: 0,
-          }}
-        >
+        <li style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           {onNavigateHome ? (
-            <button
-              type="button"
+            <HomeButton
               onClick={onNavigateHome}
-              style={{
-                background: "none",
-                border: "none",
-                color: mutedColor,
-                cursor: "pointer",
-                padding: 0,
-                display: "inline-flex",
-                alignItems: "center",
-                transition: "color 0.2s",
-                flexShrink: 0,
-              }}
-              aria-label="Retour à l'accueil"
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.color = hoverColor)
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.color = mutedColor)
-              }
-            >
-              {homeIcon}
-            </button>
+              mutedColor={mutedColor}
+              hoverColor={hoverColor}
+              focusColor={focusColor}
+              icon={homeIcon}
+            />
           ) : (
             <span
               style={{
@@ -281,6 +373,7 @@ export function Breadcrumb({
                 color: mutedColor,
                 flexShrink: 0,
               }}
+              aria-hidden="true"
             >
               {homeIcon}
             </span>
@@ -296,7 +389,6 @@ export function Breadcrumb({
                 display: "flex",
                 alignItems: "center",
                 gap,
-                // ✅ FIX — séparateurs jamais tronqués
                 minWidth: 0,
                 flexShrink: isLast ? 1 : 0,
                 overflow: "hidden",

@@ -12,7 +12,21 @@ import {
 } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES module-level (injectés UNE SEULE FOIS)
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
 // ════════════════════════════════════════════════════════════════════
 const AbsencesEnfantKeyframes = (
   <style>{`
@@ -110,29 +124,60 @@ function formatDateLabel(dateStr) {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// PRESSABLE — feedback tap + focus ring via state React
+// ════════════════════════════════════════════════════════════════════
+function Pressable({
+  onClick, style, children, disabled = false, type = "button",
+  focusColor, ariaLabel, ariaBusy, ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      aria-busy={ariaBusy}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed && !disabled ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.2s, border-color 0.2s, box-shadow 0.2s",
+        ...(focused && !disabled && focusColor ? FOCUS_RING(focusColor) : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // MODAL JUSTIFICATIF
 // ════════════════════════════════════════════════════════════════════
 function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
   const [texte, setTexte] = useState("");
   const textareaRef = useRef(null);
 
-  // ✅ Reset du texte à chaque ouverture
   useEffect(() => {
     if (open) {
       setTexte("");
-      // Focus automatique après animation
       const t = setTimeout(() => textareaRef.current?.focus(), 200);
       return () => clearTimeout(t);
     }
   }, [open]);
 
-  // ✅ Fermeture sur Escape
   useEffect(() => {
     if (!open) return;
     const handleKey = (e) => {
-      if (e.key === "Escape" && !sending) {
-        onClose();
-      }
+      if (e.key === "Escape" && !sending) onClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -159,15 +204,14 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
     <>
       {isMobile && (
         <div
+          aria-hidden="true"
           style={{
             width: 40,
             height: 8,
             borderRadius: 4,
             background: tokens.border,
             margin: "0 auto 14px",
-            cursor: "grab",
           }}
-          aria-hidden="true"
         />
       )}
 
@@ -181,6 +225,7 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <div
+            aria-hidden="true"
             style={{
               width: 32,
               height: 32,
@@ -192,7 +237,6 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
               color: tokens.primary,
               flexShrink: 0,
             }}
-            aria-hidden="true"
           >
             <MessageSquare size={16} />
           </div>
@@ -208,24 +252,28 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
             Justifier l'absence
           </h3>
         </div>
-        <button
-          type="button"
+        <Pressable
           onClick={handleClose}
           disabled={sending}
+          focusColor={tokens.primary}
+          ariaLabel="Fermer"
           style={{
             background: "none",
             border: "none",
             cursor: sending ? "not-allowed" : "pointer",
             color: tokens.textMuted,
-            padding: 6,
+            padding: 8,
+            minWidth: 44,
+            minHeight: 44,
             borderRadius: 8,
             display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             opacity: sending ? 0.5 : 1,
           }}
-          aria-label="Fermer"
         >
-          <X size={22} />
-        </button>
+          <X size={22} aria-hidden="true" />
+        </Pressable>
       </div>
 
       <label
@@ -250,6 +298,7 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
         placeholder="Ex : Certificat médical fourni le 15/09…"
         rows={isMobile ? 4 : 3}
         disabled={sending}
+        enterKeyHint="done"
         style={{
           width: "100%",
           padding: "12px 14px",
@@ -287,10 +336,10 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
           flexDirection: isMobile ? "column" : "row",
         }}
       >
-        <button
-          type="button"
+        <Pressable
           onClick={handleClose}
           disabled={sending}
+          focusColor={tokens.primary}
           style={{
             flex: isMobile ? "none" : 1,
             padding: isMobile ? "14px 16px" : "12px 16px",
@@ -303,15 +352,15 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
             fontSize: 14,
             order: isMobile ? 2 : 1,
             opacity: sending ? 0.6 : 1,
-            minHeight: 48,
           }}
         >
           Annuler
-        </button>
-        <button
-          type="button"
+        </Pressable>
+        <Pressable
           onClick={handleSubmit}
           disabled={sending || !texte.trim()}
+          focusColor={tokens.primary}
+          ariaBusy={sending}
           style={{
             flex: isMobile ? "none" : 2,
             padding: isMobile ? "14px 18px" : "12px 18px",
@@ -330,28 +379,23 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
             gap: 8,
             fontSize: 14,
             order: isMobile ? 1 : 2,
-            minHeight: 48,
             boxShadow:
               sending || !texte.trim()
                 ? "none"
                 : "0 6px 18px rgba(79,70,229,0.3)",
-            transition: "background 0.15s ease, box-shadow 0.15s ease",
           }}
         >
           {sending ? (
-            <Loader size={16} className="ae-spin" />
+            <Loader size={16} className="ae-spin" role="status" aria-label="Envoi en cours" />
           ) : (
-            <Send size={16} />
+            <Send size={16} aria-hidden="true" />
           )}
           {sending ? "Envoi…" : "Envoyer le justificatif"}
-        </button>
+        </Pressable>
       </div>
     </>
   );
 
-  // ════════════════════════════════════════════════════════════════
-  // RENDU MOBILE (bottom sheet)
-  // ════════════════════════════════════════════════════════════════
   if (isMobile) {
     return (
       <>
@@ -359,13 +403,11 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
         <div
           onClick={handleClose}
           className="ae-fade-in"
+          aria-hidden="true"
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
             zIndex: 1300,
           }}
-          aria-hidden="true"
         />
         <div
           role="dialog"
@@ -373,17 +415,13 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
           aria-labelledby="justif-modal-title"
           className="ae-slide-up"
           style={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            bottom: 0,
+            position: "fixed", left: 0, right: 0, bottom: 0,
             background: tokens.surface,
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
+            borderTopLeftRadius: 20, borderTopRightRadius: 20,
             padding: "12px 16px calc(24px + env(safe-area-inset-bottom, 0px))",
-            zIndex: 1301,
-            maxHeight: "90vh",
-            overflowY: "auto",
+            zIndex: 1301, maxHeight: "90vh", overflowY: "auto",
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
             boxShadow: "0 -8px 30px rgba(0,0,0,0.25)",
           }}
         >
@@ -393,9 +431,6 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
     );
   }
 
-  // ════════════════════════════════════════════════════════════════
-  // RENDU DESKTOP (centered modal)
-  // ════════════════════════════════════════════════════════════════
   return (
     <>
       {AbsencesEnfantKeyframes}
@@ -403,14 +438,9 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
         onClick={handleClose}
         className="ae-fade-in"
         style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1300,
-          padding: 16,
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 1300, padding: 16,
         }}
       >
         <div
@@ -420,12 +450,12 @@ function JustifModal({ open, onClose, onSubmit, sending, tokens, isMobile }) {
           onClick={(e) => e.stopPropagation()}
           style={{
             background: tokens.surface,
-            borderRadius: 16,
-            padding: 24,
-            width: "100%",
-            maxWidth: 480,
+            borderRadius: 16, padding: 24,
+            width: "100%", maxWidth: 480,
             boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
             border: `1px solid ${tokens.border}`,
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
           }}
         >
           {content}
@@ -449,27 +479,27 @@ function AbsenceCard({ abs, tokens, isMobile, onJustifier }) {
     ? {
         bg: tokens.successSoft,
         color: tokens.success,
-        icon: <CheckCircle size={11} />,
+        icon: <CheckCircle size={11} aria-hidden="true" />,
         label: "Justifiée",
       }
     : estRejetee
     ? {
         bg: tokens.dangerSoft,
         color: tokens.danger,
-        icon: <XCircle size={11} />,
+        icon: <XCircle size={11} aria-hidden="true" />,
         label: "Rejetée",
       }
     : estEnAttente
     ? {
         bg: tokens.infoSoft,
         color: tokens.info,
-        icon: <Clock size={11} />,
+        icon: <Clock size={11} aria-hidden="true" />,
         label: "En attente",
       }
     : {
         bg: tokens.warningSoft,
         color: tokens.warning,
-        icon: <AlertTriangle size={11} />,
+        icon: <AlertTriangle size={11} aria-hidden="true" />,
         label: "Non justifiée",
       };
 
@@ -479,7 +509,7 @@ function AbsenceCard({ abs, tokens, isMobile, onJustifier }) {
       : { bg: tokens.warningSoft, color: tokens.warning, label: "Retard" };
 
   return (
-    <div
+    <article
       style={{
         background: tokens.surface,
         borderRadius: 12,
@@ -510,6 +540,7 @@ function AbsenceCard({ abs, tokens, isMobile, onJustifier }) {
           <Calendar
             size={14}
             color={tokens.primary}
+            aria-hidden="true"
             style={{ flexShrink: 0 }}
           />
           <span
@@ -595,7 +626,11 @@ function AbsenceCard({ abs, tokens, isMobile, onJustifier }) {
             lineHeight: 1.4,
           }}
         >
-          <FileText size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+          <FileText
+            size={13}
+            aria-hidden="true"
+            style={{ flexShrink: 0, marginTop: 1 }}
+          />
           <span style={{ minWidth: 0, overflow: "hidden" }}>
             {abs.justificatif}
           </span>
@@ -603,39 +638,61 @@ function AbsenceCard({ abs, tokens, isMobile, onJustifier }) {
       )}
 
       {canJustify && (
-        <button
-          type="button"
+        <JustifierButton
           onClick={onJustifier}
-          style={{
-            marginTop: 10,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-            padding: isMobile ? "10px 14px" : "8px 14px",
-            background: tokens.primary,
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: isMobile ? 12.5 : 12.5,
-            alignSelf: "flex-start",
-            minHeight: 36,
-            transition: "background 0.15s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = tokens.primaryHover;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = tokens.primary;
-          }}
-        >
-          <Send size={13} />
-          {estRejetee ? "Soumettre à nouveau" : "Justifier"}
-        </button>
+          isMobile={isMobile}
+          tokens={tokens}
+          estRejetee={estRejetee}
+        />
       )}
-    </div>
+    </article>
+  );
+}
+
+// ✅ Extraction du bouton pour state React (avant : manipulation DOM)
+function JustifierButton({ onClick, isMobile, tokens, estRejetee }) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const bg = hovered || pressed ? tokens.primaryHover : tokens.primary;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        marginTop: 10,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        padding: isMobile ? "10px 14px" : "10px 14px",
+        background: bg,
+        color: "white",
+        border: "none",
+        borderRadius: 8,
+        cursor: "pointer",
+        fontWeight: 600,
+        fontSize: 12.5,
+        alignSelf: "flex-start",
+        transform: pressed ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.15s ease",
+        ...(focused ? FOCUS_RING(tokens.primary) : null),
+      }}
+    >
+      <Send size={13} aria-hidden="true" />
+      {estRejetee ? "Soumettre à nouveau" : "Justifier"}
+    </button>
   );
 }
 
@@ -648,7 +705,6 @@ export function AbsencesEnfant({ eleveId, userId }) {
 
   const tokens = useMemo(() => buildTokens(dark), [dark]);
 
-  // ✅ Args stables pour Convex
   const absencesArgs = useMemo(
     () => (eleveId && userId ? { eleveId, userId } : "skip"),
     [eleveId, userId]
@@ -664,9 +720,6 @@ export function AbsencesEnfant({ eleveId, userId }) {
 
   const absences = useMemo(() => absencesRaw ?? [], [absencesRaw]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // SUBMIT
-  // ════════════════════════════════════════════════════════════════════
   const handleSubmitJustif = useCallback(
     async (texte) => {
       setSending(true);
@@ -740,6 +793,8 @@ export function AbsencesEnfant({ eleveId, userId }) {
       <div style={{ marginTop: isMobile ? 12 : 16 }}>
         {header}
         <div
+          role="status"
+          aria-live="polite"
           style={{
             background: tokens.surface,
             borderRadius: 14,
@@ -751,6 +806,7 @@ export function AbsencesEnfant({ eleveId, userId }) {
           }}
         >
           <div
+            aria-hidden="true"
             style={{
               width: 56,
               height: 56,
@@ -761,7 +817,6 @@ export function AbsencesEnfant({ eleveId, userId }) {
               justifyContent: "center",
               margin: "0 auto 12px",
             }}
-            aria-hidden="true"
           >
             <CheckCircle size={26} color={tokens.success} />
           </div>
@@ -798,19 +853,30 @@ export function AbsencesEnfant({ eleveId, userId }) {
     <div style={{ marginTop: isMobile ? 12 : 16 }}>
       {header}
 
-      <div style={{ display: "grid", gap: isMobile ? 8 : 10 }}>
+      <ul
+        role="list"
+        style={{
+          display: "grid",
+          gap: isMobile ? 8 : 10,
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
         {absences.map((a) => (
-          <AbsenceCard
-            key={a._id}
-            abs={a}
-            tokens={tokens}
-            isMobile={isMobile}
-            onJustifier={() => setJustifAbsenceId(a._id)}
-          />
+          <li key={a._id}>
+            <AbsenceCard
+              abs={a}
+              tokens={tokens}
+              isMobile={isMobile}
+              onJustifier={() => setJustifAbsenceId(a._id)}
+            />
+          </li>
         ))}
-      </div>
+      </ul>
 
-      {/* Modal — conditionnellement monté (reset à chaque ouverture) */}
       <JustifModal
         open={justifAbsenceId !== null}
         onClose={handleCloseModal}

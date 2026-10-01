@@ -4,12 +4,15 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { Button, IconButton } from "@/components/ui";
+import { Button, BottomSheet, Fab } from "@/components/ui";
 import toast from "react-hot-toast";
 import {
   Activity, Download, Loader, Search, X, Filter, Calendar,
   Shield, User, School, FileText, ChevronDown, ChevronRight,
+  Settings,
 } from "lucide-react";
+import { RetentionModal } from "./audit/RetentionModal";
+import { HeatmapCard } from "./audit/HeatmapCard";
 
 // ════════════════════════════════════════════════════════════════
 // CONFIG
@@ -22,31 +25,28 @@ const ACTION_COLORS = {
   create_super_admin: "#10B981",
   add_user: "#10B981",
   approve_user: "#10B981",
-
   modification: "#3B82F6",
   update: "#3B82F6",
   update_user: "#3B82F6",
   update_role: "#3B82F6",
   update_super_admin_permissions: "#3B82F6",
+  update_audit_retention: "#3B82F6",
   suspend_ecole: "#F59E0B",
   reactivate_ecole: "#3B82F6",
-
   suppression: "#EF4444",
   delete: "#EF4444",
   delete_ecole: "#EF4444",
   delete_user: "#EF4444",
   delete_super_admin: "#EF4444",
   reject_user: "#EF4444",
-
   activation: "#10B981",
   desactivation: "#F59E0B",
-
   change_password: "#8B5CF6",
   send_to_all_parents: "#06B6D4",
+  purge_audit: "#EF4444",
 };
 
-const getActionColor = (action) =>
-  ACTION_COLORS[action] ?? "#64748B";
+const getActionColor = (action) => ACTION_COLORS[action] ?? "#64748B";
 
 const getActionLabel = (action) => {
   const labels = {
@@ -64,7 +64,9 @@ const getActionLabel = (action) => {
     reject_user: "Rejet utilisateur",
     change_password: "Changement mot de passe",
     update_role: "Changement de rôle",
+    update_audit_retention: "MAJ rétention audit",
     send_to_all_parents: "Message à tous les parents",
+    purge_audit: "Purge audit",
     creation: "Création",
     modification: "Modification",
     suppression: "Suppression",
@@ -86,18 +88,8 @@ const formatDate = (iso) => {
   });
 };
 
-const formatDateShort = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-};
-
 // ════════════════════════════════════════════════════════════════
-// KPI Card (inline, pas de dépendance)
+// KPI Card
 // ════════════════════════════════════════════════════════════════
 function KpiCard({ icon: Icon, label, value, color, footer }) {
   const t = useTokens();
@@ -178,10 +170,17 @@ export function AuditSection({ userId }) {
   const [filtreDateDebut, setFiltreDateDebut] = useState("");
   const [filtreDateFin, setFiltreDateFin] = useState("");
   const [recherche, setRecherche] = useState("");
+  const [filtreAuteur, setFiltreAuteur] = useState("");
   const [showFiltres, setShowFiltres] = useState(!isMobile);
 
   // Détail dépliable
   const [expandedId, setExpandedId] = useState(null);
+
+  // Rétention
+  const [retentionOpen, setRetentionOpen] = useState(false);
+
+  // ✨ NOUVEAU — Bottom Sheet filtres mobile
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // ─── Queries ─────────────────────────────────────
   const listArgs = useMemo(
@@ -196,15 +195,26 @@ export function AuditSection({ userId }) {
         ? new Date(filtreDateFin).getTime() + 24 * 60 * 60 * 1000 - 1
         : undefined,
       recherche: recherche || undefined,
+      auteurId: filtreAuteur || undefined,
       limit: 500,
     }),
-    [userId, filtreAction, filtreEcole, filtreDateDebut, filtreDateFin, recherche]
+    [
+      userId,
+      filtreAction,
+      filtreEcole,
+      filtreDateDebut,
+      filtreDateFin,
+      recherche,
+      filtreAuteur,
+    ]
   );
 
   const logsRaw = useQuery(api.audit.listAll, listArgs);
   const statsRaw = useQuery(api.audit.stats, { userId });
   const actionsRaw = useQuery(api.audit.listActions, { userId });
   const ecolesRaw = useQuery(api.audit.listEcoles, { userId });
+  const auteursRaw = useQuery(api.audit.listAuteurs, { userId });
+  const retentionRaw = useQuery(api.audit.getRetention, { userId });
 
   const logs = useMemo(() => logsRaw ?? [], [logsRaw]);
   const stats = statsRaw ?? {
@@ -215,6 +225,8 @@ export function AuditSection({ userId }) {
   };
   const actions = actionsRaw ?? [];
   const ecoles = ecolesRaw ?? [];
+  const auteurs = auteursRaw ?? [];
+  const retention = retentionRaw ?? { retentionDays: null };
 
   // ─── Reset filtres ────────────────────────────────
   const resetFiltres = () => {
@@ -223,10 +235,24 @@ export function AuditSection({ userId }) {
     setFiltreDateDebut("");
     setFiltreDateFin("");
     setRecherche("");
+    setFiltreAuteur("");
   };
 
   const hasFilters =
-    filtreAction || filtreEcole || filtreDateDebut || filtreDateFin || recherche;
+    filtreAction ||
+    filtreEcole ||
+    filtreDateDebut ||
+    filtreDateFin ||
+    recherche ||
+    filtreAuteur;
+
+  const nbFiltresActifs = [
+    filtreAction,
+    filtreEcole,
+    filtreDateDebut,
+    filtreDateFin,
+    filtreAuteur,
+  ].filter(Boolean).length;
 
   // ─── Export Excel ─────────────────────────────────
   const handleExport = async () => {
@@ -254,19 +280,10 @@ export function AuditSection({ userId }) {
 
       const ws = XLSX.utils.json_to_sheet(data);
 
-      // Largeurs de colonnes
       ws["!cols"] = [
-        { wch: 18 }, // Date
-        { wch: 30 }, // Action
-        { wch: 25 }, // Code action
-        { wch: 20 }, // Auteur
-        { wch: 15 }, // Login
-        { wch: 14 }, // Rôle
-        { wch: 25 }, // École
-        { wch: 12 }, // Code école
-        { wch: 18 }, // Table
-        { wch: 24 }, // ID document
-        { wch: 60 }, // Détails
+        { wch: 18 }, { wch: 30 }, { wch: 25 }, { wch: 20 },
+        { wch: 15 }, { wch: 14 }, { wch: 25 }, { wch: 12 },
+        { wch: 18 }, { wch: 24 }, { wch: 60 },
       ];
 
       const wb = XLSX.utils.book_new();
@@ -330,28 +347,29 @@ export function AuditSection({ userId }) {
             Historique complet des actions sensibles (RGPD)
           </p>
         </div>
-        <Button
-          icon={<Download size={16} />}
-          onClick={handleExport}
-          disabled={logs.length === 0}
-        >
-          Export Excel
-        </Button>
+        {/* ✨ Bouton desktop uniquement */}
+        {!isMobile && (
+          <Button
+            icon={<Download size={16} />}
+            onClick={handleExport}
+            disabled={logs.length === 0}
+          >
+            Export Excel
+          </Button>
+        )}
       </div>
 
-      {/* ═══ KPI Grid ═══ */}
+      {/* ═══ KPI Grid (5 cards) ═══ */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)",
+          gridTemplateColumns: isMobile
+            ? "1fr 1fr"
+            : "repeat(auto-fit, minmax(180px, 1fr))",
           gap: t.space.md,
         }}
       >
-        <KpiCard
-          icon={Activity}
-          label="Total logs"
-          value={stats.total}
-        />
+        <KpiCard icon={Activity} label="Total logs" value={stats.total} />
         <KpiCard
           icon={Calendar}
           label="Dernières 24h"
@@ -371,9 +389,93 @@ export function AuditSection({ userId }) {
           color="#8B5CF6"
           footer={hasFilters ? "Filtres actifs" : "Aucun filtre"}
         />
+
+        {/* KPI Rétention — cliquable */}
+        <button
+          type="button"
+          onClick={() => setRetentionOpen(true)}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "block",
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            style={{
+              background: t.surface.elevated,
+              border: `1px solid ${t.border.subtle}`,
+              borderRadius: t.radius.lg,
+              padding: t.space.md,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              transition: "border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = t.accent.primary;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = t.border.subtle;
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: t.font.size.sm,
+                  color: t.text.secondary,
+                  fontWeight: 500,
+                }}
+              >
+                Rétention
+              </span>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: t.radius.sm,
+                  background: `${t.accent.primary}15`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Settings size={16} color={t.accent.primary} />
+              </div>
+            </div>
+            <div
+              style={{
+                fontSize: t.font.size["2xl"],
+                fontWeight: 700,
+                color: t.text.primary,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {retention.retentionDays
+                ? retention.retentionDays >= 365
+                  ? `${Math.floor(retention.retentionDays / 365)} an${
+                      Math.floor(retention.retentionDays / 365) > 1 ? "s" : ""
+                    }`
+                  : `${retention.retentionDays} j`
+                : "∞"}
+            </div>
+            <div style={{ fontSize: t.font.size.xs, color: t.text.secondary }}>
+              Cliquer pour modifier
+            </div>
+          </div>
+        </button>
       </div>
 
-      {/* ═══ Barre de recherche + toggle filtres ═══ */}
+      {/* ═══ Heatmap ═══ */}
+      <HeatmapCard userId={userId} joursRecents={90} />
+
+      {/* ═══ Barre de recherche ═══ */}
       <div
         style={{
           display: "flex",
@@ -429,27 +531,44 @@ export function AuditSection({ userId }) {
           )}
         </div>
 
+        {/* ✨ Bouton Filtres — mobile ouvre BottomSheet, desktop toggle */}
         <button
           type="button"
-          onClick={() => setShowFiltres((v) => !v)}
+          onClick={() => {
+            if (isMobile) {
+              setShowMobileFilters(true);
+            } else {
+              setShowFiltres((v) => !v);
+            }
+          }}
           style={{
             display: "flex",
             alignItems: "center",
             gap: 6,
             padding: "8px 14px",
-            border: `1px solid ${t.border.default}`,
+            border: `1px solid ${
+              hasFilters || showFiltres ? t.accent.primary : t.border.default
+            }`,
             borderRadius: t.radius.sm,
-            background: showFiltres ? `${t.accent.primary}15` : "transparent",
-            color: showFiltres ? t.accent.primary : t.text.secondary,
+            background:
+              hasFilters || showFiltres
+                ? `${t.accent.primary}15`
+                : "transparent",
+            color:
+              hasFilters || showFiltres
+                ? t.accent.primary
+                : t.text.secondary,
             cursor: "pointer",
             fontSize: t.font.size.sm,
             fontWeight: 600,
             fontFamily: t.font.family,
+            flex: isMobile ? 1 : "none",
+            justifyContent: isMobile ? "center" : "flex-start",
           }}
         >
           <Filter size={14} />
           Filtres
-          {hasFilters && (
+          {nbFiltresActifs > 0 && (
             <span
               style={{
                 background: t.accent.primary,
@@ -465,12 +584,12 @@ export function AuditSection({ userId }) {
                 justifyContent: "center",
               }}
             >
-              !
+              {nbFiltresActifs}
             </span>
           )}
         </button>
 
-        {hasFilters && (
+        {hasFilters && !isMobile && (
           <button
             type="button"
             onClick={resetFiltres}
@@ -495,12 +614,12 @@ export function AuditSection({ userId }) {
         )}
       </div>
 
-      {/* ═══ Panneau filtres ═══ */}
-      {showFiltres && (
+      {/* ═══ Panneau filtres DESKTOP uniquement ═══ */}
+      {showFiltres && !isMobile && (
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
+            gridTemplateColumns: "repeat(5, 1fr)",
             gap: t.space.sm,
             padding: t.space.md,
             background: t.surface.elevated,
@@ -576,6 +695,42 @@ export function AuditSection({ userId }) {
                 <option key={e._id} value={e._id}>
                   {e.nom}
                   {e.code ? ` (${e.code})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtre auteur */}
+          <div>
+            <label
+              style={{
+                fontSize: t.font.size.xs,
+                color: t.text.secondary,
+                fontWeight: 600,
+                display: "block",
+                marginBottom: 4,
+              }}
+            >
+              Auteur
+            </label>
+            <select
+              value={filtreAuteur}
+              onChange={(e) => setFiltreAuteur(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: t.radius.sm,
+                border: `1px solid ${t.border.default}`,
+                background: t.surface.input ?? t.surface.default,
+                color: t.text.primary,
+                fontSize: t.font.size.sm,
+                fontFamily: t.font.family,
+              }}
+            >
+              <option value="">Tous les auteurs</option>
+              {auteurs.map((a) => (
+                <option key={a._id} value={a._id}>
+                  {a.nom} ({a.count})
                 </option>
               ))}
             </select>
@@ -689,7 +844,6 @@ export function AuditSection({ userId }) {
                   borderTop: i > 0 ? `1px solid ${t.border.subtle}` : "none",
                 }}
               >
-                {/* Ligne principale */}
                 <button
                   type="button"
                   onClick={() => setExpandedId(expanded ? null : log._id)}
@@ -707,7 +861,6 @@ export function AuditSection({ userId }) {
                     color: t.text.primary,
                   }}
                 >
-                  {/* Chevron */}
                   <div
                     style={{
                       marginTop: 4,
@@ -723,7 +876,6 @@ export function AuditSection({ userId }) {
                     )}
                   </div>
 
-                  {/* Badge action */}
                   <span
                     style={{
                       fontSize: 10,
@@ -742,7 +894,6 @@ export function AuditSection({ userId }) {
                     {getActionLabel(log.action)}
                   </span>
 
-                  {/* Contenu principal */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
@@ -806,7 +957,6 @@ export function AuditSection({ userId }) {
                   </div>
                 </button>
 
-                {/* Détail dépliable */}
                 {expanded && (
                   <div
                     style={{
@@ -823,11 +973,7 @@ export function AuditSection({ userId }) {
                         fontSize: t.font.size.xs,
                       }}
                     >
-                      <DetailField
-                        icon={FileText}
-                        label="Table"
-                        value={log.table}
-                      />
+                      <DetailField icon={FileText} label="Table" value={log.table} />
                       <DetailField
                         icon={FileText}
                         label="ID document"
@@ -868,6 +1014,275 @@ export function AuditSection({ userId }) {
           })}
         </div>
       )}
+
+      {/* ═══ Modal Rétention ═══ */}
+      {retentionOpen && (
+        <RetentionModal
+          userId={userId}
+          currentRetention={retention.retentionDays}
+          onClose={() => setRetentionOpen(false)}
+        />
+      )}
+
+      {/* ✨ NOUVEAU — FAB mobile (extensible : Export / Rétention) */}
+      {isMobile && (
+        <Fab
+          icon={<Settings size={22} />}
+          label="Actions"
+          actions={[
+            {
+              label: "Export Excel",
+              icon: <Download size={14} />,
+              color: "#10B981",
+              onClick: handleExport,
+            },
+            {
+              label: "Configurer rétention",
+              icon: <Settings size={14} />,
+              color: t.accent.primary,
+              onClick: () => setRetentionOpen(true),
+            },
+          ]}
+          bottom={24}
+        />
+      )}
+
+      {/* ✨ NOUVEAU — Bottom Sheet Filtres mobile */}
+      <BottomSheet
+        open={showMobileFilters}
+        onClose={() => setShowMobileFilters(false)}
+        title="Filtres"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Action */}
+          <div>
+            <label
+              style={{
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                color: t.text.primary,
+                display: "block",
+                marginBottom: 6,
+              }}
+            >
+              Action
+            </label>
+            <select
+              value={filtreAction}
+              onChange={(e) => setFiltreAction(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: t.radius.sm,
+                border: `1px solid ${t.border.default}`,
+                background: t.surface.elevated,
+                color: t.text.primary,
+                fontSize: t.font.size.sm,
+                fontFamily: t.font.family,
+              }}
+            >
+              <option value="">Toutes les actions</option>
+              {actions.map((a) => (
+                <option key={a} value={a}>
+                  {getActionLabel(a)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* École */}
+          <div>
+            <label
+              style={{
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                color: t.text.primary,
+                display: "block",
+                marginBottom: 6,
+              }}
+            >
+              École
+            </label>
+            <select
+              value={filtreEcole}
+              onChange={(e) => setFiltreEcole(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: t.radius.sm,
+                border: `1px solid ${t.border.default}`,
+                background: t.surface.elevated,
+                color: t.text.primary,
+                fontSize: t.font.size.sm,
+                fontFamily: t.font.family,
+              }}
+            >
+              <option value="">Toutes les écoles</option>
+              {ecoles.map((e) => (
+                <option key={e._id} value={e._id}>
+                  {e.nom}
+                  {e.code ? ` (${e.code})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Auteur */}
+          <div>
+            <label
+              style={{
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                color: t.text.primary,
+                display: "block",
+                marginBottom: 6,
+              }}
+            >
+              Auteur
+            </label>
+            <select
+              value={filtreAuteur}
+              onChange={(e) => setFiltreAuteur(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: t.radius.sm,
+                border: `1px solid ${t.border.default}`,
+                background: t.surface.elevated,
+                color: t.text.primary,
+                fontSize: t.font.size.sm,
+                fontFamily: t.font.family,
+              }}
+            >
+              <option value="">Tous les auteurs</option>
+              {auteurs.map((a) => (
+                <option key={a._id} value={a._id}>
+                  {a.nom} ({a.count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Dates */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label
+                style={{
+                  fontSize: t.font.size.sm,
+                  fontWeight: 700,
+                  color: t.text.primary,
+                  display: "block",
+                  marginBottom: 6,
+                }}
+              >
+                Du
+              </label>
+              <input
+                type="date"
+                value={filtreDateDebut}
+                onChange={(e) => setFiltreDateDebut(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: t.radius.sm,
+                  border: `1px solid ${t.border.default}`,
+                  background: t.surface.elevated,
+                  color: t.text.primary,
+                  fontSize: t.font.size.sm,
+                  fontFamily: t.font.family,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <label
+                style={{
+                  fontSize: t.font.size.sm,
+                  fontWeight: 700,
+                  color: t.text.primary,
+                  display: "block",
+                  marginBottom: 6,
+                }}
+              >
+                Au
+              </label>
+              <input
+                type="date"
+                value={filtreDateFin}
+                onChange={(e) => setFiltreDateFin(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: t.radius.sm,
+                  border: `1px solid ${t.border.default}`,
+                  background: t.surface.elevated,
+                  color: t.text.primary,
+                  fontSize: t.font.size.sm,
+                  fontFamily: t.font.family,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Info résultats */}
+          <div
+            style={{
+              padding: t.space.sm,
+              background: `${t.accent.primary}08`,
+              border: `1px solid ${t.accent.primary}20`,
+              borderRadius: t.radius.sm,
+              fontSize: t.font.size.xs,
+              color: t.text.secondary,
+              textAlign: "center",
+            }}
+          >
+            {logs.length} log(s) correspondant(s)
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 10 }}>
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFiltres}
+                style={{
+                  flex: 1,
+                  padding: 14,
+                  background: "transparent",
+                  color: "#EF4444",
+                  border: `1px solid ${t.border.default}`,
+                  borderRadius: t.radius.sm,
+                  cursor: "pointer",
+                  fontSize: t.font.size.sm,
+                  fontWeight: 600,
+                  fontFamily: t.font.family,
+                }}
+              >
+                Réinitialiser
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(false)}
+              style={{
+                flex: 1,
+                padding: 14,
+                background: t.accent.primary,
+                color: "#FFFFFF",
+                border: "none",
+                borderRadius: t.radius.sm,
+                cursor: "pointer",
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                fontFamily: t.font.family,
+              }}
+            >
+              Appliquer
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
     </div>
   );
 }

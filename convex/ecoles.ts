@@ -1,9 +1,8 @@
-// convex/ecoles.ts
 import { query, mutation, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
-// ✅ Import : `isSuperAdmin` (large) + `requireOwner` (strict pour mutations one-shot)
 import { isSuperAdmin, requireOwner } from "./helpers/auth";
+import { requireGranularPermission } from "./helpers/permissions"; // ✨
 
 type AnyCtx = MutationCtx | QueryCtx;
 
@@ -762,3 +761,114 @@ function generateSchoolCode(length = 6): string {
   }
   return code;
 }
+
+// ════════════════════════════════════════════════════════════════
+// ✨ EXPORT RGPD
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Export complet des données d'une école (RGPD).
+ * ✨ Permission : ecoles.read (OWNER strict recommandé)
+ */
+export const exportEcoleData = query({
+  args: { userId: v.id("users"), ecoleId: v.id("ecoles") },
+  handler: async (ctx, args) => {
+    await requireGranularPermission(ctx, args.userId, "ecoles.read");
+
+    const ecole = await ctx.db.get(args.ecoleId);
+    if (!ecole) throw new Error("École introuvable");
+
+    const [
+      users,
+      eleves,
+      classes,
+      anneesScolaires,
+      notes,
+      absences,
+      punitions,
+      fautes,
+      sanctions,
+      frais,
+      fraisClasses,
+      cours,
+      examens,
+      emploiDuTemps,
+      messages,
+      abonnements,
+      paiementsAbonnement,
+      auditLogs,
+      ecoleNotes,
+    ] = await Promise.all([
+      ctx.db.query("users").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(2000),
+      ctx.db.query("eleves").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(5000),
+      ctx.db.query("classes").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(500),
+      ctx.db.query("anneesScolaires").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(50),
+      ctx.db.query("notes").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(20000),
+      ctx.db.query("absences").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(5000),
+      ctx.db.query("punitions").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(5000),
+      ctx.db.query("fautes").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(500),
+      ctx.db.query("sanctions").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(500),
+      ctx.db.query("frais").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(5000),
+      ctx.db.query("fraisClasses").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(500),
+      ctx.db.query("cours").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(1000),
+      ctx.db.query("examens").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(1000),
+      ctx.db.query("emploiDuTemps").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(500),
+      ctx.db.query("messages").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(5000),
+      ctx.db.query("abonnements").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(10),
+      ctx.db
+        .query("paiementsAbonnement")
+        .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
+        .take(100),
+      ctx.db.query("audit").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(2000),
+      ctx.db.query("ecoleNotes").withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId)).take(200),
+    ]);
+
+    // Retirer les passwords des users
+    const usersSafe = users.map((u) => {
+      const { password, loginAttempts, lockedUntil, ...safe } = u;
+      return safe;
+    });
+
+    return {
+      metadata: {
+        exportDate: new Date().toISOString(),
+        exportedBy: args.userId,
+        ecoleId: args.ecoleId,
+        ecoleName: ecole.nom,
+        ecoleCode: ecole.code ?? "",
+        version: "1.0",
+        rgpd: true,
+      },
+      ecole,
+      users: usersSafe,
+      eleves,
+      classes,
+      anneesScolaires,
+      notes,
+      absences,
+      punitions,
+      fautes,
+      sanctions,
+      frais,
+      fraisClasses,
+      cours,
+      examens,
+      emploiDuTemps,
+      messages,
+      abonnements,
+      paiementsAbonnement,
+      audit: auditLogs,
+      ecoleNotes,
+      counts: {
+        users: users.length,
+        eleves: eleves.length,
+        classes: classes.length,
+        notes: notes.length,
+        absences: absences.length,
+        punitions: punitions.length,
+        messages: messages.length,
+        audit: auditLogs.length,
+      },
+    };
+  },
+});

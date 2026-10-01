@@ -27,7 +27,15 @@ export const VIEW = {
 const ROLES_AUTORISES_DIFFUSION = ["admin", "directeur", "disciplinaire"];
 
 // ════════════════════════════════════════════════════════════════════
-// ✅ FIX #1 — Base URL dynamique selon le rôle
+// ✨ Détection prefers-reduced-motion
+// ════════════════════════════════════════════════════════════════════
+function getPrefersReducedMotion() {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Base URL dynamique selon le rôle
 // ════════════════════════════════════════════════════════════════════
 function getMessagerieBase(user) {
   const role = user?.role;
@@ -51,7 +59,7 @@ function getMessagerieBase(user) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ✅ FIX #2 — Parse URL générique
+// Parse URL générique
 // ════════════════════════════════════════════════════════════════════
 function parseMessagerieUrl(pathname, base) {
   if (!pathname.startsWith(base)) {
@@ -108,10 +116,10 @@ export function MessagerieApp({ user, ecoleId }) {
 
   const userId = user?._id;
 
-  // ✅ Base URL dérivée du rôle
+  // Base URL dérivée du rôle
   const MESSAGERIE_BASE = useMemo(() => getMessagerieBase(user), [user]);
 
-  // ✅ Parse URL avec la base dynamique
+  // Parse URL avec la base dynamique
   const parsed = useMemo(
     () => parseMessagerieUrl(location.pathname, MESSAGERIE_BASE),
     [location.pathname, MESSAGERIE_BASE]
@@ -120,8 +128,14 @@ export function MessagerieApp({ user, ecoleId }) {
   const selectedUserId = parsed.userId;
   const activeGroupId = parsed.groupId;
 
+  // ✨ Reduced motion (une seule fois)
+  const prefersReducedMotion = useMemo(
+    () => getPrefersReducedMotion(),
+    []
+  );
+
   // ════════════════════════════════════════════════════════════════════
-  // ÉTATS LOCAUX (payload, pas navigation)
+  // ÉTATS LOCAUX
   // ════════════════════════════════════════════════════════════════════
   const [nouveauMessage, setNouveauMessage] = useState("");
   const [piecesJointes, setPiecesJointes] = useState([]);
@@ -130,6 +144,18 @@ export function MessagerieApp({ user, ecoleId }) {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const prevMessagesCountRef = useRef(0);
+  const uploadAbortRef = useRef(null); // ✨ AbortController pour upload
+
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ Cleanup : annuler l'upload en cours au démontage
+  // ════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    return () => {
+      if (uploadAbortRef.current) {
+        uploadAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   // ════════════════════════════════════════════════════════════════════
   // ARGS STABLES
@@ -138,20 +164,23 @@ export function MessagerieApp({ user, ecoleId }) {
     () => (ecoleId && userId ? { ecoleId, userId } : "skip"),
     [ecoleId, userId]
   );
+
   const messagesEnvoyesArgs = useMemo(
-    () => (userId ? { expediteurId: userId } : "skip"),
+    () => (userId ? { expediteurId: userId, userId } : "skip"),
     [userId]
   );
+
   const messagesRecusArgs = useMemo(
-    () => (userId ? { destinataireId: userId } : "skip"),
+    () => (userId ? { destinataireId: userId, userId } : "skip"),
     [userId]
   );
+
   const groupMessagesArgs = useMemo(
     () =>
-      activeGroupId && ecoleId
-        ? { ecoleId, groupeId: activeGroupId }
+      activeGroupId && ecoleId && userId
+        ? { ecoleId, groupeId: activeGroupId, userId }
         : "skip",
-    [activeGroupId, ecoleId]
+    [activeGroupId, ecoleId, userId]
   );
 
   // ════════════════════════════════════════════════════════════════════
@@ -188,12 +217,14 @@ export function MessagerieApp({ user, ecoleId }) {
     [queryGroupMessages]
   );
 
+  // ✨ Loading assoupli : on débloque dès que les 2 requêtes messages
+  // sont prêtes. Les utilisateurs peuvent charger en arrière-plan (noms
+  // affichés progressivement via ConversationList).
   const isLoading =
-    utilisateursQuery === undefined ||
     messagesEnvoyesQuery === undefined ||
     messagesRecusQuery === undefined;
 
-  // ✅ Map pour lookups O(1)
+  // Map pour lookups O(1)
   const usersById = useMemo(() => {
     const m = new Map();
     utilisateurs.forEach((u) => {
@@ -255,24 +286,48 @@ export function MessagerieApp({ user, ecoleId }) {
   // MUTATIONS
   // ════════════════════════════════════════════════════════════════════
   const sendMessage = useMutation(api.messages.send);
-  const markAsRead = useMutation(api.messages.markAsRead);
+  const markConversationAsRead = useMutation(
+    api.messages.markConversationAsRead
+  ); // ✨ NOUVELLE mutation batch
   const uploadFile = useMutation(api.messages.generateUploadUrl);
   const sendGroupMessage = useMutation(api.messages.sendToGroupe);
   const createCall = useMutation(api.appels.createCall);
+  const getStorageUrlMutation = useMutation(api.messages.getStorageUrl);
 
   // ════════════════════════════════════════════════════════════════════
-  // MARK AS READ
+  // ✨ Helper toast (centralisé)
+  // ════════════════════════════════════════════════════════════════════
+  const toastError = useCallback((prefix, err) => {
+    toast.error(`${prefix} : ${err?.message ?? "inconnue"}`);
+  }, []);
+
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ MARK AS READ — 1 mutation batch au lieu de N
   // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
-    if (!selectedUserId) return;
-    const unread = messagesRecus.filter(
+    if (!selectedUserId || !userId) return;
+
+    // On lance la mutation uniquement si au moins 1 message est non lu
+    const hasUnread = messagesRecus.some(
       (m) => m.expediteurId === selectedUserId && !m.lu
     );
-    unread.forEach((m) => markAsRead({ messageId: m._id }));
-  }, [selectedUserId, messagesRecus, markAsRead]);
+    if (!hasUnread) return;
+
+    markConversationAsRead({ userId, expediteurId: selectedUserId }).catch(
+      (err) => {
+        // Silencieux : pas grave si le markAsRead échoue, on réessaiera
+        console.warn("markConversationAsRead failed:", err);
+      }
+    );
+  }, [
+    selectedUserId,
+    messagesRecus,
+    markConversationAsRead,
+    userId,
+  ]);
 
   // ════════════════════════════════════════════════════════════════════
-  // Scroll intelligent
+  // ✨ Scroll intelligent — ✨ FIX : utilise .closest() au lieu de 3× parent
   // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
     const currentCount = messagesConversation.length + groupMessages.length;
@@ -282,23 +337,26 @@ export function MessagerieApp({ user, ecoleId }) {
 
     if (!hasNewMessages) return;
 
-    const container =
-      messagesEndRef.current?.parentElement?.parentElement?.parentElement;
+    // ✨ FIX : robuste via classe CSS (au lieu de parentElement × 3)
+    const container = messagesEndRef.current?.closest(
+      ".pcv-messages, .gcv-messages"
+    );
+
     if (container) {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-      const isNearBottom = distanceFromBottom < 150;
-      if (!isNearBottom) return;
+      // Si l'utilisateur a scrollé vers le haut, on respecte sa position
+      if (distanceFromBottom > 150) return;
     }
 
     const timeoutId = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "end",
       });
     }, 50);
     return () => clearTimeout(timeoutId);
-  }, [messagesConversation, groupMessages]);
+  }, [messagesConversation, groupMessages, prefersReducedMotion]);
 
   // ════════════════════════════════════════════════════════════════════
   // GROUPES
@@ -336,7 +394,7 @@ export function MessagerieApp({ user, ecoleId }) {
   );
 
   // ════════════════════════════════════════════════════════════════════
-  // NAVIGATION (helpers)
+  // NAVIGATION
   // ════════════════════════════════════════════════════════════════════
   const openList = useCallback(
     () => navigate(MESSAGERIE_BASE),
@@ -387,7 +445,7 @@ export function MessagerieApp({ user, ecoleId }) {
       setNouveauMessage("");
       setPiecesJointes([]);
     } catch (err) {
-      toast.error("Erreur d'envoi : " + (err?.message ?? "inconnue"));
+      toastError("Erreur d'envoi", err);
     }
   }, [
     nouveauMessage,
@@ -396,6 +454,7 @@ export function MessagerieApp({ user, ecoleId }) {
     ecoleId,
     userId,
     sendMessage,
+    toastError,
   ]);
 
   const handleSendGroupMessage = useCallback(
@@ -409,38 +468,71 @@ export function MessagerieApp({ user, ecoleId }) {
           groupeId: activeGroupId,
         });
       } catch (err) {
-        toast.error("Erreur : " + (err?.message ?? "inconnue"));
+        toastError("Erreur", err);
       }
     },
-    [ecoleId, userId, activeGroupId, sendGroupMessage]
+    [ecoleId, userId, activeGroupId, sendGroupMessage, toastError]
   );
 
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ FIX UPLOAD — AbortController + storageId + getStorageUrl
+  // ════════════════════════════════════════════════════════════════════
   const handleFileChange = useCallback(
     async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
+
+      // ✨ Annule l'upload précédent s'il y en a un en cours
+      if (uploadAbortRef.current) {
+        uploadAbortRef.current.abort();
+      }
+      uploadAbortRef.current = new AbortController();
+
       setIsUploading(true);
       try {
-        const uploadUrl = await uploadFile({});
+        // 1. Obtenir l'URL d'upload signée
+        const uploadUrl = await uploadFile({ userId });
+
+        // 2. POST du fichier (avec signal d'annulation)
         const result = await fetch(uploadUrl, {
           method: "POST",
           body: file,
           headers: { "Content-Type": file.type },
+          signal: uploadAbortRef.current.signal,
         });
         if (!result.ok) throw new Error("Échec de l'upload");
-        const publicUrl = uploadUrl.split("?")[0];
+
+        // 3. Récupérer le storageId retourné par Convex
+        const { storageId } = await result.json();
+        if (!storageId) throw new Error("storageId manquant");
+
+        // 4. Convertir storageId → URL réelle
+        const { url: realUrl } = await getStorageUrlMutation({
+          storageId,
+          userId,
+        });
+
+        // 5. Stocker
         setPiecesJointes((prev) => [
           ...prev,
-          { nom: file.name, type: file.type, url: publicUrl },
+          {
+            nom: file.name,
+            type: file.type,
+            url: realUrl,
+            storageId,
+          },
         ]);
       } catch (err) {
-        toast.error("Erreur upload : " + (err?.message ?? "inconnue"));
+        // ✨ Ignore silencieusement les AbortError
+        if (err?.name === "AbortError") return;
+        toastError("Erreur upload", err);
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
+        uploadAbortRef.current = null;
       }
     },
-    [uploadFile]
+    [uploadFile, getStorageUrlMutation, userId, toastError]
   );
 
   const handleCallUser = useCallback(
@@ -480,10 +572,41 @@ export function MessagerieApp({ user, ecoleId }) {
   );
 
   // ════════════════════════════════════════════════════════════════════
-  // RENDU : BROADCAST
+  // ✨ Tokens pour MessagingHero (mémoïsé)
   // ════════════════════════════════════════════════════════════════════
+  const heroTokens = useMemo(
+    () => ({
+      text: dark ? "#F1F5F9" : "#1E293B",
+      textMuted: dark ? "#94A3B8" : "#64748B",
+      surface: dark ? "#1E293B" : "#FFFFFF",
+      primary: dark ? "#818CF8" : "#4F46E5",
+      primaryHover: dark ? "#6366F1" : "#4338CA",
+      primarySoft: dark ? "#312E81" : "#EEF2FF",
+      groupBg: dark ? "#4C1D95" : "#EDE9FE",
+      groupFg: dark ? "#C4B5FD" : "#6D28D9",
+    }),
+    [dark]
+  );
+
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ BROADCAST — redirect si accès refusé (au lieu de return null)
+  // ════════════════════════════════════════════════════════════════════
+  const broadcastUnauthorized = useMemo(
+    () =>
+      view === VIEW.BROADCAST &&
+      !ROLES_AUTORISES_DIFFUSION.includes(user?.role),
+    [view, user?.role]
+  );
+
+  useEffect(() => {
+    if (broadcastUnauthorized) {
+      toast.error("Accès refusé");
+      navigate(MESSAGERIE_BASE, { replace: true });
+    }
+  }, [broadcastUnauthorized, navigate, MESSAGERIE_BASE]);
+
   if (view === VIEW.BROADCAST) {
-    if (!ROLES_AUTORISES_DIFFUSION.includes(user?.role)) return null;
+    if (broadcastUnauthorized) return null;
     return (
       <>
         {MessagerieKeyframes}
@@ -513,6 +636,9 @@ export function MessagerieApp({ user, ecoleId }) {
             minHeight: 300,
             background: dark ? "#0F172A" : "#F8FAFC",
           }}
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
         >
           <Loader
             size={32}
@@ -540,10 +666,12 @@ export function MessagerieApp({ user, ecoleId }) {
     <>
       {MessagerieKeyframes}
       <div
+        role="region"
+        aria-label="Messagerie"
         style={{
           display: "flex",
-          height: "100%",
-          minHeight: 0,
+          height: "100dvh",
+          minHeight: "100dvh",
           flex: 1,
           overflow: "hidden",
           background: dark ? "#0F172A" : "#F8FAFC",
@@ -628,23 +756,13 @@ export function MessagerieApp({ user, ecoleId }) {
               />
             ) : (
               !isMobile && (
-                // ✅ FIX — Hero design pour l'empty state desktop
                 <MessagingHero
                   icon={MessageCircle}
                   title="Sélectionnez une conversation"
                   description="Choisissez un contact ou un groupe dans la liste à gauche pour démarrer."
                   size="lg"
                   pulse
-                  tokens={{
-                    text: dark ? "#F1F5F9" : "#1E293B",
-                    textMuted: dark ? "#94A3B8" : "#64748B",
-                    surface: dark ? "#1E293B" : "#FFFFFF",
-                    primary: dark ? "#818CF8" : "#4F46E5",
-                    primaryHover: dark ? "#6366F1" : "#4338CA",
-                    primarySoft: dark ? "#312E81" : "#EEF2FF",
-                    groupBg: dark ? "#4C1D95" : "#EDE9FE",
-                    groupFg: dark ? "#C4B5FD" : "#6D28D9",
-                  }}
+                  tokens={heroTokens}
                   isMobile={isMobile}
                 />
               )

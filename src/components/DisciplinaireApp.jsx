@@ -1,5 +1,6 @@
+// src/components/DisciplinaireApp.jsx
 import { useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Layout } from "./Layout";
 import { ProfilUtilisateur } from "./ProfilUtilisateur";
 import { AccueilDisciplinaire } from "./AccueilDisciplinaire";
@@ -19,23 +20,21 @@ import {
   HelpCircle, FileText, Shield, Calendar,
 } from "lucide-react";
 
-// Onglets qui nécessitent une année active
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES
+// ════════════════════════════════════════════════════════════════════
 const TABS_REQUIRING_YEAR = ["saisir", "absences"];
 
-// ✅ Onglets valides (source de vérité pour valider le param URL)
 const VALID_TABS = [
-  "accueil",
-  "saisir",
-  "historique",
-  "absences",
-  "messagerie",
-  "appels",
-  "profil",
-  "aide",
-  "mentions",
-  "confidentialite",
+  "accueil", "saisir", "historique", "absences", "messagerie",
+  "appels", "profil", "aide", "mentions", "confidentialite",
 ];
 
+const TABS_FULL_HEIGHT = ["messagerie", "appels"];
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT
+// ════════════════════════════════════════════════════════════════════
 export function DisciplinaireApp({
   user,
   ecoleId,
@@ -52,15 +51,15 @@ export function DisciplinaireApp({
 }) {
   const isMobile = useIsMobile();
 
-  // ========== URL ROUTING ==========
-  // ✅ Source de vérité = URL (React Router), pas Zustand
-  const { tab: tabParam } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const tab = useMemo(
-    () => (VALID_TABS.includes(tabParam) ? tabParam : "accueil"),
-    [tabParam]
-  );
+  // ✅ Extrait le tab depuis le pathname (ex: /disciplinaire/saisir → "saisir")
+  const tab = useMemo(() => {
+    const parts = location.pathname.split("/").filter(Boolean);
+    const candidate = parts[1];
+    return VALID_TABS.includes(candidate) ? candidate : "accueil";
+  }, [location.pathname]);
 
   const setTab = useCallback(
     (newTab) => {
@@ -71,22 +70,22 @@ export function DisciplinaireApp({
     [navigate]
   );
 
-  // ✅ messagingContactId reste en Zustand
-  const messagingContactId = useAppStore((state) => state.messagingContactId);
   const setMessagingContactId = useAppStore(
     (state) => state.setMessagingContactId
   );
 
-  // ✅ Handler mémoïsé
   const handleNavigateToMessaging = useCallback(
     (contactId) => {
       setMessagingContactId(contactId);
-      setTab("messagerie");
+      if (contactId) {
+        navigate(`/disciplinaire/messagerie/chat/${contactId}`);
+      } else {
+        navigate("/disciplinaire/messagerie");
+      }
     },
-    [setMessagingContactId, setTab]
+    [setMessagingContactId, navigate]
   );
 
-  // ✅ Simplifié
   const nbPunitions = useMemo(() => punitions?.length ?? 0, [punitions]);
 
   const loading =
@@ -102,7 +101,6 @@ export function DisciplinaireApp({
   const tabNeedsYear = TABS_REQUIRING_YEAR.includes(tab);
   const showBanner = !anneeId && !tabNeedsYear;
 
-  // ✅ Menu mémoïsé
   const menu = useMemo(
     () => [
       { id: "accueil", label: "Tableau de bord", icon: <Home size={20} /> },
@@ -124,7 +122,7 @@ export function DisciplinaireApp({
     [nbPunitions]
   );
 
-  // ==================== GUARD : session invalide ====================
+  // ─── GUARD : session invalide ───
   if (!user) {
     return (
       <Layout
@@ -149,7 +147,7 @@ export function DisciplinaireApp({
     );
   }
 
-  // ==================== LOADING ====================
+  // ─── LOADING ───
   if (loading) {
     return (
       <Layout
@@ -175,9 +173,8 @@ export function DisciplinaireApp({
     );
   }
 
-  // ==================== RENDU CONTENU ====================
+  // ─── RENDU CONTENU ───
   const renderContent = () => {
-    // Message complet pour les onglets qui nécessitent une année
     if (!anneeId && tabNeedsYear) {
       return (
         <div
@@ -200,7 +197,7 @@ export function DisciplinaireApp({
               margin: "0 auto 16px",
             }}
           >
-            <Calendar size={30} color={warning} />
+            <Calendar size={30} color={warning} aria-hidden="true" />
           </div>
           <h2
             style={{
@@ -275,13 +272,7 @@ export function DisciplinaireApp({
         );
 
       case "messagerie":
-        return (
-          <MessagerieApp
-            user={user}
-            ecoleId={ecoleId}
-            initialSelectedUserId={messagingContactId}
-          />
-        );
+        return <MessagerieApp user={user} ecoleId={ecoleId} />;
 
       case "appels":
         return (
@@ -306,7 +297,6 @@ export function DisciplinaireApp({
         return <Aide user={user} />;
 
       default:
-        // Fallback : onglet inconnu → accueil
         return (
           <AccueilDisciplinaire
             user={user}
@@ -317,7 +307,9 @@ export function DisciplinaireApp({
     }
   };
 
-  // ==================== RENDU PRINCIPAL ====================
+  const needsFullHeight = TABS_FULL_HEIGHT.includes(tab);
+
+  // ─── RENDU PRINCIPAL ───
   return (
     <Layout
       menu={menu}
@@ -328,30 +320,46 @@ export function DisciplinaireApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {showBanner && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: warningBg,
-            color: warningText,
-            padding: isMobile ? "10px 12px" : "10px 16px",
-            fontSize: isMobile ? 12 : 13,
-            fontWeight: 500,
-            borderRadius: 10,
-            marginBottom: isMobile ? 12 : 16,
-            lineHeight: 1.4,
-          }}
-        >
-          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
-          <span>
-            Aucune année scolaire active. La saisie de punitions et d'absences
-            est désactivée.
-          </span>
-        </div>
-      )}
-      {renderContent()}
+      <div
+        style={
+          needsFullHeight
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                height: "100%",
+                width: "100%",
+                overflow: "hidden",
+              }
+            : undefined
+        }
+      >
+        {showBanner && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: warningBg,
+              color: warningText,
+              padding: isMobile ? "10px 12px" : "10px 16px",
+              fontSize: isMobile ? 12 : 13,
+              fontWeight: 500,
+              borderRadius: 10,
+              marginBottom: isMobile ? 12 : 16,
+              lineHeight: 1.4,
+            }}
+          >
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} aria-hidden="true" />
+            <span>
+              Aucune année scolaire active. La saisie de punitions et d'absences
+              est désactivée.
+            </span>
+          </div>
+        )}
+        {renderContent()}
+      </div>
     </Layout>
   );
 }

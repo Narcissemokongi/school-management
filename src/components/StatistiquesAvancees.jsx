@@ -1,4 +1,5 @@
-import { useState } from "react";
+// src/components/StatistiquesAvancees.jsx
+import { useState, useMemo, useCallback, useId } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -9,13 +10,110 @@ import {
 } from "recharts";
 import { School, TrendingUp, BarChart3, Loader } from "lucide-react";
 
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL (rendus UNE fois)
+// ════════════════════════════════════════════════════════════════════
+const StatistiquesAvanceesKeyframes = (
+  <style>{`
+    @keyframes sxa-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .sxa-animate-spin { animation: sxa-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .sxa-animate-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// PRESSABLE — feedback tap + focus ring via state React
+// ════════════════════════════════════════════════════════════════════
+function Pressable({
+  onClick, style, children, disabled = false, type = "button",
+  focusColor, ariaLabel, role, ariaSelected, ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      role={role}
+      aria-selected={ariaSelected}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed && !disabled ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.2s, color 0.2s",
+        ...(focused && !disabled && focusColor ? FOCUS_RING(focusColor) : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TOOLTIP RECHARTS (custom)
+// ════════════════════════════════════════════════════════════════════
+function CustomTooltip({ active, payload, label, colors }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div
+      style={{
+        background: colors.tooltipBg,
+        border: `1px solid ${colors.tooltipBorder}`,
+        borderRadius: 8,
+        padding: "8px 12px",
+        color: colors.textPrimary,
+      }}
+    >
+      <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>
+      {payload.map((p) => (
+        <p key={p.dataKey ?? p.name} style={{ margin: 0, fontVariantNumeric: "tabular-nums" }}>
+          {p.name} : {p.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export function StatistiquesAvancees({
   ecoleId,
   anneeId,
-  anneeActive,   // NOUVEAU : permet d'afficher le nom plutôt que l'ID
+  anneeActive,
   classes,
   annees,
-  user,          // NOUVEAU : userId requis par toutes les queries
+  user,
 }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -24,9 +122,17 @@ export function StatistiquesAvancees({
   const [selectedClasse, setSelectedClasse] = useState("");
   const [seuil, setSeuil] = useState(50);
 
+  // IDs stables pour aria-labelledby
+  const tauxPanelId = useId();
+  const evolutionPanelId = useId();
+  const comparaisonPanelId = useId();
+  const titreTauxId = useId();
+  const titreEvoId = useId();
+  const titreCompId = useId();
+
   const userId = user?._id;
 
-  // ===== Requêtes (userId obligatoire + pas de ?? [] qui masque le loading) =====
+  // ===== Requêtes =====
   const shouldFetchTaux = Boolean(
     tab === "taux" && selectedClasse && ecoleId && anneeId && userId
   );
@@ -59,37 +165,59 @@ export function StatistiquesAvancees({
     shouldFetchComp ? { ecoleId, anneeId, userId } : "skip"
   );
 
-  // Fallbacks pour le rendu
-  const tauxReussite = tauxReussiteRaw ?? [];
-  const evolution = evolutionRaw ?? [];
-  const comparaison = comparaisonRaw ?? [];
+  const tauxReussite = useMemo(() => tauxReussiteRaw ?? [], [tauxReussiteRaw]);
+  const evolution = useMemo(() => evolutionRaw ?? [], [evolutionRaw]);
+  const comparaison = useMemo(() => comparaisonRaw ?? [], [comparaisonRaw]);
 
-  // ===== Loading correct : undefined = encore en cours =====
   const isLoading =
     (shouldFetchTaux && tauxReussiteRaw === undefined) ||
     (shouldFetchEvo && evolutionRaw === undefined) ||
     (shouldFetchComp && comparaisonRaw === undefined);
 
-  // Couleurs adaptatives
-  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
-  const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const inputBg = dark ? "#0F172A" : "#F9FAFB";
-  const inputText = dark ? "#F1F5F9" : "#1E293B";
-  const accent = dark ? "#818CF8" : "#4F46E5";
-  const success = dark ? "#34D399" : "#10B981";
-  const gridStroke = dark ? "#334155" : "#E2E8F0";
-  const axisStroke = dark ? "#94A3B8" : "#64748B";
-  const tooltipBg = dark ? "#0F172A" : "white";
-  const tooltipBorder = dark ? "#334155" : "#E2E8F0";
+  // ===== Couleurs (mémoïsées) =====
+  const colors = useMemo(() => ({
+    textPrimary: dark ? "#F1F5F9" : "#1E293B",
+    textSecondary: dark ? "#94A3B8" : "#64748B",
+    cardBg: dark ? "#1E293B" : "#FFFFFF",
+    cardBorder: dark ? "#334155" : "#E2E8F0",
+    inputBg: dark ? "#0F172A" : "#F9FAFB",
+    inputText: dark ? "#F1F5F9" : "#1E293B",
+    accent: dark ? "#818CF8" : "#4F46E5",
+    success: dark ? "#34D399" : "#10B981",
+    gridStroke: dark ? "#334155" : "#E2E8F0",
+    axisStroke: dark ? "#94A3B8" : "#64748B",
+    tooltipBg: dark ? "#0F172A" : "white",
+    tooltipBorder: dark ? "#334155" : "#E2E8F0",
+    shadow: dark
+      ? "0 1px 3px rgba(0,0,0,0.3)"
+      : "0 1px 3px rgba(0,0,0,0.05)",
+  }), [dark]);
 
-  // Styles adaptatifs
+  const {
+    textPrimary, textSecondary, cardBg, cardBorder, inputBg, inputText,
+    accent, success, gridStroke, axisStroke, shadow,
+  } = colors;
+
+  // ===== Handlers =====
+  const handleTabChange = useCallback((newTab) => {
+    setTab(newTab);
+  }, []);
+
+  const handleClasseChange = useCallback((e) => {
+    setSelectedClasse(e.target.value);
+  }, []);
+
+  const handleSeuilChange = useCallback((e) => {
+    const v = Number(e.target.value);
+    if (Number.isNaN(v)) return;
+    setSeuil(Math.min(100, Math.max(0, v)));
+  }, []);
+
+  // ===== Styles adaptatifs =====
   const containerPadding = isMobile ? "16px 12px" : "24px 16px";
   const titleSize = isMobile ? 22 : 28;
-  const tabButtonPadding = isMobile ? "8px 12px" : "10px 20px";
-  const tabButtonMarginRight = isMobile ? 4 : 8;
-  const selectPadding = isMobile ? "10px 12px" : "8px 12px";
+  const tabButtonPadding = isMobile ? "10px 12px" : "10px 20px";
+  const selectPadding = isMobile ? "12px 12px" : "10px 12px";
   const selectFontSize = isMobile ? 16 : 14;
   const graphHeight = isMobile ? 250 : 300;
   const cardPadding = isMobile ? 16 : 24;
@@ -101,60 +229,46 @@ export function StatistiquesAvancees({
     display: "flex",
     gap: isMobile ? 4 : 8,
     marginBottom: isMobile ? 16 : 24,
-    flexWrap: "wrap",
+    flexWrap: isMobile ? "nowrap" : "wrap",
     overflowX: isMobile ? "auto" : "visible",
     whiteSpace: isMobile ? "nowrap" : "normal",
+    scrollbarWidth: "none",
+    ...SCROLL_AREA,
   };
 
-  const tabButton = (active) => ({
-    padding: tabButtonPadding,
-    border: "none",
-    borderRadius: 8,
-    background: active ? accent : "transparent",
-    color: active ? "#fff" : textSecondary,
-    fontWeight: 600,
-    cursor: "pointer",
-    marginRight: tabButtonMarginRight,
-    display: "inline-flex",
-    alignItems: "center",
-    fontSize: 14,
-    flexShrink: 0,
-  });
+  const cardStyle = useMemo(() => ({
+    background: cardBg,
+    borderRadius: 16,
+    padding: cardPadding,
+    boxShadow: shadow,
+    border: `1px solid ${cardBorder}`,
+    ...SCROLL_AREA,
+  }), [cardBg, cardPadding, cardBorder, shadow]);
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (!active || !payload?.length) return null;
-    return (
-      <div
-        style={{
-          background: tooltipBg,
-          border: `1px solid ${tooltipBorder}`,
-          borderRadius: 8,
-          padding: "8px 12px",
-          color: textPrimary,
-        }}
-      >
-        <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>
-        {payload.map((p) => (
-          <p key={p.dataKey ?? p.name} style={{ margin: 0 }}>
-            {p.name} : {p.value}
-          </p>
-        ))}
-      </div>
-    );
-  };
+  // ===== Panels =====
+  const panels = [
+    { id: "taux", label: "Taux de réussite", icon: BarChart3, panelId: tauxPanelId },
+    { id: "evolution", label: "Évolution", icon: TrendingUp, panelId: evolutionPanelId },
+    { id: "comparaison", label: "Comparaison classes", icon: School, panelId: comparaisonPanelId },
+  ];
 
-  // Titre du panneau "comparaison" : afficher le nom de l'année si dispo
-  const anneeLabel =
-    anneeActive?.nom ??
-    annees?.find((a) => a._id === anneeId)?.nom ??
-    "";
+  const anneeLabel = useMemo(
+    () =>
+      anneeActive?.nom ??
+      annees?.find((a) => a._id === anneeId)?.nom ??
+      "",
+    [anneeActive, annees, anneeId]
+  );
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: containerPadding }}>
-      <style>{`
-        @keyframes sxa-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .sxa-animate-spin { animation: sxa-spin 1s linear infinite; }
-      `}</style>
+    <div
+      style={{
+        maxWidth: 1280,
+        margin: "0 auto",
+        padding: containerPadding,
+      }}
+    >
+      {StatistiquesAvanceesKeyframes}
 
       <h2
         style={{
@@ -167,20 +281,45 @@ export function StatistiquesAvancees({
         Statistiques avancées
       </h2>
 
-      {/* Onglets */}
-      <div style={tabContainerStyle}>
-        <button onClick={() => setTab("taux")} style={tabButton(tab === "taux")}>
-          <BarChart3 size={18} style={{ marginRight: 6 }} /> Taux de réussite
-        </button>
-        <button onClick={() => setTab("evolution")} style={tabButton(tab === "evolution")}>
-          <TrendingUp size={18} style={{ marginRight: 6 }} /> Évolution
-        </button>
-        <button onClick={() => setTab("comparaison")} style={tabButton(tab === "comparaison")}>
-          <School size={18} style={{ marginRight: 6 }} /> Comparaison classes
-        </button>
+      {/* ═══════════ Onglets ═══════════ */}
+      <div
+        role="tablist"
+        aria-label="Sections de statistiques"
+        style={tabContainerStyle}
+      >
+        {panels.map(({ id, label, icon: Icon, panelId }) => {
+          const isActive = tab === id;
+          return (
+            <Pressable
+              key={id}
+              role="tab"
+              ariaSelected={isActive}
+              aria-controls={panelId}
+              onClick={() => handleTabChange(id)}
+              focusColor={accent}
+              style={{
+                padding: tabButtonPadding,
+                border: "none",
+                borderRadius: 8,
+                background: isActive ? accent : "transparent",
+                color: isActive ? "#FFFFFF" : textSecondary,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                fontSize: 14,
+                flexShrink: 0,
+                gap: 6,
+              }}
+            >
+              <Icon size={18} aria-hidden="true" />
+              {label}
+            </Pressable>
+          );
+        })}
       </div>
 
-      {/* Sélecteur de classe (sauf comparaison) */}
+      {/* ═══════════ Filtres ═══════════ */}
       {tab !== "comparaison" && (
         <div
           style={{
@@ -192,10 +331,19 @@ export function StatistiquesAvancees({
             flexDirection: controlsFlexDirection,
           }}
         >
+          <label
+            htmlFor="sxa-classe"
+            style={{ position: "absolute", left: -9999 }}
+          >
+            Choisir une classe
+          </label>
           <select
+            id="sxa-classe"
             value={selectedClasse}
-            onChange={(e) => setSelectedClasse(e.target.value)}
+            onChange={handleClasseChange}
+            aria-label="Choisir une classe"
             style={{
+              ...TAP_BASE,
               padding: selectPadding,
               border: `1px solid ${cardBorder}`,
               borderRadius: 8,
@@ -205,19 +353,19 @@ export function StatistiquesAvancees({
               outline: "none",
               width: isMobile ? "100%" : "auto",
               flex: isMobile ? "none" : 1,
+              fontFamily: "inherit",
+              appearance: "none",
+              WebkitAppearance: "none",
             }}
           >
             <option value="">-- Choisir une classe --</option>
             {classes.map((c) => (
-              <option
-                key={c._id}
-                value={c.nom}
-                style={{ background: dark ? "#1E293B" : "#FFF" }}
-              >
+              <option key={c._id} value={c.nom}>
                 {c.nom}
               </option>
             ))}
           </select>
+
           {tab === "taux" && (
             <div
               style={{
@@ -227,21 +375,35 @@ export function StatistiquesAvancees({
                 width: isMobile ? "100%" : "auto",
               }}
             >
-              <span style={{ color: textSecondary, fontSize: 14 }}>Seuil (%) :</span>
+              <label
+                htmlFor="sxa-seuil"
+                style={{ color: textSecondary, fontSize: 14, whiteSpace: "nowrap" }}
+              >
+                Seuil (%)
+              </label>
               <input
+                id="sxa-seuil"
                 type="number"
+                inputMode="numeric"
+                enterKeyHint="done"
                 value={seuil}
-                onChange={(e) => setSeuil(Number(e.target.value))}
+                onChange={handleSeuilChange}
                 min={0}
                 max={100}
+                aria-label="Seuil de réussite en pourcentage"
                 style={{
-                  width: isMobile ? "100%" : 70,
+                  ...TAP_BASE,
+                  width: isMobile ? "100%" : 80,
                   padding: selectPadding,
                   border: `1px solid ${cardBorder}`,
                   borderRadius: 8,
                   background: inputBg,
                   color: inputText,
                   fontSize: selectFontSize,
+                  outline: "none",
+                  boxSizing: "border-box",
+                  fontFamily: "inherit",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               />
             </div>
@@ -249,27 +411,36 @@ export function StatistiquesAvancees({
         </div>
       )}
 
-      {/* Indicateur de chargement */}
+      {/* ═══════════ Loader ═══════════ */}
       {isLoading && (
-        <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-          <Loader size={32} className="sxa-animate-spin" style={{ color: accent }} />
+        <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+          style={{ display: "flex", justifyContent: "center", padding: 40 }}
+        >
+          <Loader
+            size={32}
+            className="sxa-animate-spin"
+            style={{ color: accent }}
+            aria-hidden="true"
+          />
+          <span style={{ position: "absolute", left: -9999 }}>
+            Chargement des statistiques
+          </span>
         </div>
       )}
 
-      {/* Contenu des onglets */}
+      {/* ═══════════ Panel : Taux de réussite ═══════════ */}
       {!isLoading && tab === "taux" && selectedClasse && (
-        <div
-          style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: cardPadding,
-            boxShadow: dark
-              ? "0 1px 3px rgba(0,0,0,0.3)"
-              : "0 1px 3px rgba(0,0,0,0.05)",
-            border: `1px solid ${cardBorder}`,
-          }}
+        <section
+          id={tauxPanelId}
+          role="tabpanel"
+          aria-labelledby={titreTauxId}
+          style={cardStyle}
         >
           <h3
+            id={titreTauxId}
             style={{
               marginBottom: 16,
               color: textPrimary,
@@ -279,28 +450,35 @@ export function StatistiquesAvancees({
             Taux de réussite par matière (≥ {seuil}%) – {selectedClasse}
           </h3>
           {tauxReussite.length === 0 ? (
-            <p style={{ color: textSecondary }}>Aucune donnée.</p>
+            <p role="status" aria-live="polite" style={{ color: textSecondary }}>
+              Aucune donnée.
+            </p>
           ) : (
             <>
-              <ResponsiveContainer width="100%" height={graphHeight}>
-                <BarChart data={tauxReussite}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                  <XAxis dataKey="matiere" stroke={axisStroke} />
-                  <YAxis unit="%" domain={[0, 100]} stroke={axisStroke} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar
-                    dataKey="tauxReussite"
-                    fill={accent}
-                    radius={[4, 4, 0, 0]}
-                    name="Taux de réussite"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <div
+                role="img"
+                aria-label={`Graphique en barres : taux de réussite par matière pour la classe ${selectedClasse}`}
+              >
+                <ResponsiveContainer width="100%" height={graphHeight}>
+                  <BarChart data={tauxReussite}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="matiere" stroke={axisStroke} />
+                    <YAxis unit="%" domain={[0, 100]} stroke={axisStroke} />
+                    <Tooltip content={<CustomTooltip colors={colors} />} />
+                    <Bar
+                      dataKey="tauxReussite"
+                      fill={accent}
+                      radius={[4, 4, 0, 0]}
+                      name="Taux de réussite"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
               <div
                 style={{
                   overflowX: "auto",
                   marginTop: 20,
-                  WebkitOverflowScrolling: "touch",
+                  ...SCROLL_AREA,
                 }}
               >
                 <table
@@ -311,11 +489,28 @@ export function StatistiquesAvancees({
                     color: textPrimary,
                   }}
                 >
+                  <caption
+                    style={{
+                      position: "absolute",
+                      left: -9999,
+                      width: 1,
+                      height: 1,
+                      overflow: "hidden",
+                    }}
+                  >
+                    Taux de réussite par matière – {selectedClasse}
+                  </caption>
                   <thead>
                     <tr style={{ borderBottom: `2px solid ${cardBorder}` }}>
-                      <th style={{ textAlign: "left", padding: 8 }}>Matière</th>
-                      <th style={{ textAlign: "center", padding: 8 }}>Taux de réussite</th>
-                      <th style={{ textAlign: "center", padding: 8 }}>Nombre d'élèves</th>
+                      <th scope="col" style={{ textAlign: "left", padding: 8 }}>
+                        Matière
+                      </th>
+                      <th scope="col" style={{ textAlign: "center", padding: 8 }}>
+                        Taux de réussite
+                      </th>
+                      <th scope="col" style={{ textAlign: "center", padding: 8 }}>
+                        Nombre d'élèves
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -324,11 +519,28 @@ export function StatistiquesAvancees({
                         key={item.matiere}
                         style={{ borderBottom: `1px solid ${cardBorder}` }}
                       >
-                        <td style={{ padding: 8 }}>{item.matiere}</td>
-                        <td style={{ textAlign: "center", padding: 8 }}>
+                        <th
+                          scope="row"
+                          style={{ padding: 8, textAlign: "left", fontWeight: 400 }}
+                        >
+                          {item.matiere}
+                        </th>
+                        <td
+                          style={{
+                            textAlign: "center",
+                            padding: 8,
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
                           {item.tauxReussite.toFixed(1)}%
                         </td>
-                        <td style={{ textAlign: "center", padding: 8 }}>
+                        <td
+                          style={{
+                            textAlign: "center",
+                            padding: 8,
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
                           {item.nbEleves}
                         </td>
                       </tr>
@@ -338,22 +550,19 @@ export function StatistiquesAvancees({
               </div>
             </>
           )}
-        </div>
+        </section>
       )}
 
+      {/* ═══════════ Panel : Évolution ═══════════ */}
       {!isLoading && tab === "evolution" && selectedClasse && (
-        <div
-          style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: cardPadding,
-            boxShadow: dark
-              ? "0 1px 3px rgba(0,0,0,0.3)"
-              : "0 1px 3px rgba(0,0,0,0.05)",
-            border: `1px solid ${cardBorder}`,
-          }}
+        <section
+          id={evolutionPanelId}
+          role="tabpanel"
+          aria-labelledby={titreEvoId}
+          style={cardStyle}
         >
           <h3
+            id={titreEvoId}
             style={{
               marginBottom: 16,
               color: textPrimary,
@@ -363,41 +572,45 @@ export function StatistiquesAvancees({
             Évolution de la moyenne générale – {selectedClasse}
           </h3>
           {evolution.length === 0 ? (
-            <p style={{ color: textSecondary }}>Pas assez de données.</p>
+            <p role="status" aria-live="polite" style={{ color: textSecondary }}>
+              Pas assez de données.
+            </p>
           ) : (
-            <ResponsiveContainer width="100%" height={graphHeight}>
-              <LineChart data={evolution}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="anneeNom" stroke={axisStroke} />
-                <YAxis domain={[0, 100]} stroke={axisStroke} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="moyenne"
-                  stroke={accent}
-                  strokeWidth={2}
-                  name="Moy. générale (%)"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <div
+              role="img"
+              aria-label={`Graphique linéaire : évolution de la moyenne générale pour la classe ${selectedClasse}`}
+            >
+              <ResponsiveContainer width="100%" height={graphHeight}>
+                <LineChart data={evolution}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="anneeNom" stroke={axisStroke} />
+                  <YAxis domain={[0, 100]} stroke={axisStroke} />
+                  <Tooltip content={<CustomTooltip colors={colors} />} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="moyenne"
+                    stroke={accent}
+                    strokeWidth={2}
+                    name="Moy. générale (%)"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           )}
-        </div>
+        </section>
       )}
 
+      {/* ═══════════ Panel : Comparaison ═══════════ */}
       {!isLoading && tab === "comparaison" && (
-        <div
-          style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: cardPadding,
-            boxShadow: dark
-              ? "0 1px 3px rgba(0,0,0,0.3)"
-              : "0 1px 3px rgba(0,0,0,0.05)",
-            border: `1px solid ${cardBorder}`,
-          }}
+        <section
+          id={comparaisonPanelId}
+          role="tabpanel"
+          aria-labelledby={titreCompId}
+          style={cardStyle}
         >
           <h3
+            id={titreCompId}
             style={{
               marginBottom: 16,
               color: textPrimary,
@@ -407,24 +620,31 @@ export function StatistiquesAvancees({
             Comparaison des classes{anneeLabel ? ` – ${anneeLabel}` : ""}
           </h3>
           {comparaison.length === 0 ? (
-            <p style={{ color: textSecondary }}>Aucune donnée.</p>
+            <p role="status" aria-live="polite" style={{ color: textSecondary }}>
+              Aucune donnée.
+            </p>
           ) : (
-            <ResponsiveContainer width="100%" height={graphHeight}>
-              <BarChart data={comparaison}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="classe" stroke={axisStroke} />
-                <YAxis domain={[0, 100]} stroke={axisStroke} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar
-                  dataKey="moyenne"
-                  fill={success}
-                  radius={[4, 4, 0, 0]}
-                  name="Moy. générale (%)"
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            <div
+              role="img"
+              aria-label={`Graphique en barres : comparaison des moyennes par classe${anneeLabel ? ` pour l'année ${anneeLabel}` : ""}`}
+            >
+              <ResponsiveContainer width="100%" height={graphHeight}>
+                <BarChart data={comparaison}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="classe" stroke={axisStroke} />
+                  <YAxis domain={[0, 100]} stroke={axisStroke} />
+                  <Tooltip content={<CustomTooltip colors={colors} />} />
+                  <Bar
+                    dataKey="moyenne"
+                    fill={success}
+                    radius={[4, 4, 0, 0]}
+                    name="Moy. générale (%)"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
-        </div>
+        </section>
       )}
     </div>
   );

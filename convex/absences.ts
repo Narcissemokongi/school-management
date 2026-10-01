@@ -1,3 +1,4 @@
+// convex/absences.ts
 import { query, mutation, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
@@ -88,6 +89,7 @@ async function loadEleveMap(ctx: AnyCtx, eleveIds: Id<"eleves">[]) {
 /**
  * 🔴 FIX : `userId` optionnel + cloisonnement école.
  * 🟢 FIX : `.take()`.
+ * ✅ FIX ÉLÈVE : l'élève peut voir ses propres absences (via eleve.userId).
  */
 export const listByEleve = query({
   args: {
@@ -105,13 +107,27 @@ export const listByEleve = query({
       if (!eleve) throw new Error("Élève introuvable");
 
       if (!isSuperAdmin(caller)) {
-        // Parent de cet élève OU staff de l'école
-        const isParent = (eleve as any).parentId === args.userId;
-        const isStaff =
-          caller.ecoleId === (eleve as any).ecoleId &&
-          ["admin", "directeur", "disciplinaire", "enseignant"].includes(caller.role);
+        const eleveData = eleve as any;
 
-        if (!isParent && !isStaff) {
+        // ✅ FIX — L'élève voit ses propres absences
+        //    Le lien user ↔ eleve est : eleves.userId === users._id
+        //    (confirmé par EleveApp.jsx : api.eleves.getByUserId)
+        const isSelfEleve =
+          caller.role === "eleve" &&
+          eleveData.userId === args.userId;
+
+        // Parent legacy (au cas où le champ eleve.parentId existe encore)
+        const isParent = eleveData.parentId === args.userId;
+
+        // Staff école (admin, directeur, disciplinaire, enseignant)
+        const isStaff =
+          caller.ecoleId === eleveData.ecoleId &&
+          ["admin", "directeur", "disciplinaire", "enseignant"].includes(
+            caller.role
+          );
+
+        // 🎯 Autorise : élève lui-même OU parent legacy OU staff
+        if (!isSelfEleve && !isParent && !isStaff) {
           throw new Error("Accès refusé.");
         }
       }

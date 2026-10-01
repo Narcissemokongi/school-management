@@ -119,7 +119,6 @@ export function OverviewTab({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  // ✅ Queries avec args stables
   const recentEcolesRaw = useQuery(
     api.ecoles.listRecent,
     userId ? { userId } : "skip"
@@ -138,7 +137,6 @@ export function OverviewTab({
     recentEcolesRaw === undefined ||
     (userId && recentUsersRaw === undefined);
 
-  // ✅ Tous les useMemo AVANT le early return
   const topEcoles = useMemo(() => {
     return [...(ecolesAvecUsers ?? [])]
       .sort((a, b) => (b.userCount || 0) - (a.userCount || 0))
@@ -222,8 +220,9 @@ export function OverviewTab({
           <div
             style={{
               display: "grid",
+              // ✨ FIX — 2 colonnes mobile
               gridTemplateColumns: isMobile
-                ? "1fr"
+                ? "repeat(2, minmax(0, 1fr))"
                 : "repeat(auto-fit, minmax(200px, 1fr))",
               gap: isMobile ? 8 : 16,
             }}
@@ -261,17 +260,20 @@ export function OverviewTab({
       ? `${(activeEcoles / donutTotal) * donutCircumference} ${donutCircumference}`
       : "0 0";
 
-  const containerPadding = isMobile ? "16px 12px" : "16px 0";
+  // ✨ FIX — padding racine à 0 sur mobile (parent a déjà le sien)
+  const containerPadding = isMobile ? "0" : "16px 0";
   const headerMargin = isMobile ? 20 : 32;
   const sectionPadding = isMobile ? 16 : 24;
   const smallText = isMobile ? 12 : 13;
   const titleSize = isMobile ? 20 : 24;
   const subtitleSize = isMobile ? 13 : 14;
 
+  // ✨ FIX — 2 colonnes de StatCards sur mobile
   const gridMainColumns = isMobile
-    ? "1fr"
+    ? "repeat(2, minmax(0, 1fr))"
     : "repeat(auto-fit, minmax(180px, 1fr))";
   const gridMainGap = isMobile ? 8 : 16;
+
   const twoColumns = isMobile
     ? "1fr"
     : "repeat(auto-fit, minmax(320px, 1fr))";
@@ -693,9 +695,10 @@ export function OverviewTab({
               flexDirection: isMobile ? "column" : "row",
             }}
           >
+            {/* ✨ FIX — Donut plus grand sur mobile */}
             <svg
-              width="120"
-              height="120"
+              width={isMobile ? 140 : 120}
+              height={isMobile ? 140 : 120}
               viewBox="0 0 100 100"
               role="img"
               aria-label={`${activeEcoles} écoles actives, ${suspendedEcoles} suspendues`}

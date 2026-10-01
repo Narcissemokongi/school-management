@@ -1,10 +1,10 @@
 // src/components/Appels.jsx
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import {
   Phone, PhoneOutgoing, MessageCircle, Clock, Video, Users,
-  Search, X, Check, UserPlus, Loader,
+  Search, X, Check, Loader,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useStyles } from "@/styles/theme";
@@ -12,24 +12,24 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { HistoriqueAppels } from "./HistoriqueAppels";
 
 // ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ════════════════════════════════════════════════════════════════════
 // CONSTANTES
 // ════════════════════════════════════════════════════════════════════
 const GROUP_CALL_ALLOWED_ROLES = [
-  "admin",
-  "directeur",
-  "disciplinaire",
-  "enseignant",
+  "admin", "directeur", "disciplinaire", "enseignant",
 ];
 
 const CONTACT_WHITELIST_FOR_STUDENTS = [
-  "admin",
-  "directeur",
-  "disciplinaire",
-  "enseignant",
-  "comptable",
+  "admin", "directeur", "disciplinaire", "enseignant", "comptable",
 ];
 
-// Couleurs sémantiques par rôle
 const ROLE_COLORS = {
   admin: { bg: "#EEF2FF", fg: "#4338CA", darkBg: "#312E81", darkFg: "#A5B4FC" },
   directeur: { bg: "#F3E8FF", fg: "#7E22CE", darkBg: "#581C87", darkFg: "#D8B4FE" },
@@ -40,7 +40,6 @@ const ROLE_COLORS = {
   comptable: { bg: "#CCFBF1", fg: "#0F766E", darkBg: "#134E4A", darkFg: "#5EEAD4" },
 };
 
-// Palette pour avatars (déterministe par nom)
 const AVATAR_PALETTE = [
   "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E",
   "#F59E0B", "#10B981", "#14B8A6", "#3B82F6",
@@ -56,6 +55,9 @@ const ROLE_LABELS = {
   comptable: "Comptable",
   superAdmin: "Super Admin",
 };
+
+// ✨ Taille minimale tap target mobile
+const MOBILE_TAP = 44;
 
 // ════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -77,7 +79,7 @@ function getAvatarColor(nom) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES module-level
+// KEYFRAMES
 // ════════════════════════════════════════════════════════════════════
 const AppelsKeyframes = (
   <style>{`
@@ -117,13 +119,9 @@ const AppelsKeyframes = (
 // SOUS-COMPOSANTS
 // ════════════════════════════════════════════════════════════════════
 
-/** Badge coloré selon le rôle */
 function RoleBadge({ role, dark }) {
   const config = ROLE_COLORS[role] || {
-    bg: "#F1F5F9",
-    fg: "#475569",
-    darkBg: "#334155",
-    darkFg: "#CBD5E1",
+    bg: "#F1F5F9", fg: "#475569", darkBg: "#334155", darkFg: "#CBD5E1",
   };
   return (
     <span
@@ -146,7 +144,6 @@ function RoleBadge({ role, dark }) {
   );
 }
 
-/** Avatar initiale coloré */
 function Avatar({ nom, size = 44 }) {
   const initial = getInitials(nom);
   const bg = getAvatarColor(nom);
@@ -173,7 +170,87 @@ function Avatar({ nom, size = 44 }) {
   );
 }
 
-/** Un contact dans la liste */
+// ════════════════════════════════════════════════════════════════════
+// ICON BUTTON LOCAL — ✨ refactoré avec feedback tap + 44px mobile
+// ════════════════════════════════════════════════════════════════════
+function IconButton({ icon, label, onClick, tokens, variant = "ghost", disabled = false, isMobile }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  // ✨ 44px mobile, 38px desktop
+  const size = isMobile ? MOBILE_TAP : 38;
+
+  const variants = {
+    ghost: {
+      background: pressed
+        ? tokens.ghostHover
+        : hovered && !isMobile && !disabled
+        ? tokens.ghostHover
+        : "transparent",
+      color: tokens.textMuted,
+    },
+    primary: {
+      background: disabled
+        ? tokens.primaryDisabled
+        : pressed
+        ? tokens.primaryHover
+        : hovered && !isMobile
+        ? tokens.primaryHover
+        : tokens.primary,
+      color: "#FFFFFF",
+      boxShadow:
+        (pressed || (hovered && !isMobile)) && !disabled
+          ? "0 2px 8px rgba(79,70,229,0.25)"
+          : "none",
+    },
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onTouchStart={() => !disabled && setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
+      style={{
+        width: size,
+        height: size,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 10,
+        border: "none",
+        cursor: disabled ? "not-allowed" : "pointer",
+        transition:
+          "background 0.12s ease, transform 0.1s ease, box-shadow 0.15s ease",
+        padding: 0,
+        outline: focused ? `2px solid ${tokens.primary}` : "none",
+        outlineOffset: 2,
+        // ✨ Feedback tap
+        transform: pressed && !disabled ? "scale(0.9)" : "scale(1)",
+        // ✨ Neutralise tap delay + flash
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        boxSizing: "border-box",
+        ...variants[variant],
+      }}
+      aria-label={label}
+      title={label}
+    >
+      {icon}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CONTACT ROW
+// ════════════════════════════════════════════════════════════════════
 function ContactRow({
   contact,
   dark,
@@ -188,8 +265,8 @@ function ContactRow({
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
       style={{
         display: "flex",
         alignItems: "center",
@@ -200,6 +277,9 @@ function ContactRow({
         border: `1px solid ${tokens.border}`,
         transition: "background 0.15s ease, border-color 0.15s ease",
         opacity: isBusy ? 0.6 : 1,
+        // ✨ Empêche le débordement
+        minWidth: 0,
+        boxSizing: "border-box",
       }}
     >
       <Avatar nom={contact.nom} size={isMobile ? 40 : 44} />
@@ -221,6 +301,7 @@ function ContactRow({
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
+              minWidth: 0,
             }}
           >
             {contact.nom}
@@ -242,6 +323,7 @@ function ContactRow({
           onClick={() => onMessage(contact._id)}
           tokens={tokens}
           disabled={isBusy}
+          isMobile={isMobile}
         />
         <IconButton
           icon={
@@ -256,6 +338,7 @@ function ContactRow({
           tokens={tokens}
           variant="primary"
           disabled={isBusy}
+          isMobile={isMobile}
         />
         <IconButton
           icon={<Video size={18} />}
@@ -264,73 +347,18 @@ function ContactRow({
           tokens={tokens}
           variant="primary"
           disabled={isBusy}
+          isMobile={isMobile}
         />
       </div>
     </div>
   );
 }
 
-/** Bouton icône carré arrondi */
-function IconButton({ icon, label, onClick, tokens, variant = "ghost", disabled = false }) {
-  const [hovered, setHovered] = useState(false);
-
-  const baseStyle = {
-    width: 38,
-    height: 38,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    border: "none",
-    cursor: disabled ? "not-allowed" : "pointer",
-    transition: "background 0.15s ease, transform 0.1s ease",
-    padding: 0,
-    outline: "none",
-  };
-
-  const variants = {
-    ghost: {
-      background: hovered && !disabled ? tokens.ghostHover : "transparent",
-      color: tokens.textMuted,
-    },
-    primary: {
-      background: disabled
-        ? tokens.primaryDisabled
-        : hovered
-        ? tokens.primaryHover
-        : tokens.primary,
-      color: "#FFFFFF",
-      boxShadow: hovered && !disabled ? "0 2px 8px rgba(79,70,229,0.25)" : "none",
-    },
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={(e) => {
-        e.currentTarget.style.outline = `2px solid ${tokens.primary}`;
-        e.currentTarget.style.outlineOffset = "2px";
-      }}
-      onBlur={(e) => {
-        e.currentTarget.style.outline = "none";
-      }}
-      style={{ ...baseStyle, ...variants[variant] }}
-      aria-label={label}
-      title={label}
-    >
-      {icon}
-    </button>
-  );
-}
-
-/** Skeleton pour un contact en chargement */
 function ContactSkeleton({ tokens, isMobile }) {
+  const btnSize = isMobile ? MOBILE_TAP : 38;
   return (
     <div
+      aria-hidden="true"
       style={{
         display: "flex",
         alignItems: "center",
@@ -366,7 +394,12 @@ function ContactSkeleton({ tokens, isMobile }) {
           <div
             key={i}
             className="app-skeleton"
-            style={{ width: 38, height: 38, borderRadius: 10, color: tokens.skeleton }}
+            style={{
+              width: btnSize,
+              height: btnSize,
+              borderRadius: 10,
+              color: tokens.skeleton,
+            }}
           />
         ))}
       </div>
@@ -374,7 +407,6 @@ function ContactSkeleton({ tokens, isMobile }) {
   );
 }
 
-/** Empty state propre */
 function EmptyState({ icon, title, description, tokens, isMobile }) {
   return (
     <div
@@ -429,14 +461,24 @@ function EmptyState({ icon, title, description, tokens, isMobile }) {
   );
 }
 
-/** Ligne de participant pour l'appel de groupe */
+// ════════════════════════════════════════════════════════════════════
+// PARTICIPANT ROW — ✨ feedback tap + tap target
+// ════════════════════════════════════════════════════════════════════
 function ParticipantRow({ contact, dark, selected, onToggle, tokens, isMobile }) {
   const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const handleTouchStart = () => setPressed(true);
+  const handleTouchEnd = () => setPressed(false);
+  const handleTouchCancel = () => setPressed(false);
 
   return (
     <label
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
       style={{
         display: "flex",
         alignItems: "center",
@@ -445,14 +487,23 @@ function ParticipantRow({ contact, dark, selected, onToggle, tokens, isMobile })
         borderRadius: 10,
         background: selected
           ? tokens.primarySoft
-          : hovered
+          : hovered && !isMobile
           ? tokens.surfaceHover
           : "transparent",
         cursor: "pointer",
-        transition: "background 0.15s ease",
+        transition:
+          "background 0.12s ease, border-color 0.15s ease, transform 0.1s ease",
         border: selected
           ? `1px solid ${tokens.primary}`
           : `1px solid transparent`,
+        // ✨ Feedback tap
+        transform: pressed ? "scale(0.985)" : "scale(1)",
+        // ✨ Min height tap target
+        minHeight: isMobile ? MOBILE_TAP : undefined,
+        boxSizing: "border-box",
+        // ✨ Neutralise flash
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
       }}
     >
       <div
@@ -498,6 +549,7 @@ function ParticipantRow({ contact, dark, selected, onToggle, tokens, isMobile })
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
+              minWidth: 0,
             }}
           >
             {contact.nom}
@@ -519,9 +571,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
 
   const userId = user?._id;
 
-  // ════════════════════════════════════════════════════════════════════
-  // TOKENS (design system local)
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ Tokens
   const tokens = useMemo(
     () => ({
       bg: dark ? "#0F172A" : "#F8FAFC",
@@ -541,9 +591,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
     [dark]
   );
 
-  // ════════════════════════════════════════════════════════════════════
-  // CLEANUP
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ Cleanup
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
@@ -559,9 +607,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
     };
   }, [cleanupCalls, userId]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // ÉTATS
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ ÉTATS
   const [tab, setTab] = useState("contacts");
   const [searchTerm, setSearchTerm] = useState("");
   const [groupCallMode, setGroupCallMode] = useState(false);
@@ -570,10 +616,10 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
   const [participantSearch, setParticipantSearch] = useState("");
   const [callingId, setCallingId] = useState(null);
   const [launchingGroup, setLaunchingGroup] = useState(false);
+  // ✨ Feedback tap sur boutons custom
+  const [pressedBtn, setPressedBtn] = useState(null);
 
-  // ════════════════════════════════════════════════════════════════════
-  // QUERIES
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ QUERIES
   const contactsArgs = useMemo(
     () => (ecoleId && userId ? { ecoleId, userId } : "skip"),
     [ecoleId, userId]
@@ -597,15 +643,11 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
   const classesRaw = useQuery(api.classes.list, classesArgs);
   const classes = useMemo(() => classesRaw ?? [], [classesRaw]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // MUTATIONS
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ MUTATIONS
   const createCall = useMutation(api.appels.createCall);
   const createGroupCall = useMutation(api.appels.createGroupCall);
 
-  // ════════════════════════════════════════════════════════════════════
-  // FILTRES
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ FILTRES
   const visibleContacts = useMemo(() => {
     let filtered =
       user?.role === "parent" || user?.role === "eleve"
@@ -622,7 +664,6 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
     return filtered;
   }, [contacts, user?.role, searchTerm]);
 
-  // Participants visibles dans le formulaire groupe
   const visibleParticipants = useMemo(() => {
     if (!participantSearch.trim()) return visibleContacts;
     const q = participantSearch.toLowerCase();
@@ -646,9 +687,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
     [visibleContacts, selectedParticipants]
   );
 
-  // ════════════════════════════════════════════════════════════════════
-  // HANDLERS
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ HANDLERS
   const handleTabChange = useCallback((newTab) => {
     setTab(newTab);
     if (newTab !== "contacts") setGroupCallMode(false);
@@ -750,18 +789,25 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
     setSelectedParticipants([]);
   }, []);
 
-  // ════════════════════════════════════════════════════════════════════
-  // LAYOUT TOKENS
-  // ════════════════════════════════════════════════════════════════════
-  const containerPadding = isMobile ? "16px 12px" : "24px";
+  const closeGroupForm = useCallback(() => {
+    setGroupCallMode(false);
+    setSelectedParticipants([]);
+    setSelectedGroupId("");
+    setParticipantSearch("");
+  }, []);
+
+  // ✨ LAYOUT
+  const containerPadding = isMobile
+    ? `calc(16px + ${SAFE_TOP}) calc(12px + ${SAFE_LEFT}) calc(16px + ${SAFE_BOTTOM}) calc(12px + ${SAFE_RIGHT})`
+    : "24px";
   const titleSize = isMobile ? 22 : 28;
   const subtitleSize = isMobile ? 13 : 15;
 
-  // ════════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────────
   // RENDU
-  // ════════════════════════════════════════════════════════════════════
+  // ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: tokens.bg, minHeight: "100%" }}>
+    <div style={{ background: tokens.bg, minHeight: "100%", height: "100%" }}>
       {AppelsKeyframes}
 
       <div
@@ -769,9 +815,14 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
           maxWidth: 960,
           margin: "0 auto",
           padding: containerPadding,
+          height: "100%",
+          boxSizing: "border-box",
+          overflowY: "auto",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        {/* ═══════════ HEADER ═══════════ */}
+        {/* ═══ HEADER ═══ */}
         <div
           style={{
             display: "flex",
@@ -834,13 +885,20 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             <button
               type="button"
               onClick={() => setGroupCallMode((v) => !v)}
+              onTouchStart={() => setPressedBtn("group-toggle")}
+              onTouchEnd={() => setPressedBtn(null)}
+              onTouchCancel={() => setPressedBtn(null)}
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
                 padding: isMobile ? "10px 14px" : "10px 18px",
-                background: groupCallMode ? tokens.primary : tokens.surface,
+                background: groupCallMode
+                  ? pressedBtn === "group-toggle"
+                    ? tokens.primaryHover
+                    : tokens.primary
+                  : tokens.surface,
                 color: groupCallMode ? "#FFFFFF" : tokens.text,
                 border: `1px solid ${
                   groupCallMode ? tokens.primary : tokens.border
@@ -849,9 +907,15 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 cursor: "pointer",
                 fontWeight: 600,
                 fontSize: 14,
-                transition: "all 0.15s ease",
+                transition:
+                  "all 0.15s ease, transform 0.1s ease",
                 whiteSpace: "nowrap",
                 width: isMobile ? "100%" : "auto",
+                minHeight: isMobile ? MOBILE_TAP : undefined,
+                transform:
+                  pressedBtn === "group-toggle" ? "scale(0.98)" : "scale(1)",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
               }}
               aria-expanded={groupCallMode}
             >
@@ -861,7 +925,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
           )}
         </div>
 
-        {/* ═══════════ ONGLETS (pill style) ═══════════ */}
+        {/* ═══ ONGLETS (pill) ═══ */}
         <div
           style={{
             display: "inline-flex",
@@ -879,6 +943,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             { id: "historique", label: "Historique", icon: <Clock size={15} /> },
           ].map((t) => {
             const isActive = tab === t.id;
+            const isPressed = pressedBtn === `tab-${t.id}`;
             return (
               <button
                 key={t.id}
@@ -886,6 +951,9 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => handleTabChange(t.id)}
+                onTouchStart={() => setPressedBtn(`tab-${t.id}`)}
+                onTouchEnd={() => setPressedBtn(null)}
+                onTouchCancel={() => setPressedBtn(null)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -898,8 +966,13 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                   fontWeight: isActive ? 600 : 500,
                   cursor: "pointer",
                   fontSize: isMobile ? 13 : 14,
-                  transition: "all 0.15s ease",
+                  transition:
+                    "all 0.15s ease, transform 0.1s ease",
                   whiteSpace: "nowrap",
+                  minHeight: isMobile ? 40 : undefined,
+                  transform: isPressed ? "scale(0.96)" : "scale(1)",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
                 }}
               >
                 {t.icon}
@@ -909,7 +982,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
           })}
         </div>
 
-        {/* ═══════════ FORM GROUPE (collapsible) ═══════════ */}
+        {/* ═══ FORM GROUPE ═══ */}
         {groupCallMode && canCreateGroupCall && (
           <div
             className="app-slide-down"
@@ -924,7 +997,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 : "0 4px 12px rgba(0,0,0,0.04)",
             }}
           >
-            {/* Header du form */}
+            {/* Header */}
             <div
               style={{
                 display: "flex",
@@ -945,21 +1018,28 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               </h3>
               <button
                 type="button"
-                onClick={() => {
-                  setGroupCallMode(false);
-                  setSelectedParticipants([]);
-                  setSelectedGroupId("");
-                  setParticipantSearch("");
-                }}
+                onClick={closeGroupForm}
+                onTouchStart={() => setPressedBtn("close-form")}
+                onTouchEnd={() => setPressedBtn(null)}
+                onTouchCancel={() => setPressedBtn(null)}
                 style={{
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
                   color: tokens.textMuted,
-                  padding: 6,
+                  padding: 8,
                   borderRadius: 8,
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "center",
+                  // ✨ Tap target
+                  minWidth: isMobile ? MOBILE_TAP : undefined,
+                  minHeight: isMobile ? MOBILE_TAP : undefined,
+                  transform:
+                    pressedBtn === "close-form" ? "scale(0.9)" : "scale(1)",
+                  transition: "transform 0.1s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
                 }}
                 aria-label="Fermer"
               >
@@ -991,10 +1071,17 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 border: `1px solid ${tokens.border}`,
                 background: tokens.bg,
                 color: tokens.text,
-                fontSize: isMobile ? 15 : 14,
+                // ✨ 16px évite le zoom iOS
+                fontSize: isMobile ? 16 : 14,
                 outline: "none",
                 marginBottom: 16,
                 cursor: "pointer",
+                fontFamily: "inherit",
+                minHeight: isMobile ? MOBILE_TAP : undefined,
+                WebkitAppearance: "none",
+                appearance: "none",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
               }}
             >
               <option value="">— Choisir un groupe —</option>
@@ -1005,7 +1092,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               ))}
             </select>
 
-            {/* Header participants + compteur + actions */}
+            {/* Header participants */}
             <div
               style={{
                 display: "flex",
@@ -1055,7 +1142,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                     disabled={allParticipantsSelected}
                     style={{
                       fontSize: 12,
-                      padding: "4px 10px",
+                      padding: "6px 12px",
                       borderRadius: 6,
                       border: `1px solid ${tokens.border}`,
                       background: "transparent",
@@ -1063,6 +1150,9 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                       cursor: allParticipantsSelected ? "not-allowed" : "pointer",
                       opacity: allParticipantsSelected ? 0.5 : 1,
                       fontWeight: 500,
+                      minHeight: isMobile ? 36 : undefined,
+                      WebkitTapHighlightColor: "transparent",
+                      touchAction: "manipulation",
                     }}
                   >
                     Tout
@@ -1073,7 +1163,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                     disabled={selectedParticipants.length === 0}
                     style={{
                       fontSize: 12,
-                      padding: "4px 10px",
+                      padding: "6px 12px",
                       borderRadius: 6,
                       border: `1px solid ${tokens.border}`,
                       background: "transparent",
@@ -1084,6 +1174,9 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                           : "pointer",
                       opacity: selectedParticipants.length === 0 ? 0.5 : 1,
                       fontWeight: 500,
+                      minHeight: isMobile ? 36 : undefined,
+                      WebkitTapHighlightColor: "transparent",
+                      touchAction: "manipulation",
                     }}
                   >
                     Aucun
@@ -1092,18 +1185,20 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
               )}
             </div>
 
-            {/* Recherche participants (si > 6) */}
+            {/* Recherche participants */}
             {visibleContacts.length > 6 && (
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  padding: "8px 12px",
+                  padding: isMobile ? "10px 12px" : "8px 12px",
                   borderRadius: 10,
                   border: `1px solid ${tokens.border}`,
                   background: tokens.bg,
                   marginBottom: 8,
+                  minHeight: isMobile ? MOBILE_TAP : undefined,
+                  boxSizing: "border-box",
                 }}
               >
                 <Search size={14} color={tokens.textMuted} />
@@ -1112,13 +1207,20 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                   onChange={(e) => setParticipantSearch(e.target.value)}
                   placeholder="Filtrer les participants..."
                   aria-label="Filtrer les participants"
+                  inputMode="search"
+                  autoComplete="off"
+                  autoCorrect="off"
                   style={{
                     flex: 1,
                     border: "none",
                     outline: "none",
                     background: "transparent",
                     color: tokens.text,
-                    fontSize: 13,
+                    // ✨ 16px mobile
+                    fontSize: isMobile ? 16 : 13,
+                    fontFamily: "inherit",
+                    WebkitTapHighlightColor: "transparent",
+                    touchAction: "manipulation",
                   }}
                 />
               </div>
@@ -1131,6 +1233,8 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 overflowY: "auto",
                 marginBottom: 16,
                 paddingRight: 4,
+                overscrollBehavior: "contain",
+                WebkitOverflowScrolling: "touch",
               }}
             >
               {visibleParticipants.length === 0 ? (
@@ -1172,12 +1276,10 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             >
               <button
                 type="button"
-                onClick={() => {
-                  setGroupCallMode(false);
-                  setSelectedParticipants([]);
-                  setSelectedGroupId("");
-                  setParticipantSearch("");
-                }}
+                onClick={closeGroupForm}
+                onTouchStart={() => setPressedBtn("cancel-form")}
+                onTouchEnd={() => setPressedBtn(null)}
+                onTouchCancel={() => setPressedBtn(null)}
                 style={{
                   padding: "10px 18px",
                   background: "transparent",
@@ -1187,6 +1289,13 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                   cursor: "pointer",
                   fontWeight: 500,
                   fontSize: 14,
+                  minHeight: MOBILE_TAP,
+                  transform:
+                    pressedBtn === "cancel-form" ? "scale(0.98)" : "scale(1)",
+                  transition: "transform 0.1s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
                 }}
               >
                 Annuler
@@ -1199,6 +1308,9 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                   !selectedGroupId ||
                   selectedParticipants.length === 0
                 }
+                onTouchStart={() => setPressedBtn("launch")}
+                onTouchEnd={() => setPressedBtn(null)}
+                onTouchCancel={() => setPressedBtn(null)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1210,6 +1322,8 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                     !selectedGroupId ||
                     selectedParticipants.length === 0
                       ? tokens.primaryDisabled
+                      : pressedBtn === "launch"
+                      ? tokens.primaryHover
                       : tokens.primary,
                   color: "#FFFFFF",
                   border: "none",
@@ -1223,6 +1337,15 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                       ? "not-allowed"
                       : "pointer",
                   minWidth: 180,
+                  minHeight: MOBILE_TAP,
+                  transform:
+                    pressedBtn === "launch" && !launchingGroup
+                      ? "scale(0.98)"
+                      : "scale(1)",
+                  transition: "transform 0.1s ease, background 0.12s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
                 }}
               >
                 {launchingGroup ? (
@@ -1238,10 +1361,10 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
           </div>
         )}
 
-        {/* ═══════════ CONTENU PRINCIPAL ═══════════ */}
+        {/* ═══ CONTENU ═══ */}
         {tab === "contacts" ? (
           <div className="app-fade-in">
-            {/* Barre de recherche */}
+            {/* Recherche */}
             {!isLoadingContacts && visibleContacts.length > 0 && (
               <div
                 style={{
@@ -1253,6 +1376,8 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                   border: `1px solid ${tokens.border}`,
                   background: tokens.surface,
                   marginBottom: isMobile ? 12 : 16,
+                  minHeight: isMobile ? MOBILE_TAP : undefined,
+                  boxSizing: "border-box",
                 }}
               >
                 <Search size={16} color={tokens.textMuted} />
@@ -1261,13 +1386,20 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Rechercher un contact..."
                   aria-label="Rechercher un contact"
+                  inputMode="search"
+                  autoComplete="off"
+                  autoCorrect="off"
                   style={{
                     flex: 1,
                     border: "none",
                     outline: "none",
                     background: "transparent",
                     color: tokens.text,
-                    fontSize: isMobile ? 15 : 14,
+                    // ✨ 16px mobile
+                    fontSize: isMobile ? 16 : 14,
+                    fontFamily: "inherit",
+                    WebkitTapHighlightColor: "transparent",
+                    touchAction: "manipulation",
                   }}
                 />
                 {searchTerm && (
@@ -1278,10 +1410,17 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                       background: "transparent",
                       border: "none",
                       cursor: "pointer",
-                      padding: 4,
+                      padding: 8,
+                      marginRight: -8,
                       display: "flex",
                       alignItems: "center",
+                      justifyContent: "center",
                       color: tokens.textMuted,
+                      // ✨ Tap target 40px
+                      minWidth: 40,
+                      minHeight: 40,
+                      WebkitTapHighlightColor: "transparent",
+                      touchAction: "manipulation",
                     }}
                     aria-label="Effacer la recherche"
                   >
@@ -1297,7 +1436,7 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: isMobile ? 8 : 8,
+                  gap: 8,
                 }}
               >
                 {[1, 2, 3, 4].map((i) => (

@@ -1,3 +1,4 @@
+// src/components/AccueilDirecteur.jsx
 import { useMemo } from "react";
 import { DashboardDirecteur } from "./DashboardDirecteur";
 import { useStyles } from "@/styles/theme";
@@ -13,6 +14,7 @@ export function AccueilDirecteur({
   classes = [],
   fautes = [],
   notifs = [],
+  user,  // ✅ FIX CRITIQUE — user reçu et retransmis
 }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -22,10 +24,10 @@ export function AccueilDirecteur({
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const accent = dark ? "#818CF8" : "#4F46E5";
 
-  // Nombre de punitions (source unique de vérité)
+  // Nombre de punitions
   const nbPunitions = punitions.length;
 
-  // Message contextuel mémoïsé (recalcul uniquement si nbPunitions change)
+  // Message contextuel mémoïsé
   const welcomeMessage = useMemo(() => {
     if (nbPunitions === 0) {
       return "Aucune punition enregistrée. La discipline est au beau fixe.";
@@ -47,7 +49,8 @@ export function AccueilDirecteur({
       }}
     >
       {/* ==================== EN-TÊTE DE BIENVENUE ==================== */}
-      <div
+      <section
+        aria-label="Message de bienvenue"
         style={{
           display: "flex",
           alignItems: "center",
@@ -63,6 +66,7 @@ export function AccueilDirecteur({
       >
         {/* Avatar / icône */}
         <div
+          aria-hidden="true"
           style={{
             width: isMobile ? 44 : 52,
             height: isMobile ? 44 : 52,
@@ -99,19 +103,22 @@ export function AccueilDirecteur({
             >
               Bienvenue
             </span>
-            <Sparkles size={14} color={accent} />
+            <Sparkles size={14} color={accent} aria-hidden="true" />
           </div>
           <div
+            role="status"
+            aria-live="polite"
             style={{
               fontSize: isMobile ? 12 : 13,
               color: textSecondary,
               lineHeight: 1.4,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {welcomeMessage}
           </div>
         </div>
-      </div>
+      </section>
 
       {/* ==================== TABLEAU DE BORD ==================== */}
       <DashboardDirecteur
@@ -123,6 +130,7 @@ export function AccueilDirecteur({
         classes={classes}
         fautes={fautes}
         notifs={notifs}
+        user={user}
       />
     </div>
   );

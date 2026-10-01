@@ -1,3 +1,4 @@
+// src/components/ConsultationEmploiDuTemps.jsx
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -6,9 +7,19 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { Skeleton } from "./Skeleton";
 import { Calendar, Clock, School, Info } from "lucide-react";
 
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
 const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
-// Formatage safe de datePublication
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+// ════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════
 function formatDateShort(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -16,6 +27,9 @@ function formatDateShort(dateStr) {
   return d.toLocaleDateString("fr-FR");
 }
 
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -24,7 +38,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
   const canQueryEmploi = Boolean(classe && ecoleId && userId);
   const canQueryAnnee = Boolean(anneeId && userId);
 
-  // ===== Emploi du temps (userId requis) =====
+  // ===== Emploi du temps =====
   const emploi = useQuery(
     api.emploiDuTemps.getByClasse,
     canQueryEmploi
@@ -34,7 +48,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
       : "skip"
   );
 
-  // ===== Nom de l'année scolaire (userId requis) =====
+  // ===== Nom de l'année scolaire =====
   const anneeObj = useQuery(
     api.anneesScolaires.getById,
     canQueryAnnee ? { anneeId, userId } : "skip"
@@ -43,21 +57,34 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
   const anneeNom = anneeObj?.nom || "";
 
   // ===== Couleurs adaptatives =====
-  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
-  const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
-  const tableHeaderBg = dark ? "#312E81" : "#1E293B";
-  const tableHeaderText = "#FFFFFF";
-  const rowBorder = dark ? "#334155" : "#F1F5F9";
-  const hourBg = dark ? "#0F172A" : "#F8FAFC";
-  const hourText = dark ? "#CBD5E1" : "#475569";
-  const cellHasContentBg = dark ? "#312E81" : "#EEF2FF";
-  const cellHasContentText = dark ? "#E0E7FF" : "#312E81";
-  const cellHasContentBorder = dark ? "#4F46E5" : "#C7D2FE";
-  const cellEmptyText = dark ? "#475569" : "#CBD5E1";
-  const zebraRowBg = dark ? "#1E293B" : "#FFFFFF";
-  const zebraRowAltBg = dark ? "#0F172A" : "#FAFBFC";
+  const colors = useMemo(() => ({
+    textPrimary: dark ? "#F1F5F9" : "#1E293B",
+    textSecondary: dark ? "#94A3B8" : "#64748B",
+    cardBg: dark ? "#1E293B" : "#FFFFFF",
+    cardBorder: dark ? "#334155" : "#E2E8F0",
+    tableHeaderBg: dark ? "#312E81" : "#1E293B",
+    tableHeaderText: "#FFFFFF",
+    rowBorder: dark ? "#334155" : "#F1F5F9",
+    hourBg: dark ? "#0F172A" : "#F8FAFC",
+    hourText: dark ? "#CBD5E1" : "#475569",
+    cellHasContentBg: dark ? "#312E81" : "#EEF2FF",
+    cellHasContentText: dark ? "#E0E7FF" : "#312E81",
+    cellHasContentBorder: dark ? "#4F46E5" : "#C7D2FE",
+    cellEmptyText: dark ? "#475569" : "#CBD5E1",
+    zebraRowBg: dark ? "#1E293B" : "#FFFFFF",
+    zebraRowAltBg: dark ? "#0F172A" : "#FAFBFC",
+    shadow: dark
+      ? "0 1px 3px rgba(0,0,0,0.3)"
+      : "0 1px 3px rgba(0,0,0,0.05)",
+  }), [dark]);
+
+  const {
+    textPrimary, textSecondary, cardBg, cardBorder,
+    tableHeaderBg, tableHeaderText, rowBorder,
+    hourBg, hourText,
+    cellHasContentBg, cellHasContentText, cellHasContentBorder, cellEmptyText,
+    zebraRowBg, zebraRowAltBg, shadow,
+  } = colors;
 
   // ===== Parse contenu (mémoïsé) =====
   const emploiActif = emploi ?? null;
@@ -74,7 +101,6 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
         datePublication: data.datePublication || emploiActif.datePublication || "",
       };
     } catch {
-      // Parse error silencieux — l'état vide s'affichera
       return { grille: {}, heures: [], datePublication: "" };
     }
   }, [emploiActif]);
@@ -82,7 +108,9 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
   const { grille, heures, datePublication } = parsed;
   const hasContent = Boolean(emploiActif) && heures.length > 0;
 
-  // ===== ÉTAT : aucune classe sélectionnée =====
+  // ════════════════════════════════════════════════════════════════════
+  // ÉTAT : aucune classe sélectionnée
+  // ════════════════════════════════════════════════════════════════════
   if (!classe) {
     return (
       <div
@@ -93,6 +121,8 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
         }}
       >
         <div
+          role="status"
+          aria-live="polite"
           style={{
             textAlign: "center",
             padding: isMobile ? 32 : 48,
@@ -100,12 +130,11 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
             background: cardBg,
             borderRadius: 16,
             border: `1px solid ${cardBorder}`,
-            boxShadow: dark
-              ? "0 1px 3px rgba(0,0,0,0.3)"
-              : "0 1px 3px rgba(0,0,0,0.05)",
+            boxShadow: shadow,
           }}
         >
           <div
+            aria-hidden="true"
             style={{
               width: 56,
               height: 56,
@@ -137,7 +166,9 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
     );
   }
 
-  // ===== ÉTAT : chargement =====
+  // ════════════════════════════════════════════════════════════════════
+  // ÉTAT : chargement
+  // ════════════════════════════════════════════════════════════════════
   if (emploi === undefined) return <Skeleton height={300} />;
 
   const datePublicationLabel = formatDateShort(datePublication);
@@ -152,7 +183,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
         boxSizing: "border-box",
       }}
     >
-      {/* ==================== EN-TÊTE COMPACT ==================== */}
+      {/* ==================== EN-TÊTE ==================== */}
       <div style={{ marginBottom: isMobile ? 12 : 20 }}>
         <h2
           style={{
@@ -182,19 +213,20 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
       {/* ==================== ÉTAT VIDE ==================== */}
       {!hasContent ? (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             textAlign: "center",
             padding: isMobile ? 32 : 48,
             color: textSecondary,
             background: cardBg,
             borderRadius: 16,
-            boxShadow: dark
-              ? "0 1px 3px rgba(0,0,0,0.3)"
-              : "0 1px 3px rgba(0,0,0,0.05)",
+            boxShadow: shadow,
             border: `1px solid ${cardBorder}`,
           }}
         >
           <div
+            aria-hidden="true"
             style={{
               width: 56,
               height: 56,
@@ -240,11 +272,9 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
               overflowX: "auto",
               background: cardBg,
               borderRadius: 16,
-              boxShadow: dark
-                ? "0 1px 3px rgba(0,0,0,0.3)"
-                : "0 1px 3px rgba(0,0,0,0.05)",
+              boxShadow: shadow,
               border: `1px solid ${cardBorder}`,
-              WebkitOverflowScrolling: "touch",
+              ...SCROLL_AREA,
             }}
           >
             <table
@@ -256,9 +286,22 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
                 minWidth: isMobile ? 640 : 700,
               }}
             >
+              <caption
+                style={{
+                  position: "absolute",
+                  left: -9999,
+                  width: 1,
+                  height: 1,
+                  overflow: "hidden",
+                }}
+              >
+                Emploi du temps de la classe {classe}
+                {anneeNom ? ` pour l'année ${anneeNom}` : ""}
+              </caption>
               <thead>
                 <tr>
                   <th
+                    scope="col"
                     style={{
                       position: "sticky",
                       top: 0,
@@ -282,13 +325,14 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
                         gap: 4,
                       }}
                     >
-                      <Clock size={13} />
+                      <Clock size={13} aria-hidden="true" />
                       Heure
                     </div>
                   </th>
                   {JOURS.map((jour, idx) => (
                     <th
                       key={jour}
+                      scope="col"
                       style={{
                         position: "sticky",
                         top: 0,
@@ -300,8 +344,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
                         fontWeight: 700,
                         textTransform: "uppercase",
                         letterSpacing: 0.3,
-                        borderTopRightRadius:
-                          idx === JOURS.length - 1 ? 16 : 0,
+                        borderTopRightRadius: idx === JOURS.length - 1 ? 16 : 0,
                         zIndex: 3,
                       }}
                     >
@@ -316,11 +359,11 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
                   <tr
                     key={heure}
                     style={{
-                      background:
-                        rowIndex % 2 === 0 ? zebraRowBg : zebraRowAltBg,
+                      background: rowIndex % 2 === 0 ? zebraRowBg : zebraRowAltBg,
                     }}
                   >
-                    <td
+                    <th
+                      scope="row"
                       style={{
                         padding: isMobile ? 10 : 12,
                         textAlign: "center",
@@ -331,10 +374,11 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
                         borderBottom: `1px solid ${rowBorder}`,
                         borderRight: `1px solid ${rowBorder}`,
                         whiteSpace: "nowrap",
+                        fontVariantNumeric: "tabular-nums",
                       }}
                     >
                       {heure}
-                    </td>
+                    </th>
 
                     {JOURS.map((jour) => {
                       const contenu = grille[jour]?.[heure] || "";
@@ -354,6 +398,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
                         >
                           {isEmpty ? (
                             <span
+                              aria-label="Créneau libre"
                               style={{
                                 color: cellEmptyText,
                                 fontSize: isMobile ? 12 : 13,
@@ -413,6 +458,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
               }}
             >
               <span
+                aria-hidden="true"
                 style={{
                   width: 14,
                   height: 14,
@@ -423,7 +469,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
               />
               Cours programmé
             </div>
-            <span style={{ opacity: 0.5 }}>·</span>
+            <span aria-hidden="true" style={{ opacity: 0.5 }}>·</span>
             <div
               style={{
                 display: "inline-flex",
@@ -432,6 +478,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
               }}
             >
               <span
+                aria-hidden="true"
                 style={{
                   width: 14,
                   height: 14,
@@ -444,7 +491,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
             </div>
             {isMobile && (
               <>
-                <span style={{ opacity: 0.5 }}>·</span>
+                <span aria-hidden="true" style={{ opacity: 0.5 }}>·</span>
                 <div
                   style={{
                     display: "inline-flex",
@@ -453,7 +500,7 @@ export function ConsultationEmploiDuTemps({ ecoleId, classe, anneeId, user }) {
                     color: dark ? "#818CF8" : "#4F46E5",
                   }}
                 >
-                  <Info size={11} />
+                  <Info size={11} aria-hidden="true" />
                   Balayez pour voir les autres jours
                 </div>
               </>

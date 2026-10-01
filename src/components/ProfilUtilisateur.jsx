@@ -1,3 +1,4 @@
+// src/components/ProfilUtilisateur.jsx
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -12,9 +13,41 @@ import {
 import toast from "react-hot-toast";
 import { provincesRDC } from "@/utils/rdcData";
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const ProfilUtilisateurKeyframes = (
+  <style>{`
+    @keyframes pu-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes pu-haloPulse {
+      0%   { transform: translate(-50%, -50%) scale(1);    opacity: 0.55; }
+      50%  { transform: translate(-50%, -50%) scale(1.18); opacity: 0.22; }
+      100% { transform: translate(-50%, -50%) scale(1);    opacity: 0.55; }
+    }
+    .pu-spin { animation: pu-spin 1s linear infinite; }
+    .pu-halo { animation: pu-haloPulse 2.4s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .pu-spin, .pu-halo { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
 // BADGE DE RÔLE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function RoleBadge({ role, dark }) {
   const colors = {
     admin: { bg: dark ? "#7F1D1D" : "#FEE2E2", color: dark ? "#F87171" : "#B91C1C" },
@@ -45,16 +78,15 @@ function RoleBadge({ role, dark }) {
         gap: 4,
       }}
     >
-      <Shield size={10} />
+      <Shield size={10} aria-hidden="true" />
       {role}
     </span>
   );
 }
 
-// ============================================================
-// INDICATEUR DE FORCE DU MOT DE PASSE
-// ============================================================
-// ✅ Aligné sur 8 caractères (backend + Parametres.jsx + UtilisateursModals.jsx)
+// ════════════════════════════════════════════════════════════════════
+// MIN PASSWORD LENGTH
+// ════════════════════════════════════════════════════════════════════
 const MIN_PASSWORD_LENGTH = 8;
 
 function getPasswordStrength(pwd) {
@@ -110,35 +142,64 @@ function PasswordStrengthBar({ password, dark }) {
   );
 }
 
-// ============================================================
-// KEYFRAMES PARTAGÉS (module-level, préfixés pu-*)
-// ============================================================
-const puStyles = `
-  @keyframes pu-spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
-  @keyframes pu-haloPulse {
-    0%   { transform: translate(-50%, -50%) scale(1);    opacity: 0.55; }
-    50%  { transform: translate(-50%, -50%) scale(1.18); opacity: 0.22; }
-    100% { transform: translate(-50%, -50%) scale(1);    opacity: 0.55; }
-  }
-  .pu-spin { animation: pu-spin 1s linear infinite; }
-  .pu-halo { animation: pu-haloPulse 2.4s ease-in-out infinite; }
-  @media (prefers-reduced-motion: reduce) {
-    .pu-spin, .pu-halo { animation: none !important; }
-  }
-`;
+// ════════════════════════════════════════════════════════════════════
+// ✨ PASSWORD TOGGLE — zone tap 44px mobile + feedback tap
+// ════════════════════════════════════════════════════════════════════
+function PasswordToggle({ visible, onToggle, isMobile, textSecondary }) {
+  const [pressed, setPressed] = useState(false);
 
-// ============================================================
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
+      aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+      title={visible ? "Masquer" : "Afficher"}
+      style={{
+        position: "absolute",
+        right: isMobile ? 4 : 8,
+        top: "50%",
+        transform: `translateY(-50%) scale(${pressed ? 0.9 : 1})`,
+        background: "transparent",
+        border: "none",
+        color: textSecondary,
+        cursor: "pointer",
+        padding: 0,
+        width: isMobile ? MOBILE_TAP : 36,
+        height: isMobile ? MOBILE_TAP : 36,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 8,
+        transition: "transform 0.1s ease",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+      }}
+    >
+      {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function ProfilUtilisateur({ user }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
 
   const userId = user?._id;
+
+  // ✨ Feedback tap
+  const [pressedBtn, setPressedBtn] = useState(null);
+  // ✨ Focus state
+  const [focusedField, setFocusedField] = useState(null);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
 
   // Mot de passe
   const [oldPwd, setOldPwd] = useState("");
@@ -165,20 +226,18 @@ export function ProfilUtilisateur({ user }) {
   const [tuteurTelephone, setTuteurTelephone] = useState("");
   const [savingInfo, setSavingInfo] = useState(false);
 
-  // ===== Mutations =====
+  // Mutations
   const changePassword = useMutation(api.users.changePassword);
   const updateProfile = useMutation(api.users.updateProfile);
 
-  // ===== Élève associé =====
+  // Élève associé
   const isEleve = user?.role === "eleve";
-  // ⚠️ Vérifier signature backend : EleveApp utilise { userId, anneeId }
-  //    Ici on utilise { userId, requesterId }. Incohérence à confirmer.
   const eleve = useQuery(
     api.eleves.getByUserId,
     isEleve && userId ? { userId } : "skip"
   );
 
-  // ===== Synchronisation avec les données serveur =====
+  // Synchronisation
   useEffect(() => {
     if (!eleve) return;
     setSexe(eleve.sexe || "M");
@@ -196,9 +255,9 @@ export function ProfilUtilisateur({ user }) {
     setTuteurTelephone(eleve.tuteurTelephone || "");
   }, [eleve]);
 
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   // CHANGEMENT DE MOT DE PASSE
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   const handleChangePassword = useCallback(async () => {
     if (changing) return;
 
@@ -233,7 +292,6 @@ export function ProfilUtilisateur({ user }) {
 
     setChanging(true);
     try {
-      // ✅ CORRIGÉ : `requesterId` retiré (backend refuse — cf. rapport §13.4)
       await changePassword({
         userId,
         currentPassword: oldPwd,
@@ -257,9 +315,9 @@ export function ProfilUtilisateur({ user }) {
     }
   }, [changing, oldPwd, newPwd, confirmPwd, userId, confirm, changePassword]);
 
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   // SAUVEGARDE DU PROFIL ÉLÈVE
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════════
   const handleSaveInfo = useCallback(async () => {
     if (savingInfo) return;
     if (!userId) {
@@ -275,7 +333,6 @@ export function ProfilUtilisateur({ user }) {
 
     setSavingInfo(true);
     try {
-      // ⚠️ Vérifier si updateProfile exige `requesterId` (non documenté dans le rapport)
       await updateProfile({
         userId,
         sexe,
@@ -322,7 +379,6 @@ export function ProfilUtilisateur({ user }) {
     tuteurTelephone,
   ]);
 
-  // ===== Helpers =====
   const territoiresDisponibles = useMemo(
     () =>
       province
@@ -331,7 +387,7 @@ export function ProfilUtilisateur({ user }) {
     [province]
   );
 
-  // ===== Couleurs =====
+  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
@@ -344,12 +400,16 @@ export function ProfilUtilisateur({ user }) {
     ? "0 1px 3px rgba(0,0,0,0.3)"
     : "0 1px 3px rgba(0,0,0,0.05)";
 
-  const inputStyle = {
+  // ✨ inputStyle avec focus state + 16px mobile (évite zoom iOS)
+  const inputStyle = (fieldName) => ({
     width: "100%",
     padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${cardBorder}`,
+    border: `1px solid ${
+      focusedField === fieldName ? accent : cardBorder
+    }`,
     borderRadius: 10,
-    fontSize: isMobile ? 15 : 14,
+    // ✨ 16px mobile (évite le zoom iOS)
+    fontSize: 16,
     outline: "none",
     background: inputBg,
     color: inputText,
@@ -357,7 +417,12 @@ export function ProfilUtilisateur({ user }) {
     fontFamily: "inherit",
     appearance: "none",
     WebkitAppearance: "none",
-  };
+    MozAppearance: "none",
+    minHeight: isMobile ? MOBILE_TAP : undefined,
+    transition: "border-color 0.15s ease",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+  });
 
   const labelStyle = {
     display: "block",
@@ -373,50 +438,60 @@ export function ProfilUtilisateur({ user }) {
     ? "1fr"
     : "repeat(auto-fit, minmax(200px, 1fr))";
 
-  const btnStyle = (disabled = false, variant = "primary") => {
-    const base = {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      padding: isMobile ? "12px 16px" : "10px 20px",
-      borderRadius: 12,
-      fontWeight: 700,
-      fontSize: 13.5,
-      cursor: disabled ? "not-allowed" : "pointer",
-      width: isMobile ? "100%" : "auto",
-      border: "none",
-      transition: "opacity 0.15s",
-      opacity: disabled ? 0.6 : 1,
-    };
-    if (variant === "primary") {
-      return {
-        ...base,
-        background: disabled ? "#A5B4FC" : accent,
-        color: "#FFFFFF",
-      };
-    }
-    return {
-      ...base,
-      background: "transparent",
-      border: `1px solid ${cardBorder}`,
-      color: textPrimary,
-    };
-  };
+  const btnStyle = (disabled = false, key = null) => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: isMobile ? "12px 16px" : "10px 20px",
+    borderRadius: 12,
+    fontWeight: 700,
+    fontSize: 13.5,
+    cursor: disabled ? "not-allowed" : "pointer",
+    width: isMobile ? "100%" : "auto",
+    border: "none",
+    background: disabled ? "#A5B4FC" : pressedBtn === key ? "#4338CA" : accent,
+    color: "#FFFFFF",
+    transition: "transform 0.1s ease, background 0.12s ease, opacity 0.15s",
+    opacity: disabled ? 0.6 : 1,
+    minHeight: MOBILE_TAP,
+    transform: pressedBtn === key && !disabled ? "scale(0.98)" : "scale(1)",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+  });
 
-  // ===== Garde : user non chargé =====
+  // Padding container avec safe-area
+  const containerPadding = isMobile
+    ? `calc(10px + ${SAFE_TOP}) calc(8px + ${SAFE_RIGHT}) calc(24px + ${SAFE_BOTTOM}) calc(8px + ${SAFE_LEFT})`
+    : "20px 16px 32px";
+
+  // ════════════════════════════════════════════════════════════════════
+  // Garde : user non chargé
+  // ════════════════════════════════════════════════════════════════════
   if (!user || !userId) {
     return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          padding: 40,
-        }}
-      >
-        <style>{puStyles}</style>
-        <Loader size={28} className="pu-spin" style={{ color: accent }} />
-      </div>
+      <>
+        {ProfilUtilisateurKeyframes}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            padding: 40,
+          }}
+        >
+          <Loader
+            size={28}
+            className="pu-spin"
+            style={{ color: accent }}
+            aria-hidden="true"
+          />
+        </div>
+      </>
     );
   }
 
@@ -429,171 +504,583 @@ export function ProfilUtilisateur({ user }) {
     newPwd.length >= MIN_PASSWORD_LENGTH;
 
   return (
-    <div
-      style={{
-        maxWidth: 800,
-        margin: "0 auto",
-        padding: isMobile ? "10px 8px 24px" : "20px 16px 32px",
-        width: "100%",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* Keyframes partagés */}
-      <style>{puStyles}</style>
-
-      {/* ==================== EN-TÊTE ==================== */}
-      <div style={{ marginBottom: isMobile ? 14 : 20 }}>
-        <h2
-          style={{
-            fontSize: isMobile ? 17 : 22,
-            fontWeight: 700,
-            color: textPrimary,
-            margin: 0,
-            lineHeight: 1.2,
-          }}
-        >
-          Mon profil
-        </h2>
-        <p
-          style={{
-            color: textSecondary,
-            marginTop: 2,
-            marginBottom: 0,
-            fontSize: isMobile ? 11.5 : 13,
-          }}
-        >
-          Gérez vos informations personnelles et votre mot de passe
-        </p>
-      </div>
-
-      {/* ==================== CARTE IDENTITÉ — DESIGN HERO ==================== */}
+    <>
+      {ProfilUtilisateurKeyframes}
       <div
         style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-          gap: 14,
-          padding: isMobile ? "24px 16px 20px" : "28px 24px 24px",
-          background: dark
-            ? "linear-gradient(135deg, #312E81 0%, #1E293B 100%)"
-            : "linear-gradient(135deg, #EEF2FF 0%, #FFFFFF 100%)",
-          borderRadius: 16,
-          border: `1px solid ${cardBorder}`,
-          marginBottom: isMobile ? 14 : 20,
-          boxShadow: shadow,
+          maxWidth: 800,
+          margin: "0 auto",
+          padding: containerPadding,
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
-        {/* Avatar 96px avec halo pulse */}
+        {/* ═══ EN-TÊTE ═══ */}
+        <div style={{ marginBottom: isMobile ? 14 : 20 }}>
+          <h2
+            style={{
+              fontSize: isMobile ? 17 : 22,
+              fontWeight: 700,
+              color: textPrimary,
+              margin: 0,
+              lineHeight: 1.2,
+            }}
+          >
+            Mon profil
+          </h2>
+          <p
+            style={{
+              color: textSecondary,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 11.5 : 13,
+            }}
+          >
+            Gérez vos informations personnelles et votre mot de passe
+          </p>
+        </div>
+
+        {/* ═══ CARTE IDENTITÉ HERO ═══ */}
         <div
           style={{
-            position: "relative",
-            width: isMobile ? 80 : 96,
-            height: isMobile ? 80 : 96,
-            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            gap: 14,
+            padding: isMobile ? "24px 16px 20px" : "28px 24px 24px",
+            background: dark
+              ? "linear-gradient(135deg, #312E81 0%, #1E293B 100%)"
+              : "linear-gradient(135deg, #EEF2FF 0%, #FFFFFF 100%)",
+            borderRadius: 16,
+            border: `1px solid ${cardBorder}`,
+            marginBottom: isMobile ? 14 : 20,
+            boxShadow: shadow,
+            boxSizing: "border-box",
           }}
         >
-          {/* Halo pulse */}
-          <div
-            className="pu-halo"
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              width: "100%",
-              height: "100%",
-              borderRadius: "50%",
-              background: accent,
-              opacity: 0.15,
-              pointerEvents: "none",
-            }}
-          />
-          {/* Avatar */}
+          {/* Avatar 96px avec halo pulse */}
           <div
             style={{
               position: "relative",
-              width: "100%",
-              height: "100%",
-              borderRadius: "50%",
-              background: accent,
-              color: "#FFFFFF",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 800,
-              fontSize: isMobile ? 26 : 32,
-              letterSpacing: 0.5,
-              boxShadow: `0 8px 24px ${accent}55`,
-              border: `3px solid ${dark ? "#1E293B" : "#FFFFFF"}`,
+              width: isMobile ? 80 : 96,
+              height: isMobile ? 80 : 96,
+              flexShrink: 0,
             }}
           >
-            {initials || <User size={isMobile ? 32 : 40} />}
-          </div>
-        </div>
-
-        {/* Nom + login + badge */}
-        <div style={{ minWidth: 0, width: "100%" }}>
-          <div
-            style={{
-              fontWeight: 800,
-              fontSize: isMobile ? 17 : 20,
-              color: textPrimary,
-              lineHeight: 1.2,
-              marginBottom: 6,
-              wordBreak: "break-word",
-            }}
-          >
-            {user.nom} {user.postnom || ""}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <span
+            <div
+              className="pu-halo"
+              aria-hidden="true"
               style={{
-                fontSize: isMobile ? 12 : 13,
-                color: textSecondary,
-                fontFamily: "ui-monospace, monospace",
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                width: "100%",
+                height: "100%",
+                borderRadius: "50%",
+                background: accent,
+                opacity: 0.15,
+                pointerEvents: "none",
               }}
-            >
-              @{user.login}
-            </span>
-            <RoleBadge role={user.role} dark={dark} />
-          </div>
-          {user.email && (
+            />
             <div
               style={{
-                fontSize: 12,
-                color: textSecondary,
-                marginTop: 8,
-                display: "inline-flex",
+                position: "relative",
+                width: "100%",
+                height: "100%",
+                borderRadius: "50%",
+                background: accent,
+                color: "#FFFFFF",
+                display: "flex",
                 alignItems: "center",
-                gap: 5,
+                justifyContent: "center",
+                fontWeight: 800,
+                fontSize: isMobile ? 26 : 32,
+                letterSpacing: 0.5,
+                boxShadow: `0 8px 24px ${accent}55`,
+                border: `3px solid ${dark ? "#1E293B" : "#FFFFFF"}`,
+              }}
+              aria-hidden="true"
+            >
+              {initials || <User size={isMobile ? 32 : 40} />}
+            </div>
+          </div>
+
+          {/* Nom + login + badge */}
+          <div style={{ minWidth: 0, width: "100%" }}>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: isMobile ? 17 : 20,
+                color: textPrimary,
+                lineHeight: 1.2,
+                marginBottom: 6,
+                wordBreak: "break-word",
               }}
             >
-              <Mail size={12} />
-              {user.email}
+              {user.nom} {user.postnom || ""}
             </div>
-          )}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: isMobile ? 12 : 13,
+                  color: textSecondary,
+                  fontFamily: "ui-monospace, monospace",
+                }}
+              >
+                @{user.login}
+              </span>
+              <RoleBadge role={user.role} dark={dark} />
+            </div>
+            {user.email && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: textSecondary,
+                  marginTop: 8,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  wordBreak: "break-word",
+                }}
+              >
+                <Mail size={12} aria-hidden="true" />
+                {user.email}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* ==================== FORMULAIRE ÉLÈVE ==================== */}
-      {isEleve && (
+        {/* ═══ FORMULAIRE ÉLÈVE ═══ */}
+        {isEleve && (
+          <div
+            style={{
+              background: cardBg,
+              borderRadius: 14,
+              padding: isMobile ? 14 : 18,
+              marginBottom: isMobile ? 14 : 20,
+              border: `1px solid ${cardBorder}`,
+              boxShadow: shadow,
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 16,
+                paddingBottom: 12,
+                borderBottom: `1px solid ${cardBorder}`,
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: accentBg,
+                  color: accent,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+                aria-hidden="true"
+              >
+                <GraduationCap size={16} />
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: isMobile ? 14 : 15,
+                    fontWeight: 700,
+                    color: textPrimary,
+                  }}
+                >
+                  Informations personnelles
+                </div>
+                <div style={{ fontSize: 11, color: textSecondary, marginTop: 1 }}>
+                  Ces informations apparaissent sur votre fiche scolaire
+                </div>
+              </div>
+            </div>
+
+            {/* Section 1 : Identité */}
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: textSecondary,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+                marginBottom: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <User size={11} aria-hidden="true" />
+              Identité
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridColumns,
+                gap: 12,
+                marginBottom: 18,
+              }}
+            >
+              <div>
+                <label htmlFor="profil-sexe" style={labelStyle}>
+                  Sexe
+                </label>
+                <select
+                  id="profil-sexe"
+                  value={sexe}
+                  onChange={(e) => setSexe(e.target.value)}
+                  onFocus={() => setFocusedField("sexe")}
+                  onBlur={() => setFocusedField(null)}
+                  aria-label="Sexe"
+                  style={{ ...inputStyle("sexe"), cursor: "pointer" }}
+                >
+                  <option value="M">Masculin</option>
+                  <option value="F">Féminin</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="profil-date-naissance" style={labelStyle}>
+                  Date de naissance
+                </label>
+                <input
+                  id="profil-date-naissance"
+                  type="date"
+                  value={dateNaissance}
+                  onChange={(e) => setDateNaissance(e.target.value)}
+                  onFocus={() => setFocusedField("dateNaissance")}
+                  onBlur={() => setFocusedField(null)}
+                  aria-label="Date de naissance"
+                  style={{
+                    ...inputStyle("dateNaissance"),
+                    colorScheme: dark ? "dark" : "light",
+                  }}
+                />
+              </div>
+              <div>
+                <label htmlFor="profil-lieu-naissance" style={labelStyle}>
+                  Lieu de naissance
+                </label>
+                <input
+                  id="profil-lieu-naissance"
+                  value={lieuNaissance}
+                  onChange={(e) => setLieuNaissance(e.target.value)}
+                  onFocus={() => setFocusedField("lieuNaissance")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Ville"
+                  autoComplete="off"
+                  aria-label="Lieu de naissance"
+                  style={inputStyle("lieuNaissance")}
+                />
+              </div>
+            </div>
+
+            {/* Section 2 : Origine */}
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: textSecondary,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+                marginBottom: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <MapPin size={11} aria-hidden="true" />
+              Origine géographique
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridColumns,
+                gap: 12,
+                marginBottom: 18,
+              }}
+            >
+              <div>
+                <label htmlFor="profil-province" style={labelStyle}>
+                  Province
+                </label>
+                <select
+                  id="profil-province"
+                  value={province}
+                  onChange={(e) => {
+                    setProvince(e.target.value);
+                    setTerritoire("");
+                  }}
+                  onFocus={() => setFocusedField("province")}
+                  onBlur={() => setFocusedField(null)}
+                  aria-label="Province"
+                  style={{ ...inputStyle("province"), cursor: "pointer" }}
+                >
+                  <option value="">Sélectionner</option>
+                  {provincesRDC.map((p) => (
+                    <option key={p.nom} value={p.nom}>
+                      {p.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="profil-territoire" style={labelStyle}>
+                  Territoire
+                </label>
+                <select
+                  id="profil-territoire"
+                  value={territoire}
+                  onChange={(e) => setTerritoire(e.target.value)}
+                  onFocus={() => setFocusedField("territoire")}
+                  onBlur={() => setFocusedField(null)}
+                  disabled={!province}
+                  aria-label="Territoire"
+                  style={{
+                    ...inputStyle("territoire"),
+                    opacity: !province ? 0.5 : 1,
+                    cursor: !province ? "not-allowed" : "pointer",
+                  }}
+                >
+                  <option value="">Sélectionner</option>
+                  {territoiresDisponibles.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="profil-secteur" style={labelStyle}>
+                  Secteur
+                </label>
+                <input
+                  id="profil-secteur"
+                  value={secteur}
+                  onChange={(e) => setSecteur(e.target.value)}
+                  onFocus={() => setFocusedField("secteur")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Secteur"
+                  autoComplete="off"
+                  aria-label="Secteur"
+                  style={inputStyle("secteur")}
+                />
+              </div>
+              <div>
+                <label htmlFor="profil-village" style={labelStyle}>
+                  Village
+                </label>
+                <input
+                  id="profil-village"
+                  value={village}
+                  onChange={(e) => setVillage(e.target.value)}
+                  onFocus={() => setFocusedField("village")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Village"
+                  autoComplete="off"
+                  aria-label="Village"
+                  style={inputStyle("village")}
+                />
+              </div>
+              <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
+                <label htmlFor="profil-adresse" style={labelStyle}>
+                  Adresse actuelle
+                </label>
+                <input
+                  id="profil-adresse"
+                  value={adresse}
+                  onChange={(e) => setAdresse(e.target.value)}
+                  onFocus={() => setFocusedField("adresse")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Adresse complète"
+                  autoComplete="street-address"
+                  aria-label="Adresse actuelle"
+                  style={inputStyle("adresse")}
+                />
+              </div>
+            </div>
+
+            {/* Section 3 : Parents / Tuteur */}
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: textSecondary,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+                marginBottom: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <Users size={11} aria-hidden="true" />
+              Parents / Tuteur
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridColumns,
+                gap: 12,
+                marginBottom: 18,
+              }}
+            >
+              <div>
+                <label htmlFor="profil-pere" style={labelStyle}>
+                  Nom du père
+                </label>
+                <input
+                  id="profil-pere"
+                  value={nomPere}
+                  onChange={(e) => setNomPere(e.target.value)}
+                  onFocus={() => setFocusedField("nomPere")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Nom du père"
+                  autoComplete="off"
+                  aria-label="Nom du père"
+                  style={inputStyle("nomPere")}
+                />
+              </div>
+              <div>
+                <label htmlFor="profil-mere" style={labelStyle}>
+                  Nom de la mère
+                </label>
+                <input
+                  id="profil-mere"
+                  value={nomMere}
+                  onChange={(e) => setNomMere(e.target.value)}
+                  onFocus={() => setFocusedField("nomMere")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Nom de la mère"
+                  autoComplete="off"
+                  aria-label="Nom de la mère"
+                  style={inputStyle("nomMere")}
+                />
+              </div>
+              <div>
+                <label htmlFor="profil-tuteur-nom" style={labelStyle}>
+                  Nom du tuteur
+                </label>
+                <input
+                  id="profil-tuteur-nom"
+                  value={tuteurNom}
+                  onChange={(e) => setTuteurNom(e.target.value)}
+                  onFocus={() => setFocusedField("tuteurNom")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Nom du tuteur"
+                  autoComplete="off"
+                  aria-label="Nom du tuteur"
+                  style={inputStyle("tuteurNom")}
+                />
+              </div>
+              <div>
+                <label htmlFor="profil-tuteur-tel" style={labelStyle}>
+                  Téléphone tuteur
+                </label>
+                <input
+                  id="profil-tuteur-tel"
+                  value={tuteurTelephone}
+                  onChange={(e) => setTuteurTelephone(e.target.value)}
+                  onFocus={() => setFocusedField("tuteurTelephone")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="+243 …"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  aria-label="Téléphone du tuteur"
+                  style={inputStyle("tuteurTelephone")}
+                />
+              </div>
+            </div>
+
+            {/* Section 4 : Contact */}
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: textSecondary,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+                marginBottom: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <Phone size={11} aria-hidden="true" />
+              Contact
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridColumns,
+                gap: 12,
+                marginBottom: 18,
+              }}
+            >
+              <div>
+                <label htmlFor="profil-tel" style={labelStyle}>
+                  Votre téléphone
+                </label>
+                <input
+                  id="profil-tel"
+                  value={telephone}
+                  onChange={(e) => setTelephone(e.target.value)}
+                  onFocus={() => setFocusedField("telephone")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="+243 …"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  aria-label="Votre téléphone"
+                  style={inputStyle("telephone")}
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveInfo}
+              disabled={savingInfo}
+              onTouchStart={!savingInfo ? pressBtn("save-info") : undefined}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={btnStyle(savingInfo, "save-info")}
+            >
+              {savingInfo ? (
+                <Loader size={16} className="pu-spin" aria-hidden="true" />
+              ) : (
+                <Save size={16} aria-hidden="true" />
+              )}
+              {savingInfo ? "Enregistrement…" : "Enregistrer les informations"}
+            </button>
+          </div>
+        )}
+
+        {/* ═══ CARTE MOT DE PASSE ═══ */}
         <div
           style={{
             background: cardBg,
             borderRadius: 14,
             padding: isMobile ? 14 : 18,
-            marginBottom: isMobile ? 14 : 20,
             border: `1px solid ${cardBorder}`,
             boxShadow: shadow,
+            boxSizing: "border-box",
           }}
         >
           <div
@@ -618,8 +1105,9 @@ export function ProfilUtilisateur({ user }) {
                 justifyContent: "center",
                 flexShrink: 0,
               }}
+              aria-hidden="true"
             >
-              <GraduationCap size={16} />
+              <Key size={16} />
             </div>
             <div>
               <div
@@ -629,470 +1117,133 @@ export function ProfilUtilisateur({ user }) {
                   color: textPrimary,
                 }}
               >
-                Informations personnelles
+                Mot de passe
               </div>
               <div style={{ fontSize: 11, color: textSecondary, marginTop: 1 }}>
-                Ces informations apparaissent sur votre fiche scolaire
+                Modifiez votre mot de passe de connexion
               </div>
             </div>
           </div>
 
-          {/* Section 1 : Identité */}
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              color: textSecondary,
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-              marginBottom: 8,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <User size={11} />
-            Identité
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: gridColumns,
-              gap: 12,
-              marginBottom: 18,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Sexe</label>
-              <select
-                value={sexe}
-                onChange={(e) => setSexe(e.target.value)}
-                style={inputStyle}
-              >
-                <option value="M">Masculin</option>
-                <option value="F">Féminin</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Date de naissance</label>
+          {/* Ancien mot de passe */}
+          <div style={{ marginBottom: 14 }}>
+            <label htmlFor="profil-old-pwd" style={labelStyle}>
+              Mot de passe actuel
+            </label>
+            <div style={{ position: "relative" }}>
               <input
-                type="date"
-                value={dateNaissance}
-                onChange={(e) => setDateNaissance(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Lieu de naissance</label>
-              <input
-                value={lieuNaissance}
-                onChange={(e) => setLieuNaissance(e.target.value)}
-                placeholder="Ville"
-                style={inputStyle}
-              />
-            </div>
-          </div>
-
-          {/* Section 2 : Origine */}
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              color: textSecondary,
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-              marginBottom: 8,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <MapPin size={11} />
-            Origine géographique
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: gridColumns,
-              gap: 12,
-              marginBottom: 18,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Province</label>
-              <select
-                value={province}
-                onChange={(e) => {
-                  setProvince(e.target.value);
-                  setTerritoire("");
-                }}
-                style={inputStyle}
-              >
-                <option value="">Sélectionner</option>
-                {provincesRDC.map((p) => (
-                  <option key={p.nom} value={p.nom}>
-                    {p.nom}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Territoire</label>
-              <select
-                value={territoire}
-                onChange={(e) => setTerritoire(e.target.value)}
-                style={{ ...inputStyle, opacity: !province ? 0.5 : 1 }}
-                disabled={!province}
-              >
-                <option value="">Sélectionner</option>
-                {territoiresDisponibles.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Secteur</label>
-              <input
-                value={secteur}
-                onChange={(e) => setSecteur(e.target.value)}
-                placeholder="Secteur"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Village</label>
-              <input
-                value={village}
-                onChange={(e) => setVillage(e.target.value)}
-                placeholder="Village"
-                style={inputStyle}
-              />
-            </div>
-            <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
-              <label style={labelStyle}>Adresse actuelle</label>
-              <input
-                value={adresse}
-                onChange={(e) => setAdresse(e.target.value)}
-                placeholder="Adresse complète"
-                style={inputStyle}
-              />
-            </div>
-          </div>
-
-          {/* Section 3 : Parents / Tuteur */}
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              color: textSecondary,
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-              marginBottom: 8,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <Users size={11} />
-            Parents / Tuteur
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: gridColumns,
-              gap: 12,
-              marginBottom: 18,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Nom du père</label>
-              <input
-                value={nomPere}
-                onChange={(e) => setNomPere(e.target.value)}
-                placeholder="Nom du père"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Nom de la mère</label>
-              <input
-                value={nomMere}
-                onChange={(e) => setNomMere(e.target.value)}
-                placeholder="Nom de la mère"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Nom du tuteur</label>
-              <input
-                value={tuteurNom}
-                onChange={(e) => setTuteurNom(e.target.value)}
-                placeholder="Nom du tuteur"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Téléphone tuteur</label>
-              <input
-                value={tuteurTelephone}
-                onChange={(e) => setTuteurTelephone(e.target.value)}
-                placeholder="+243 …"
-                style={inputStyle}
-              />
-            </div>
-          </div>
-
-          {/* Section 4 : Contact */}
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              color: textSecondary,
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-              marginBottom: 8,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <Phone size={11} />
-            Contact
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: gridColumns,
-              gap: 12,
-              marginBottom: 18,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Votre téléphone</label>
-              <input
-                value={telephone}
-                onChange={(e) => setTelephone(e.target.value)}
-                placeholder="+243 …"
-                style={inputStyle}
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleSaveInfo}
-            disabled={savingInfo}
-            style={btnStyle(savingInfo, "primary")}
-          >
-            {savingInfo ? (
-              <Loader size={16} className="pu-spin" />
-            ) : (
-              <Save size={16} />
-            )}
-            {savingInfo ? "Enregistrement…" : "Enregistrer les informations"}
-          </button>
-        </div>
-      )}
-
-      {/* ==================== CARTE MOT DE PASSE ==================== */}
-      <div
-        style={{
-          background: cardBg,
-          borderRadius: 14,
-          padding: isMobile ? 14 : 18,
-          border: `1px solid ${cardBorder}`,
-          boxShadow: shadow,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 16,
-            paddingBottom: 12,
-            borderBottom: `1px solid ${cardBorder}`,
-          }}
-        >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: accentBg,
-              color: accent,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <Key size={16} />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: isMobile ? 14 : 15,
-                fontWeight: 700,
-                color: textPrimary,
-              }}
-            >
-              Mot de passe
-            </div>
-            <div style={{ fontSize: 11, color: textSecondary, marginTop: 1 }}>
-              Modifiez votre mot de passe de connexion
-            </div>
-          </div>
-        </div>
-
-        {/* Ancien mot de passe */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Mot de passe actuel</label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showOld ? "text" : "password"}
-              value={oldPwd}
-              onChange={(e) => setOldPwd(e.target.value)}
-              autoComplete="current-password"
-              placeholder="••••••••"
-              style={{ ...inputStyle, paddingRight: 42 }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowOld(!showOld)}
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                color: textSecondary,
-                cursor: "pointer",
-                padding: 6,
-                display: "flex",
-              }}
-              aria-label={showOld ? "Masquer" : "Afficher"}
-            >
-              {showOld ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Nouveau mot de passe */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Nouveau mot de passe</label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showNew ? "text" : "password"}
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
-              autoComplete="new-password"
-              placeholder={`Min. ${MIN_PASSWORD_LENGTH} caractères`}
-              style={{ ...inputStyle, paddingRight: 42 }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowNew(!showNew)}
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                color: textSecondary,
-                cursor: "pointer",
-                padding: 6,
-                display: "flex",
-              }}
-              aria-label={showNew ? "Masquer" : "Afficher"}
-            >
-              {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-          <PasswordStrengthBar password={newPwd} dark={dark} />
-          {newPwd.length > 0 && newPwd.length < MIN_PASSWORD_LENGTH && (
-            <div
-              style={{
-                color: "#EF4444",
-                fontSize: 11,
-                marginTop: -6,
-                marginBottom: 8,
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              <AlertCircle size={11} />
-              Au moins {MIN_PASSWORD_LENGTH} caractères requis
-            </div>
-          )}
-        </div>
-
-        {/* Confirmation */}
-        <div style={{ marginBottom: 18 }}>
-          <label style={labelStyle}>Confirmer le mot de passe</label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showConfirm ? "text" : "password"}
-              value={confirmPwd}
-              onChange={(e) => setConfirmPwd(e.target.value)}
-              autoComplete="new-password"
-              placeholder="Confirmer"
-              style={{
-                ...inputStyle,
-                paddingRight: 42,
-                borderColor:
-                  confirmPwd && newPwd !== confirmPwd
-                    ? "#EF4444"
-                    : confirmPwd && newPwd === confirmPwd
-                    ? "#10B981"
-                    : cardBorder,
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirm(!showConfirm)}
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                color: textSecondary,
-                cursor: "pointer",
-                padding: 6,
-                display: "flex",
-              }}
-              aria-label={showConfirm ? "Masquer" : "Afficher"}
-            >
-              {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-          {confirmPwd && newPwd !== confirmPwd && (
-            <div
-              style={{
-                color: "#EF4444",
-                fontSize: 11,
-                marginTop: 6,
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              <AlertCircle size={11} />
-              Les mots de passe ne correspondent pas
-            </div>
-          )}
-          {confirmPwd &&
-            newPwd === confirmPwd &&
-            newPwd.length >= MIN_PASSWORD_LENGTH && (
-              <div
+                id="profil-old-pwd"
+                type={showOld ? "text" : "password"}
+                value={oldPwd}
+                onChange={(e) => setOldPwd(e.target.value)}
+                onFocus={() => setFocusedField("oldPwd")}
+                onBlur={() => setFocusedField(null)}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                aria-label="Mot de passe actuel"
                 style={{
-                  color: "#10B981",
+                  ...inputStyle("oldPwd"),
+                  paddingRight: isMobile ? 52 : 42,
+                }}
+              />
+              <PasswordToggle
+                visible={showOld}
+                onToggle={() => setShowOld(!showOld)}
+                isMobile={isMobile}
+                textSecondary={textSecondary}
+              />
+            </div>
+          </div>
+
+          {/* Nouveau mot de passe */}
+          <div style={{ marginBottom: 14 }}>
+            <label htmlFor="profil-new-pwd" style={labelStyle}>
+              Nouveau mot de passe
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="profil-new-pwd"
+                type={showNew ? "text" : "password"}
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                onFocus={() => setFocusedField("newPwd")}
+                onBlur={() => setFocusedField(null)}
+                autoComplete="new-password"
+                placeholder={`Min. ${MIN_PASSWORD_LENGTH} caractères`}
+                aria-label="Nouveau mot de passe"
+                style={{
+                  ...inputStyle("newPwd"),
+                  paddingRight: isMobile ? 52 : 42,
+                }}
+              />
+              <PasswordToggle
+                visible={showNew}
+                onToggle={() => setShowNew(!showNew)}
+                isMobile={isMobile}
+                textSecondary={textSecondary}
+              />
+            </div>
+            <PasswordStrengthBar password={newPwd} dark={dark} />
+            {newPwd.length > 0 && newPwd.length < MIN_PASSWORD_LENGTH && (
+              <div
+                role="alert"
+                style={{
+                  color: "#EF4444",
+                  fontSize: 11,
+                  marginTop: -6,
+                  marginBottom: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <AlertCircle size={11} aria-hidden="true" />
+                Au moins {MIN_PASSWORD_LENGTH} caractères requis
+              </div>
+            )}
+          </div>
+
+          {/* Confirmation */}
+          <div style={{ marginBottom: 18 }}>
+            <label htmlFor="profil-confirm-pwd" style={labelStyle}>
+              Confirmer le mot de passe
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="profil-confirm-pwd"
+                type={showConfirm ? "text" : "password"}
+                value={confirmPwd}
+                onChange={(e) => setConfirmPwd(e.target.value)}
+                onFocus={() => setFocusedField("confirmPwd")}
+                onBlur={() => setFocusedField(null)}
+                autoComplete="new-password"
+                placeholder="Confirmer"
+                aria-label="Confirmer le mot de passe"
+                style={{
+                  ...inputStyle("confirmPwd"),
+                  paddingRight: isMobile ? 52 : 42,
+                  borderColor:
+                    confirmPwd && newPwd !== confirmPwd
+                      ? "#EF4444"
+                      : confirmPwd && newPwd === confirmPwd
+                      ? "#10B981"
+                      : focusedField === "confirmPwd"
+                      ? accent
+                      : cardBorder,
+                }}
+              />
+              <PasswordToggle
+                visible={showConfirm}
+                onToggle={() => setShowConfirm(!showConfirm)}
+                isMobile={isMobile}
+                textSecondary={textSecondary}
+              />
+            </div>
+            {confirmPwd && newPwd !== confirmPwd && (
+              <div
+                role="alert"
+                style={{
+                  color: "#EF4444",
                   fontSize: 11,
                   marginTop: 6,
                   display: "flex",
@@ -1100,27 +1251,50 @@ export function ProfilUtilisateur({ user }) {
                   gap: 4,
                 }}
               >
-                <Check size={11} />
-                Les mots de passe correspondent
+                <AlertCircle size={11} aria-hidden="true" />
+                Les mots de passe ne correspondent pas
               </div>
             )}
+            {confirmPwd &&
+              newPwd === confirmPwd &&
+              newPwd.length >= MIN_PASSWORD_LENGTH && (
+                <div
+                  role="status"
+                  style={{
+                    color: "#10B981",
+                    fontSize: 11,
+                    marginTop: 6,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <Check size={11} aria-hidden="true" />
+                  Les mots de passe correspondent
+                </div>
+              )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleChangePassword}
+            disabled={!canChangePwd}
+            onTouchStart={canChangePwd ? pressBtn("change-pwd") : undefined}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
+            style={btnStyle(!canChangePwd, "change-pwd")}
+          >
+            {changing ? (
+              <Loader size={16} className="pu-spin" aria-hidden="true" />
+            ) : (
+              <Lock size={16} aria-hidden="true" />
+            )}
+            {changing ? "Enregistrement…" : "Changer le mot de passe"}
+          </button>
         </div>
 
-        <button
-          onClick={handleChangePassword}
-          disabled={!canChangePwd}
-          style={btnStyle(!canChangePwd, "primary")}
-        >
-          {changing ? (
-            <Loader size={16} className="pu-spin" />
-          ) : (
-            <Lock size={16} />
-          )}
-          {changing ? "Enregistrement…" : "Changer le mot de passe"}
-        </button>
+        <ConfirmDialog {...dialogProps} />
       </div>
-
-      <ConfirmDialog {...dialogProps} />
-    </div>
+    </>
   );
 }

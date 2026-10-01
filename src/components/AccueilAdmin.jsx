@@ -9,14 +9,30 @@ import {
 } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
-// CARTE STATISTIQUE
+// CONSTANTES MODULE-LEVEL
 // ════════════════════════════════════════════════════════════════════
-function StatCard({ icon, label, value, color }) {
-  const { dark } = useStyles();
-  const isMobile = useIsMobile();
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+// ════════════════════════════════════════════════════════════════════
+// CARTE STATISTIQUE
+// ✅ dark + isMobile passés en props (plus de souscription interne)
+// ════════════════════════════════════════════════════════════════════
+function StatCard({ icon, label, value, color, dark, isMobile }) {
+  const displayValue =
+    typeof value === "number" ? value.toLocaleString("fr-FR") : value;
 
   return (
-    <div
+    <article
+      aria-label={`${label} : ${displayValue}`}
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 12,
@@ -31,9 +47,11 @@ function StatCard({ icon, label, value, color }) {
         minWidth: isMobile ? 130 : "auto",
         flex: isMobile ? "0 0 auto" : 1,
         boxSizing: "border-box",
+        minHeight: 44,
       }}
     >
       <div
+        aria-hidden="true"
         style={{
           width: 32,
           height: 32,
@@ -45,7 +63,6 @@ function StatCard({ icon, label, value, color }) {
           flexShrink: 0,
           color,
         }}
-        aria-hidden="true"
       >
         {icon}
       </div>
@@ -68,28 +85,30 @@ function StatCard({ icon, label, value, color }) {
             fontSize: 18,
             fontWeight: 700,
             lineHeight: 1.1,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
-          {typeof value === "number" ? value.toLocaleString("fr-FR") : value}
+          {displayValue}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════
 // LIEN RAPIDE
+// ✅ Feedback tap via state React + touch-action + minHeight 44
 // ════════════════════════════════════════════════════════════════════
-function QuickLink({ icon, label, color, onClick }) {
-  const { dark } = useStyles();
-  const isMobile = useIsMobile();
+function QuickLink({ icon, label, color, onClick, dark, isMobile }) {
   const [hover, setHover] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const accent = dark ? "#818CF8" : "#4F46E5";
 
-  const background = hover
+  const isActive = hover || pressed;
+  const background = isActive
     ? dark
       ? "#26334D"
       : "#F8FAFC"
@@ -103,9 +122,14 @@ function QuickLink({ icon, label, color, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setHover(false); setPressed(false); }}
+      onPointerCancel={() => setPressed(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       style={{
+        ...TAP_BASE,
         display: "flex",
         alignItems: "center",
         gap: 10,
@@ -116,17 +140,18 @@ function QuickLink({ icon, label, color, onClick }) {
         }`,
         borderRadius: 12,
         cursor: "pointer",
-        transition: "background 0.15s, border-color 0.15s",
+        transition: "background 0.15s, border-color 0.15s, transform 0.1s",
         textAlign: "left",
         width: "100%",
         minWidth: 0,
         outline: "none",
-        WebkitTapHighlightColor: "transparent",
         boxSizing: "border-box",
+        transform: pressed ? "scale(0.98)" : "scale(1)",
       }}
       aria-label={label}
     >
       <div
+        aria-hidden="true"
         style={{
           width: 32,
           height: 32,
@@ -138,7 +163,6 @@ function QuickLink({ icon, label, color, onClick }) {
           justifyContent: "center",
           flexShrink: 0,
         }}
-        aria-hidden="true"
       >
         {icon}
       </div>
@@ -224,7 +248,14 @@ export function AccueilAdmin({
         color: "#10B981",
       },
     ],
-    [eleves.length, classes.length, fautes.length, sanctions.length, users.length, frais.length]
+    [
+      eleves.length,
+      classes.length,
+      fautes.length,
+      sanctions.length,
+      users.length,
+      frais.length,
+    ]
   );
 
   // ✅ QuickLinks mémoïsés
@@ -308,7 +339,7 @@ export function AccueilAdmin({
         </p>
       </div>
 
-      {/* ══════════════════ STATS (scroll horizontal mobile) ══════════════════ */}
+      {/* ══════════════════ STATS ══════════════════ */}
       <div
         style={{
           display: isMobile ? "flex" : "grid",
@@ -319,17 +350,19 @@ export function AccueilAdmin({
           marginBottom: isMobile ? 16 : 24,
           overflowX: isMobile ? "auto" : "visible",
           paddingBottom: isMobile ? 4 : 0,
-          WebkitOverflowScrolling: "touch",
           scrollbarWidth: "none",
+          ...SCROLL_AREA,
         }}
       >
-        {stats.map((stat, idx) => (
+        {stats.map((stat) => (
           <StatCard
-            key={idx}
+            key={stat.label}
             icon={stat.icon}
             label={stat.label}
             value={stat.value}
             color={stat.color}
+            dark={dark}
+            isMobile={isMobile}
           />
         ))}
       </div>
@@ -345,13 +378,13 @@ export function AccueilAdmin({
           }}
         >
           <div
+            aria-hidden="true"
             style={{
               width: 6,
               height: 18,
               borderRadius: 3,
               background: dark ? "#818CF8" : "#4F46E5",
             }}
-            aria-hidden="true"
           />
           <h3
             style={{
@@ -383,6 +416,8 @@ export function AccueilAdmin({
               label={link.label}
               color={link.color}
               onClick={() => handleNavigate(link.tab)}
+              dark={dark}
+              isMobile={isMobile}
             />
           ))}
         </div>

@@ -1,3 +1,4 @@
+// src/components/FraisEnfant.jsx
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -8,9 +9,32 @@ import {
 } from "lucide-react";
 import { Skeleton } from "./Skeleton";
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const FraisEnfantKeyframes = (
+  <style>{`
+    @keyframes fe-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .fe-spin { animation: fe-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .fe-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
 // FORMATAGE DES MONTANTS
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function formatMontant(value, devise) {
   if (value == null) return "—";
   const num = Number(value);
@@ -27,9 +51,9 @@ function formatMontant(value, devise) {
   }
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // CARTE DE FRAIS INDIVIDUELLE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
@@ -63,55 +87,59 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
         padding: isMobile ? "12px 14px" : "14px 16px",
         boxShadow: shadow,
         border: `1px solid ${cardBorder}`,
+        boxSizing: "border-box",
       }}
     >
       {/* En-tête : titre (optionnel) + badge */}
-      {(showTitle || estPaye != null) && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-            gap: 8,
-          }}
-        >
-          {showTitle ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: isMobile ? 13.5 : 14,
-                fontWeight: 700,
-                color: textPrimary,
-              }}
-            >
-              <Wallet size={15} color={accent} />
-              Frais scolaires
-            </div>
-          ) : (
-            <div />
-          )}
-          <span
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+          gap: 8,
+        }}
+      >
+        {showTitle ? (
+          <div
             style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              gap: 4,
-              background: estPaye ? badgePayeBg : badgeAttenteBg,
-              color: estPaye ? badgePayeText : badgeAttenteText,
-              padding: "3px 10px",
-              borderRadius: 12,
-              fontSize: 10.5,
+              gap: 6,
+              fontSize: isMobile ? 13.5 : 14,
               fontWeight: 700,
-              flexShrink: 0,
+              color: textPrimary,
+              minWidth: 0,
             }}
           >
-            {estPaye ? <CheckCircle size={11} /> : <Clock size={11} />}
-            {estPaye ? "Payé" : "En attente"}
-          </span>
-        </div>
-      )}
+            <Wallet size={15} color={accent} aria-hidden="true" />
+            Frais scolaires
+          </div>
+        ) : (
+          <div />
+        )}
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            background: estPaye ? badgePayeBg : badgeAttenteBg,
+            color: estPaye ? badgePayeText : badgeAttenteText,
+            padding: "3px 10px",
+            borderRadius: 12,
+            fontSize: 10.5,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {estPaye ? (
+            <CheckCircle size={11} aria-hidden="true" />
+          ) : (
+            <Clock size={11} aria-hidden="true" />
+          )}
+          {estPaye ? "Payé" : "En attente"}
+        </span>
+      </div>
 
       {/* Montants */}
       <div style={{ marginBottom: 12 }}>
@@ -120,6 +148,8 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
             display: "flex",
             justifyContent: "space-between",
             marginBottom: 6,
+            gap: 8,
+            alignItems: "baseline",
           }}
         >
           <span
@@ -135,6 +165,8 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
               fontWeight: 600,
               fontSize: isMobile ? 13 : 13.5,
               color: textPrimary,
+              fontVariantNumeric: "tabular-nums",
+              textAlign: "right",
             }}
           >
             {formatMontant(frais.montantTotal, devise)} {devise}
@@ -145,6 +177,8 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
             display: "flex",
             justifyContent: "space-between",
             marginBottom: 6,
+            gap: 8,
+            alignItems: "baseline",
           }}
         >
           <span
@@ -160,6 +194,8 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
               fontWeight: 600,
               fontSize: isMobile ? 13 : 13.5,
               color: success,
+              fontVariantNumeric: "tabular-nums",
+              textAlign: "right",
             }}
           >
             {formatMontant(frais.montantPaye, devise)} {devise}
@@ -171,6 +207,8 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
             justifyContent: "space-between",
             paddingTop: 8,
             borderTop: `1px solid ${divider}`,
+            gap: 8,
+            alignItems: "baseline",
           }}
         >
           <span
@@ -187,6 +225,8 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
               fontWeight: 700,
               fontSize: isMobile ? 14 : 14.5,
               color: reste > 0 ? danger : success,
+              fontVariantNumeric: "tabular-nums",
+              textAlign: "right",
             }}
           >
             {formatMontant(reste, devise)} {devise}
@@ -207,11 +247,22 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
           }}
         >
           <span>Progression</span>
-          <span style={{ color: estPaye ? success : accent, fontWeight: 700 }}>
+          <span
+            style={{
+              color: estPaye ? success : accent,
+              fontWeight: 700,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {pourcentagePaye}%
           </span>
         </div>
         <div
+          role="progressbar"
+          aria-valuenow={pourcentagePaye}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Progression du paiement : ${pourcentagePaye}%`}
           style={{
             width: "100%",
             height: 6,
@@ -245,9 +296,14 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
             paddingTop: 10,
             borderTop: `1px solid ${divider}`,
             lineHeight: 1.4,
+            wordBreak: "break-word",
           }}
         >
-          <StickyNote size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+          <StickyNote
+            size={13}
+            style={{ marginTop: 1, flexShrink: 0 }}
+            aria-hidden="true"
+          />
           <span>{frais.commentaire}</span>
         </div>
       )}
@@ -255,9 +311,9 @@ function FraisCard({ frais, devise, dark, isMobile, showTitle = true }) {
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // RÉSUMÉ GLOBAL (quand plusieurs frais)
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function FraisResume({ fraisList, devise, dark, isMobile }) {
   const totalDu = fraisList.reduce((s, f) => s + f.montantTotal, 0);
   const totalPaye = fraisList.reduce((s, f) => s + f.montantPaye, 0);
@@ -280,6 +336,7 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
         boxShadow: dark
           ? "0 1px 3px rgba(0,0,0,0.3)"
           : "0 1px 3px rgba(0,0,0,0.05)",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -307,6 +364,9 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
               fontSize: 10.5,
               color: textSecondary,
               marginBottom: 2,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             Total dû
@@ -316,6 +376,7 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
               fontSize: isMobile ? 13 : 14,
               fontWeight: 700,
               color: textPrimary,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {formatMontant(totalDu, devise)}
@@ -327,6 +388,9 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
               fontSize: 10.5,
               color: textSecondary,
               marginBottom: 2,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             Payé
@@ -336,6 +400,7 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
               fontSize: isMobile ? 13 : 14,
               fontWeight: 700,
               color: success,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {formatMontant(totalPaye, devise)}
@@ -347,6 +412,9 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
               fontSize: 10.5,
               color: textSecondary,
               marginBottom: 2,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             Reste
@@ -356,6 +424,7 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
               fontSize: isMobile ? 13 : 14,
               fontWeight: 700,
               color: reste > 0 ? danger : success,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {formatMontant(reste, devise)}
@@ -366,35 +435,88 @@ function FraisResume({ fraisList, devise, dark, isMobile }) {
   );
 }
 
-// ============================================================
-// KEYFRAMES (injectés dans toutes les branches)
-// ============================================================
-const Keyframes = (
-  <style>{`
-    @keyframes fe-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .fe-spin { animation: fe-spin 1s linear infinite; }
-    @media (prefers-reduced-motion: reduce) {
-      .fe-spin { animation: none !important; }
-    }
-  `}</style>
-);
+// ════════════════════════════════════════════════════════════════════
+// EMPTY / ERROR STATE
+// ════════════════════════════════════════════════════════════════════
+function FraisEmptyState({ title, description, dark, isMobile, accent }) {
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const shadow = dark
+    ? "0 1px 3px rgba(0,0,0,0.3)"
+    : "0 1px 3px rgba(0,0,0,0.05)";
 
-// ============================================================
+  return (
+    <div
+      style={{
+        background: cardBg,
+        borderRadius: 16,
+        padding: isMobile ? 24 : 32,
+        boxShadow: shadow,
+        marginTop: 16,
+        textAlign: "center",
+        border: `1px solid ${cardBorder}`,
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: "50%",
+          background: dark ? "#334155" : "#F1F5F9",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "0 auto 12px",
+        }}
+        aria-hidden="true"
+      >
+        <DollarSign size={26} color={accent || textSecondary} />
+      </div>
+      <p
+        style={{
+          color: textPrimary,
+          fontSize: 14,
+          fontWeight: 600,
+          margin: 0,
+        }}
+      >
+        {title}
+      </p>
+      {description && (
+        <p
+          style={{
+            color: textSecondary,
+            fontSize: 12.5,
+            margin: "4px 0 0",
+            maxWidth: 320,
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          {description}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function FraisEnfant({ eleveId, user }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
 
   const userId = user?._id;
 
-  // ✅ userId ajouté sur les 3 queries + garde stricte
   const fraisRaw = useQuery(
     api.frais.listByEleve,
     eleveId && userId ? { eleveId, userId } : "skip"
   );
 
-  // ⚠️ Vérifier signature backend : `id` ou `eleveId` ?
   const eleve = useQuery(
     api.eleves.get,
     eleveId && userId ? { id: eleveId, userId } : "skip"
@@ -410,86 +532,71 @@ export function FraisEnfant({ eleveId, user }) {
   // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
-  const cardBg = dark ? "#1E293B" : "#FFFFFF";
-  const cardBorder = dark ? "#334155" : "#E2E8F0";
   const accent = dark ? "#818CF8" : "#4F46E5";
-  const shadow = dark
-    ? "0 1px 3px rgba(0,0,0,0.3)"
-    : "0 1px 3px rgba(0,0,0,0.05)";
 
   const fraisList = useMemo(() => fraisRaw ?? [], [fraisRaw]);
 
-  // ==================== CHARGEMENT ====================
+  // Container padding avec safe-area
+  const containerStyle = {
+    marginTop: isMobile ? 12 : 16,
+    paddingLeft: isMobile ? SAFE_LEFT : 0,
+    paddingRight: isMobile ? SAFE_RIGHT : 0,
+    paddingBottom: isMobile ? `calc(8px + ${SAFE_BOTTOM})` : 0,
+    boxSizing: "border-box",
+  };
+
+  // ════════════════════════════════════════════════════════════════
+  // CHARGEMENT
+  // ════════════════════════════════════════════════════════════════
   if (eleve === undefined || (eleve && ecole === undefined)) {
     return (
       <>
-        {Keyframes}
-        <Skeleton height={200} style={{ marginTop: 16 }} />
-      </>
-    );
-  }
-
-  // ==================== ÉLÈVE INTROUVABLE ====================
-  if (eleve === null) {
-    return (
-      <>
-        {Keyframes}
+        {FraisEnfantKeyframes}
         <div
-          style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: isMobile ? 24 : 32,
-            boxShadow: shadow,
-            marginTop: 16,
-            textAlign: "center",
-            border: `1px solid ${cardBorder}`,
-          }}
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          style={containerStyle}
         >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: "50%",
-              background: dark ? "#334155" : "#F1F5F9",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 12px",
-            }}
-          >
-            <DollarSign size={26} color={textSecondary} />
-          </div>
-          <p
-            style={{
-              color: textPrimary,
-              fontSize: 14,
-              fontWeight: 600,
-              margin: 0,
-            }}
-          >
-            Élève introuvable
-          </p>
-          <p
-            style={{
-              color: textSecondary,
-              fontSize: 12.5,
-              margin: "4px 0 0",
-            }}
-          >
-            Impossible de charger les informations de frais
-          </p>
+          <Skeleton height={200} />
         </div>
       </>
     );
   }
 
-  // ==================== CHARGEMENT DES FRAIS ====================
+  // ════════════════════════════════════════════════════════════════
+  // ÉLÈVE INTROUVABLE
+  // ════════════════════════════════════════════════════════════════
+  if (eleve === null) {
+    return (
+      <>
+        {FraisEnfantKeyframes}
+        <div style={containerStyle}>
+          <FraisEmptyState
+            title="Élève introuvable"
+            description="Impossible de charger les informations de frais"
+            dark={dark}
+            isMobile={isMobile}
+            accent={textSecondary}
+          />
+        </div>
+      </>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // CHARGEMENT DES FRAIS
+  // ════════════════════════════════════════════════════════════════
   if (fraisRaw === undefined) {
     return (
       <>
-        {Keyframes}
+        {FraisEnfantKeyframes}
         <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
           style={{
+            ...containerStyle,
             display: "flex",
             justifyContent: "center",
             padding: 40,
@@ -499,81 +606,49 @@ export function FraisEnfant({ eleveId, user }) {
             size={26}
             className="fe-spin"
             style={{ color: accent }}
+            aria-hidden="true"
           />
         </div>
       </>
     );
   }
 
-  // ==================== AUCUN FRAIS ====================
+  // ════════════════════════════════════════════════════════════════
+  // AUCUN FRAIS
+  // ════════════════════════════════════════════════════════════════
   if (fraisList.length === 0) {
     return (
       <>
-        {Keyframes}
-        <div
-          style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: isMobile ? 24 : 32,
-            boxShadow: shadow,
-            marginTop: 16,
-            textAlign: "center",
-            border: `1px solid ${cardBorder}`,
-          }}
-        >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: "50%",
-              background: dark ? "#334155" : "#F1F5F9",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 12px",
-            }}
-          >
-            <DollarSign size={26} color={textSecondary} />
-          </div>
-          <p
-            style={{
-              color: textPrimary,
-              fontSize: 14,
-              fontWeight: 600,
-              margin: 0,
-            }}
-          >
-            Aucune information de frais
-          </p>
-          <p
-            style={{
-              color: textSecondary,
-              fontSize: 12.5,
-              margin: "4px 0 0",
-              maxWidth: 320,
-              marginLeft: "auto",
-              marginRight: "auto",
-            }}
-          >
-            Les frais scolaires de cet élève n'ont pas encore été enregistrés
-          </p>
+        {FraisEnfantKeyframes}
+        <div style={containerStyle}>
+          <FraisEmptyState
+            title="Aucune information de frais"
+            description="Les frais scolaires de cet élève n'ont pas encore été enregistrés"
+            dark={dark}
+            isMobile={isMobile}
+            accent={textSecondary}
+          />
         </div>
       </>
     );
   }
 
-  // ==================== DONNÉES ====================
+  // ════════════════════════════════════════════════════════════════
+  // DONNÉES
+  // ════════════════════════════════════════════════════════════════
   const deviseCode = ecole?.devise || "CDF";
   const devise = deviseCode === "USD" ? "$" : "FC";
   const hasMultiple = fraisList.length > 1;
 
-  // ==================== RENDU ====================
+  // ════════════════════════════════════════════════════════════════
+  // RENDU
+  // ════════════════════════════════════════════════════════════════
   return (
     <>
-      {Keyframes}
+      {FraisEnfantKeyframes}
       <div
         style={{
-          marginTop: isMobile ? 12 : 16,
+          ...containerStyle,
           display: "grid",
           gap: isMobile ? 8 : 12,
         }}

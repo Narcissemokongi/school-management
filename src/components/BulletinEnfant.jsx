@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+// src/components/BulletinEnfant.jsx
+import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -9,9 +10,46 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-// ============================================================
-// LAZY-LOAD jspdf + html2canvas
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+const TOP3_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32"];
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL (rendus UNE fois)
+// ════════════════════════════════════════════════════════════════════
+const BulletinEnfantKeyframes = (
+  <style>{`
+    @keyframes be-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .be-spin { animation: be-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .be-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// LAZY-LOAD jspdf + html2canvas (caché par promise)
+// ════════════════════════════════════════════════════════════════════
 let _pdfDepsPromise = null;
 function loadPdfDeps() {
   if (!_pdfDepsPromise) {
@@ -26,6 +64,9 @@ function loadPdfDeps() {
   return _pdfDepsPromise;
 }
 
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT
+// ════════════════════════════════════════════════════════════════════
 export function BulletinEnfant({
   eleveId,
   ecoleId,
@@ -44,7 +85,7 @@ export function BulletinEnfant({
   const [generating, setGenerating] = useState(false);
   const [forceClair, setForceClair] = useState(false);
 
-  // ========== REQUÊTES (userId requis) ==========
+  // ========== REQUÊTES ==========
   const ecole = useQuery(
     api.ecoles.get,
     ecoleId && userId ? { ecoleId, userId } : "skip"
@@ -84,21 +125,21 @@ export function BulletinEnfant({
       : "skip"
   );
 
-  // ✅ Mémoïsation des tableaux (évite nouvelles refs à chaque render)
+  // ✅ Mémoïsation des tableaux
   const notes = useMemo(() => notesRaw ?? [], [notesRaw]);
   const absences = useMemo(() => absencesRaw ?? [], [absencesRaw]);
   const coursDisponibles = useMemo(() => coursRaw ?? [], [coursRaw]);
   const classement = useMemo(() => classementRaw ?? [], [classementRaw]);
 
-  // ========== COULEURS INTERFACE ==========
-  const uiColors = {
+  // ========== COULEURS INTERFACE (mémoïsées) ==========
+  const uiColors = useMemo(() => ({
     textPrimary: dark ? "#F1F5F9" : "#1E293B",
     textSecondary: dark ? "#94A3B8" : "#64748B",
     accent: dark ? "#818CF8" : "#4F46E5",
-  };
+  }), [dark]);
 
-  // ========== COULEURS BULLETIN ==========
-  const displayBulletinColors = {
+  // ========== COULEURS BULLETIN (mémoïsées) ==========
+  const displayBulletinColors = useMemo(() => ({
     textPrimary: dark ? "#F1F5F9" : "#1E293B",
     textSecondary: dark ? "#94A3B8" : "#64748B",
     cardBg: dark ? "#1E293B" : "#FFFFFF",
@@ -111,9 +152,9 @@ export function BulletinEnfant({
     mutedBg: dark ? "#0F172A" : "#F8FAFC",
     decisionBg: dark ? "#78350F" : "#FEF3C7",
     decisionText: dark ? "#FBBF24" : "#92400E",
-  };
+  }), [dark]);
 
-  const exportBulletinColors = {
+  const exportBulletinColors = useMemo(() => ({
     textPrimary: "#1E293B",
     textSecondary: "#64748B",
     cardBg: "#FFFFFF",
@@ -126,9 +167,11 @@ export function BulletinEnfant({
     mutedBg: "#F8FAFC",
     decisionBg: "#FEF3C7",
     decisionText: "#92400E",
-  };
+  }), []);
 
-  const bulletinColors = forceClair ? exportBulletinColors : displayBulletinColors;
+  const bulletinColors = forceClair
+    ? exportBulletinColors
+    : displayBulletinColors;
 
   // ========== TRAITEMENT DES DONNÉES ==========
   const typePeriode = ecole?.typePeriode || "trimestre";
@@ -147,7 +190,8 @@ export function BulletinEnfant({
     [coursDisponibles]
   );
 
-  const calculerMoyenneBrute = (notesMatiere) => {
+  // ========== CALCULS ==========
+  const calculerMoyenneBrute = useCallback((notesMatiere) => {
     if (!notesMatiere || notesMatiere.length === 0) return "-";
     const sommePonderee = notesMatiere.reduce(
       (sum, n) => sum + n.note * (n.coefficient || 1),
@@ -158,7 +202,7 @@ export function BulletinEnfant({
       0
     );
     return totalCoeff > 0 ? sommePonderee / totalCoeff : "-";
-  };
+  }, []);
 
   const statsParMatiere = useMemo(() => {
     return matieres.map((matiere) => {
@@ -197,7 +241,7 @@ export function BulletinEnfant({
           .join("; "),
       };
     });
-  }, [notes, matieres, periodes, coursDisponibles]);
+  }, [notes, matieres, periodes, coursDisponibles, calculerMoyenneBrute]);
 
   const moyenneGeneralePourcent = useMemo(() => {
     let sommePonderee = 0;
@@ -246,39 +290,9 @@ export function BulletinEnfant({
   const retards = absences.filter((a) => a.type === "retard").length;
 
   // ============================================================
-  // LOADING — corrigé : plus de `?? []` masquant
+  // EXPORT PDF (mémoïsé)
   // ============================================================
-  if (
-    ecole === undefined ||
-    anneeActive === undefined ||
-    notesRaw === undefined ||
-    eleve === undefined ||
-    absencesRaw === undefined ||
-    coursRaw === undefined ||
-    classementRaw === undefined
-  ) {
-    return (
-      <>
-        <style>{`
-          @keyframes be-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          .be-spin { animation: be-spin 1s linear infinite; }
-          @media (prefers-reduced-motion: reduce) {
-            .be-spin { animation: none !important; }
-          }
-        `}</style>
-        <Skeleton height={400} />
-      </>
-    );
-  }
-
-  const aujourdHui = new Date().toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
-  // ========== EXPORT PDF ==========
-  const handleExportPDF = async () => {
+  const handleExportPDF = useCallback(async () => {
     if (!bulletinRef.current || generating) return;
     setGenerating(true);
     setForceClair(true);
@@ -327,14 +341,38 @@ export function BulletinEnfant({
       setForceClair(false);
       setGenerating(false);
     }
-  };
+  }, [generating, nom, postnom]);
 
-  const top3Colors = ["#FFD700", "#C0C0C0", "#CD7F32"];
+  // ============================================================
+  // LOADING
+  // ============================================================
+  if (
+    ecole === undefined ||
+    anneeActive === undefined ||
+    notesRaw === undefined ||
+    eleve === undefined ||
+    absencesRaw === undefined ||
+    coursRaw === undefined ||
+    classementRaw === undefined
+  ) {
+    return (
+      <>
+        {BulletinEnfantKeyframes}
+        <Skeleton height={400} />
+      </>
+    );
+  }
 
-  // Styles adaptatifs
+  const aujourdHui = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  // ========== STYLES ADAPTATIFS ==========
   const containerMargin = isMobile ? "16px auto" : "24px auto";
   const containerPadding = isMobile ? "0 8px" : "0 16px";
-  const exportButtonPadding = isMobile ? "12px 16px" : "10px 20px";
+  const exportButtonPadding = isMobile ? "12px 16px" : "12px 20px";
   const exportButtonFontSize = isMobile ? 16 : 14;
   const exportButtonWidth = isMobile ? "100%" : "auto";
   const bulletinPadding = isMobile ? "8px" : "12px";
@@ -353,15 +391,9 @@ export function BulletinEnfant({
         color: uiColors.textPrimary,
       }}
     >
-      <style>{`
-        @keyframes be-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .be-spin { animation: be-spin 1s linear infinite; }
-        @media (prefers-reduced-motion: reduce) {
-          .be-spin { animation: none !important; }
-        }
-      `}</style>
+      {BulletinEnfantKeyframes}
 
-      {/* Bouton d'export */}
+      {/* ═══════════════ BOUTON D'EXPORT ═══════════════ */}
       <div
         style={{
           display: "flex",
@@ -370,9 +402,13 @@ export function BulletinEnfant({
         }}
       >
         <button
+          type="button"
           onClick={handleExportPDF}
           disabled={generating}
+          aria-label="Exporter le bulletin en PDF"
+          aria-busy={generating}
           style={{
+            ...TAP_BASE,
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
@@ -386,14 +422,26 @@ export function BulletinEnfant({
             cursor: generating ? "not-allowed" : "pointer",
             fontSize: exportButtonFontSize,
             width: exportButtonWidth,
+            fontFamily: "inherit",
           }}
         >
-          <Download size={isMobile ? 20 : 18} />
+          {generating ? (
+            <span
+              className="be-spin"
+              role="status"
+              aria-label="Génération du PDF"
+              style={{ display: "inline-flex" }}
+            >
+              <Download size={isMobile ? 20 : 18} aria-hidden="true" />
+            </span>
+          ) : (
+            <Download size={isMobile ? 20 : 18} aria-hidden="true" />
+          )}
           {generating ? "Génération..." : "Exporter PDF"}
         </button>
       </div>
 
-      {/* ================== BULLETIN ================== */}
+      {/* ═══════════════ BULLETIN ═══════════════ */}
       <div
         ref={bulletinRef}
         style={{
@@ -406,7 +454,7 @@ export function BulletinEnfant({
           boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
         }}
       >
-        {/* En-tête officiel */}
+        {/* ─────────── En-tête officiel ─────────── */}
         <div
           style={{
             textAlign: "center",
@@ -427,7 +475,7 @@ export function BulletinEnfant({
             {ecole.logo && (
               <img
                 src={ecole.logo}
-                alt="Logo"
+                alt=""
                 style={{ height: 45 }}
               />
             )}
@@ -511,6 +559,7 @@ export function BulletinEnfant({
               fontSize: 11,
               color: bulletinColors.textSecondary,
               margin: 0,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             Année scolaire {new Date().getFullYear() - 1}–
@@ -518,7 +567,7 @@ export function BulletinEnfant({
           </p>
         </div>
 
-        {/* Identification de l'élève */}
+        {/* ─────────── Identification élève ─────────── */}
         <div
           style={{
             display: "flex",
@@ -540,15 +589,24 @@ export function BulletinEnfant({
           </div>
           {eleve?.code && (
             <div>
-              <strong>Matricule :</strong> {eleve.code}
+              <strong>Matricule :</strong>{" "}
+              <span style={{ fontFamily: "ui-monospace, monospace" }}>
+                {eleve.code}
+              </span>
             </div>
           )}
           <div>
-            <strong>Rang :</strong> {rang} / {classement.length}
+            <strong>Rang :</strong>{" "}
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              {rang} / {classement.length}
+            </span>
           </div>
           {moyenneClasse && (
             <div>
-              <strong>Moy. classe :</strong> {moyenneClasse}%
+              <strong>Moy. classe :</strong>{" "}
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {moyenneClasse}%
+              </span>
             </div>
           )}
           {mention && (
@@ -558,9 +616,13 @@ export function BulletinEnfant({
           )}
           {rang <= 3 && (
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <Award size={14} color={top3Colors[rang - 1]} />
+              <Award size={14} color={TOP3_COLORS[rang - 1]} aria-hidden="true" />
               <span
-                style={{ fontWeight: 600, color: top3Colors[rang - 1] }}
+                style={{
+                  fontWeight: 600,
+                  color: TOP3_COLORS[rang - 1],
+                  fontVariantNumeric: "tabular-nums",
+                }}
               >
                 Top {rang}
               </span>
@@ -568,8 +630,14 @@ export function BulletinEnfant({
           )}
         </div>
 
-        {/* Tableau des notes */}
-        <div style={{ overflowX: "auto", marginBottom: 10 }}>
+        {/* ─────────── Tableau des notes ─────────── */}
+        <div
+          style={{
+            overflowX: "auto",
+            marginBottom: 10,
+            ...SCROLL_AREA,
+          }}
+        >
           <table
             style={{
               width: "100%",
@@ -579,6 +647,17 @@ export function BulletinEnfant({
               minWidth: isMobile ? 500 : "auto",
             }}
           >
+            <caption
+              style={{
+                position: "absolute",
+                left: -9999,
+                width: 1,
+                height: 1,
+                overflow: "hidden",
+              }}
+            >
+              Notes de {nom} {postnom} — classe {classe}
+            </caption>
             <thead>
               <tr
                 style={{
@@ -586,19 +665,29 @@ export function BulletinEnfant({
                   color: "white",
                 }}
               >
-                <th style={{ padding: 4, textAlign: "left" }}>Matière</th>
-                <th style={{ padding: 4, textAlign: "center" }}>Coeff</th>
-                <th style={{ padding: 4, textAlign: "center" }}>Max</th>
+                <th scope="col" style={{ padding: 4, textAlign: "left" }}>
+                  Matière
+                </th>
+                <th scope="col" style={{ padding: 4, textAlign: "center" }}>
+                  Coeff
+                </th>
+                <th scope="col" style={{ padding: 4, textAlign: "center" }}>
+                  Max
+                </th>
                 {periodes.map((periode) => (
                   <th
                     key={periode}
+                    scope="col"
                     style={{ padding: 4, textAlign: "center" }}
                   >
                     {prefixePeriode} {periode.split(" ")[0]}
                   </th>
                 ))}
-                <th style={{ padding: 4, textAlign: "center" }}>Moy. brute</th>
+                <th scope="col" style={{ padding: 4, textAlign: "center" }}>
+                  Moy. brute
+                </th>
                 <th
+                  scope="col"
                   style={{
                     padding: 4,
                     textAlign: "center",
@@ -608,7 +697,7 @@ export function BulletinEnfant({
                 >
                   Moy. %
                 </th>
-                <th style={{ padding: 4, textAlign: "center" }}>
+                <th scope="col" style={{ padding: 4, textAlign: "center" }}>
                   Appréciation
                 </th>
               </tr>
@@ -621,11 +710,28 @@ export function BulletinEnfant({
                     borderBottom: `1px solid ${bulletinColors.tableRowBorder}`,
                   }}
                 >
-                  <td style={{ padding: 3 }}>{m.matiere}</td>
-                  <td style={{ padding: 3, textAlign: "center" }}>
+                  <th
+                    scope="row"
+                    style={{ padding: 3, textAlign: "left", fontWeight: 400 }}
+                  >
+                    {m.matiere}
+                  </th>
+                  <td
+                    style={{
+                      padding: 3,
+                      textAlign: "center",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
                     {m.coeffCours}
                   </td>
-                  <td style={{ padding: 3, textAlign: "center" }}>
+                  <td
+                    style={{
+                      padding: 3,
+                      textAlign: "center",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
                     /{m.baremeCours}
                   </td>
                   {m.moyBrutes.map((mb, idx) => (
@@ -639,6 +745,7 @@ export function BulletinEnfant({
                           mb === "-"
                             ? bulletinColors.textSecondary
                             : bulletinColors.textPrimary,
+                        fontVariantNumeric: "tabular-nums",
                       }}
                     >
                       {mb === "-" ? "-" : mb}
@@ -649,6 +756,7 @@ export function BulletinEnfant({
                       padding: 3,
                       textAlign: "center",
                       fontWeight: 600,
+                      fontVariantNumeric: "tabular-nums",
                     }}
                   >
                     {m.moyAnnuelleBrute !== null
@@ -661,6 +769,7 @@ export function BulletinEnfant({
                       textAlign: "center",
                       fontWeight: 700,
                       color: bulletinColors.accent,
+                      fontVariantNumeric: "tabular-nums",
                     }}
                   >
                     {m.pourcentage !== null
@@ -698,6 +807,7 @@ export function BulletinEnfant({
                     textAlign: "center",
                     fontSize: 14,
                     color: bulletinColors.accent,
+                    fontVariantNumeric: "tabular-nums",
                   }}
                 >
                   {moyenneGeneralePourcent !== "-"
@@ -710,9 +820,10 @@ export function BulletinEnfant({
           </table>
         </div>
 
-        {/* Absences */}
-        <div style={{ marginBottom: 10 }}>
+        {/* ─────────── Absences ─────────── */}
+        <section style={{ marginBottom: 10 }} aria-labelledby="be-absences-title">
           <h3
+            id="be-absences-title"
             style={{
               fontSize: sectionTitleSize,
               fontWeight: 600,
@@ -723,7 +834,7 @@ export function BulletinEnfant({
               color: bulletinColors.textPrimary,
             }}
           >
-            <Clock size={16} /> Absences & Retards
+            <Clock size={16} aria-hidden="true" /> Absences & Retards
           </h3>
           <div
             style={{
@@ -749,6 +860,7 @@ export function BulletinEnfant({
                   fontWeight: 600,
                   color: bulletinColors.success,
                   fontSize: 10,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 {absencesJustifiees}
@@ -771,6 +883,7 @@ export function BulletinEnfant({
                   fontWeight: 600,
                   color: bulletinColors.danger,
                   fontSize: 10,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 {absencesNonJustifiees}
@@ -789,16 +902,19 @@ export function BulletinEnfant({
                   fontWeight: 600,
                   color: bulletinColors.warning,
                   fontSize: 10,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 {retards}
               </span>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Décision du conseil */}
+        {/* ─────────── Décision du conseil ─────────── */}
         <div
+          role="status"
+          aria-live="polite"
           style={{
             marginBottom: 8,
             padding: "6px 10px",
@@ -810,9 +926,17 @@ export function BulletinEnfant({
           }}
         >
           {decision === "En attente" ? (
-            <AlertTriangle size={16} color={bulletinColors.decisionText} />
+            <AlertTriangle
+              size={16}
+              color={bulletinColors.decisionText}
+              aria-hidden="true"
+            />
           ) : (
-            <CheckCircle size={16} color={bulletinColors.decisionText} />
+            <CheckCircle
+              size={16}
+              color={bulletinColors.decisionText}
+              aria-hidden="true"
+            />
           )}
           <span
             style={{
@@ -825,7 +949,7 @@ export function BulletinEnfant({
           </span>
         </div>
 
-        {/* Signatures */}
+        {/* ─────────── Signatures ─────────── */}
         <div
           style={{
             display: "flex",
@@ -835,36 +959,21 @@ export function BulletinEnfant({
             color: bulletinColors.textSecondary,
           }}
         >
-          <div>
-            <div>Le Directeur</div>
-            <div
-              style={{
-                marginTop: 16,
-                borderTop: "1px solid #CBD5E1",
-                width: 100,
-              }}
-            />
-          </div>
-          <div>
-            <div>Le Parent / Tuteur</div>
-            <div
-              style={{
-                marginTop: 16,
-                borderTop: "1px solid #CBD5E1",
-                width: 100,
-              }}
-            />
-          </div>
-          <div>
-            <div>Le Titulaire</div>
-            <div
-              style={{
-                marginTop: 16,
-                borderTop: "1px solid #CBD5E1",
-                width: 100,
-              }}
-            />
-          </div>
+          {["Le Directeur", "Le Parent / Tuteur", "Le Titulaire"].map(
+            (label) => (
+              <div key={label}>
+                <div>{label}</div>
+                <div
+                  aria-hidden="true"
+                  style={{
+                    marginTop: 16,
+                    borderTop: "1px solid #CBD5E1",
+                    width: 100,
+                  }}
+                />
+              </div>
+            )
+          )}
         </div>
 
         <div

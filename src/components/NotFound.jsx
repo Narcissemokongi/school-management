@@ -1,8 +1,174 @@
+// src/components/NotFound.jsx
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { Home, Search, ArrowLeft } from "lucide-react";
 
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL (rendus UNE fois)
+// ════════════════════════════════════════════════════════════════════
+const NotFoundKeyframes = (
+  <style>{`
+    @keyframes nf-fadeInZoom {
+      0% { opacity: 0; transform: scale(0.95) translateY(20px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes nf-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes nf-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.05); }
+    }
+    .nf-container {
+      animation: nf-fadeInZoom 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .nf-float {
+      animation: nf-float 3s ease-in-out infinite;
+    }
+    .nf-pulse {
+      animation: nf-pulse 2s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .nf-container,
+      .nf-float,
+      .nf-pulse {
+        animation: none !important;
+      }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// HOME LINK — état React pour hover/focus/pressed
+// ════════════════════════════════════════════════════════════════════
+function HomeLink({
+  to, buttonBg, buttonHover, buttonShadow, buttonShadowHover,
+  actionButtonPadding, actionButtonWidth, actionButtonFontSize,
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const isActive = hovered && !pressed;
+
+  return (
+    <Link
+      to={to}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        padding: actionButtonPadding,
+        background: isActive ? buttonHover : buttonBg,
+        color: "#FFFFFF",
+        borderRadius: 12,
+        textDecoration: "none",
+        fontWeight: 600,
+        fontSize: actionButtonFontSize,
+        boxShadow: isActive ? buttonShadowHover : buttonShadow,
+        transform: pressed
+          ? "scale(0.97)"
+          : isActive
+          ? "translateY(-2px)"
+          : "translateY(0)",
+        transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+        width: actionButtonWidth,
+        ...(focused ? FOCUS_RING(buttonBg) : null),
+      }}
+    >
+      <Home size={20} aria-hidden="true" /> Retour à l'accueil
+    </Link>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// BACK BUTTON — état React pour hover/focus/pressed
+// ════════════════════════════════════════════════════════════════════
+function BackButton({
+  onClick, dark, circleBorder,
+  actionButtonPadding, actionButtonWidth, actionButtonFontSize,
+  buttonBg,
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const hoverBg = dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)";
+  const isActive = hovered && !pressed;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      aria-label="Retour à la page précédente"
+      style={{
+        ...TAP_BASE,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        padding: actionButtonPadding,
+        background: isActive ? hoverBg : "transparent",
+        color: dark ? "#CBD5E1" : "#1E293B",
+        border: `1px solid ${circleBorder}`,
+        borderRadius: 12,
+        fontWeight: 600,
+        fontSize: actionButtonFontSize,
+        cursor: "pointer",
+        transform: pressed
+          ? "scale(0.97)"
+          : isActive
+          ? "translateY(-1px)"
+          : "translateY(0)",
+        transition: "background 0.2s, transform 0.12s",
+        width: actionButtonWidth,
+        fontFamily: "inherit",
+        ...(focused ? FOCUS_RING(buttonBg) : null),
+      }}
+    >
+      <ArrowLeft size={18} aria-hidden="true" /> Page précédente
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export function NotFound() {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -35,184 +201,120 @@ export function NotFound() {
   const actionButtonFontSize = isMobile ? 16 : 14;
 
   return (
-    <div
-      className="nf-container"
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: containerPadding,
-        textAlign: "center",
-        background: bg,
-        color: textPrimary,
-        transition: "background-color 0.3s, color 0.3s",
-        animation: "nf-fadeInZoom 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
-      }}
-    >
-      {/* Icône principale avec animation */}
+    <>
+      {NotFoundKeyframes}
       <div
-        className="nf-float"
+        className="nf-container"
         style={{
-          width: iconContainerSize,
-          height: iconContainerSize,
-          borderRadius: "50%",
-          background: circleBg,
-          border: `1px solid ${circleBorder}`,
+          minHeight: "100vh",
+          minHeight: "100dvh",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          marginBottom: isMobile ? 16 : 24,
-          boxShadow: dark
-            ? "0 1px 3px rgba(0,0,0,0.3)"
-            : "0 1px 3px rgba(0,0,0,0.1)",
-          animation: "nf-float 3s ease-in-out infinite",
+          padding: containerPadding,
+          textAlign: "center",
+          background: bg,
+          color: textPrimary,
+          transition: "background-color 0.3s, color 0.3s",
         }}
       >
-        <Search size={iconSize} color={dark ? "#818CF8" : "#4F46E5"} />
-      </div>
-
-      {/* Titre 404 animé */}
-      <h1
-        className="nf-pulse"
-        style={{
-          fontSize: title404,
-          fontWeight: 900,
-          color: dark ? "#818CF8" : "#4F46E5",
-          margin: "0 0 8px",
-          lineHeight: 1,
-          letterSpacing: "-2px",
-          animation: "nf-pulse 2s ease-in-out infinite",
-        }}
-      >
-        404
-      </h1>
-
-      {/* Sous-titre */}
-      <h2
-        style={{
-          fontSize: subtitleSize,
-          fontWeight: 600,
-          color: dark ? "#CBD5E1" : "#1E293B",
-          margin: "0 0 8px",
-        }}
-      >
-        Page introuvable
-      </h2>
-
-      {/* Description */}
-      <p
-        style={{
-          fontSize: descriptionSize,
-          color: textSecondary,
-          marginBottom: isMobile ? 24 : 32,
-          maxWidth: 420,
-          lineHeight: 1.6,
-        }}
-      >
-        Désolé, la page que vous recherchez n'existe pas ou a été déplacée.
-        Veuillez vérifier l'URL ou retourner à l'accueil.
-      </p>
-
-      {/* Boutons d'action */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          flexWrap: "wrap",
-          justifyContent: "center",
-          flexDirection: actionsFlexDirection,
-          width: isMobile ? "100%" : "auto",
-        }}
-      >
-        <Link
-          to="/"
+        {/* ═══════════ Icône principale avec animation ═══════════ */}
+        <div
+          className="nf-float"
+          aria-hidden="true"
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            padding: actionButtonPadding,
-            background: buttonBg,
-            color: "#FFFFFF",
-            borderRadius: 12,
-            textDecoration: "none",
-            fontWeight: 600,
-            fontSize: actionButtonFontSize,
-            boxShadow: buttonShadow,
-            transition: "background 0.2s, transform 0.2s, box-shadow 0.2s",
-            width: actionButtonWidth,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = buttonHover;
-            e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.boxShadow = buttonShadowHover;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = buttonBg;
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = buttonShadow;
-          }}
-        >
-          <Home size={20} /> Retour à l'accueil
-        </Link>
-
-        <button
-          onClick={() => window.history.back()}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            padding: actionButtonPadding,
-            background: "transparent",
-            color: dark ? "#CBD5E1" : "#1E293B",
+            width: iconContainerSize,
+            height: iconContainerSize,
+            borderRadius: "50%",
+            background: circleBg,
             border: `1px solid ${circleBorder}`,
-            borderRadius: 12,
-            fontWeight: 600,
-            fontSize: actionButtonFontSize,
-            cursor: "pointer",
-            transition: "background 0.2s, transform 0.1s",
-            width: actionButtonWidth,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = dark
-              ? "rgba(255,255,255,0.05)"
-              : "rgba(0,0,0,0.05)";
-            e.currentTarget.style.transform = "translateY(-1px)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.transform = "translateY(0)";
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: isMobile ? 16 : 24,
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.1)",
           }}
         >
-          <ArrowLeft size={18} /> Page précédente
-        </button>
-      </div>
+          <Search size={iconSize} color={dark ? "#818CF8" : "#4F46E5"} />
+        </div>
 
-      {/* Animations CSS préfixées nf-* + respect reduced-motion */}
-      <style>{`
-        @keyframes nf-fadeInZoom {
-          0% { opacity: 0; transform: scale(0.95) translateY(20px); }
-          100% { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        @keyframes nf-float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-10px); }
-        }
-        @keyframes nf-pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.05); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .nf-container,
-          .nf-float,
-          .nf-pulse {
-            animation: none !important;
-          }
-        }
-      `}</style>
-    </div>
+        {/* ═══════════ Titre 404 animé ═══════════ */}
+        <h1
+          className="nf-pulse"
+          style={{
+            fontSize: title404,
+            fontWeight: 900,
+            color: dark ? "#818CF8" : "#4F46E5",
+            margin: "0 0 8px",
+            lineHeight: 1,
+            letterSpacing: "-2px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          404
+        </h1>
+
+        {/* ═══════════ Sous-titre ═══════════ */}
+        <h2
+          style={{
+            fontSize: subtitleSize,
+            fontWeight: 600,
+            color: dark ? "#CBD5E1" : "#1E293B",
+            margin: "0 0 8px",
+          }}
+        >
+          Page introuvable
+        </h2>
+
+        {/* ═══════════ Description ═══════════ */}
+        <p
+          style={{
+            fontSize: descriptionSize,
+            color: textSecondary,
+            marginBottom: isMobile ? 24 : 32,
+            maxWidth: 420,
+            lineHeight: 1.6,
+          }}
+        >
+          Désolé, la page que vous recherchez n'existe pas ou a été déplacée.
+          Veuillez vérifier l'URL ou retourner à l'accueil.
+        </p>
+
+        {/* ═══════════ Boutons d'action ═══════════ */}
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            flexWrap: "wrap",
+            justifyContent: "center",
+            flexDirection: actionsFlexDirection,
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
+          <HomeLink
+            to="/"
+            buttonBg={buttonBg}
+            buttonHover={buttonHover}
+            buttonShadow={buttonShadow}
+            buttonShadowHover={buttonShadowHover}
+            actionButtonPadding={actionButtonPadding}
+            actionButtonWidth={actionButtonWidth}
+            actionButtonFontSize={actionButtonFontSize}
+          />
+          <BackButton
+            onClick={() => window.history.back()}
+            dark={dark}
+            circleBorder={circleBorder}
+            actionButtonPadding={actionButtonPadding}
+            actionButtonWidth={actionButtonWidth}
+            actionButtonFontSize={actionButtonFontSize}
+            buttonBg={buttonBg}
+          />
+        </div>
+      </div>
+    </>
   );
 }

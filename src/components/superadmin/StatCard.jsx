@@ -12,7 +12,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { hexToRgba } from "@/utils/colors";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES (module-level)
+// KEYFRAMES
 // ════════════════════════════════════════════════════════════════════
 const StatCardKeyframes = (
   <style>{`
@@ -90,6 +90,8 @@ export function StatCard({
 
   const [isHovered, setIsHovered] = useState(false);
   const [isCardFocused, setIsCardFocused] = useState(false);
+  // ✨ Nouveau : feedback tap
+  const [isPressed, setIsPressed] = useState(false);
 
   const noMotion = useMemo(() => prefersReducedMotion(), []);
 
@@ -120,7 +122,6 @@ export function StatCard({
   const effectiveIconSize =
     isMobile && effectiveSize === "small" ? Math.min(iconSize, 20) : iconSize;
 
-  // ✅ Couleurs dérivées
   const iconBg = useMemo(
     () => hexToRgba(color, t.surface.page === "#0F172A" ? 0.2 : 0.08),
     [color, t.surface.page]
@@ -183,19 +184,30 @@ export function StatCard({
     [isIconClickable, onIconClick]
   );
 
+  // ✨ Handlers touch
+  const handleTouchStart = useCallback(() => {
+    if (isClickable) setIsPressed(true);
+  }, [isClickable]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsPressed(false);
+  }, []);
+
   const transform = useMemo(() => {
+    if (isPressed) return "scale(0.97)";       // ✨ Feedback tap
     if (active) return "scale(1.02)";
-    if (isHovered && isClickable && !noMotion) return "translateY(-2px)";
+    if (!isMobile && isHovered && isClickable && !noMotion) return "translateY(-2px)";
     return "translateY(0)";
-  }, [active, isHovered, isClickable, noMotion]);
+  }, [isPressed, active, isHovered, isClickable, isMobile, noMotion]);
 
   const boxShadow = useMemo(() => {
-    if (isHovered && isClickable) return t.shadow.md;
+    if (isPressed) return t.shadow.sm;         // ✨ Réduit quand tapé
+    if (!isMobile && isHovered && isClickable) return t.shadow.md;
     return t.shadow.sm;
-  }, [isHovered, isClickable, t]);
+  }, [isPressed, isHovered, isClickable, isMobile, t]);
 
   // ────────────────────────────────────────────────────────────
-  // Sous-rendus (mémoïsés)
+  // Sous-rendus
   // ────────────────────────────────────────────────────────────
   const renderTrend = useCallback(() => {
     if (loading) {
@@ -341,10 +353,15 @@ export function StatCard({
         aria-label={isClickable ? `${label} : ${value}` : undefined}
         aria-disabled={disabled || undefined}
         title={tooltip}
-        onMouseEnter={() => isClickable && setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        // ✨ Hover désactivé sur mobile
+        onMouseEnter={() => !isMobile && isClickable && setIsHovered(true)}
+        onMouseLeave={() => !isMobile && setIsHovered(false)}
         onFocus={() => isClickable && setIsCardFocused(true)}
         onBlur={() => setIsCardFocused(false)}
+        // ✨ Feedback tap
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
         style={{
           ...styleVariant,
           borderRadius: t.radius.lg,
@@ -368,7 +385,13 @@ export function StatCard({
           opacity: disabled && !loading ? 0.6 : 1,
           border: active ? `2px solid ${color}` : styleVariant.border,
           transform,
-          flexWrap: "nowrap",
+          // ✨ Mobile : autorise wrap pour éviter débordement en 2 colonnes
+          flexWrap: isMobile ? "wrap" : "nowrap",
+          // ✨ Mobile : neutralise tap delay + flash
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
+          minWidth: 0,
+          boxSizing: "border-box",
         }}
       >
         {/* ═══ Icône ═══ */}
@@ -391,6 +414,7 @@ export function StatCard({
             flexShrink: 0,
             cursor: isIconClickable ? "pointer" : "default",
             outline: "none",
+            WebkitTapHighlightColor: "transparent",
           }}
         >
           {loading ? (
@@ -421,11 +445,12 @@ export function StatCard({
           </div>
           <div
             style={{
-              fontSize: isMobile ? 12 : 14,
+              fontSize: isMobile ? 11.5 : 14,
               color: t.text.muted,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
+              lineHeight: 1.3,
             }}
           >
             {renderLabel()}
@@ -433,7 +458,7 @@ export function StatCard({
           {subValue && (
             <div
               style={{
-                fontSize: isMobile ? 11 : 12,
+                fontSize: isMobile ? 10.5 : 12,
                 color: subValueColor || t.accent.primary,
                 marginTop: 2,
                 fontWeight: 500,

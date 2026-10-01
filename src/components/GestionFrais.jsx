@@ -1,4 +1,5 @@
-import { useState, useRef, useMemo } from "react";
+// src/components/GestionFrais.jsx
+import { useState, useRef, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -20,19 +21,46 @@ import {
   DetailFraisModal,
   ConfigFraisModal,
 } from "./FraisModals";
+import { Fab } from "./ui/Fab";
 
-// ============================================================
-// LAZY-LOAD XLSX (lib lourde ~500KB, chargée uniquement à l'usage)
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
+// ════════════════════════════════════════════════════════════════════
+const GestionFraisKeyframes = (
+  <style>{`
+    @keyframes gf-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .gf-spin { animation: gf-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .gf-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// LAZY-LOAD XLSX
+// ════════════════════════════════════════════════════════════════════
 let _xlsxPromise = null;
 function loadXLSX() {
   if (!_xlsxPromise) _xlsxPromise = import("xlsx");
   return _xlsxPromise;
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // CARTE STATISTIQUE COMPACTE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function StatCard({ icon, label, value, color, dark, isMobile }) {
   return (
     <div
@@ -44,15 +72,15 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        minWidth: isMobile ? 130 : "auto",
-        flex: isMobile ? "0 0 auto" : 1,
+        gap: isMobile ? 8 : 10,
+        minWidth: 0,
+        boxSizing: "border-box",
       }}
     >
       <div
         style={{
-          width: 32,
-          height: 32,
+          width: isMobile ? 28 : 32,
+          height: isMobile ? 28 : 32,
           borderRadius: 8,
           background: `${color}20`,
           display: "flex",
@@ -61,16 +89,19 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
           flexShrink: 0,
           color,
         }}
+        aria-hidden="true"
       >
         {icon}
       </div>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, overflow: "hidden" }}>
         <div
           style={{
             color: dark ? "#94A3B8" : "#64748B",
-            fontSize: 10.5,
+            fontSize: isMobile ? 10 : 10.5,
             fontWeight: 500,
             whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
           {label}
@@ -78,10 +109,11 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
         <div
           style={{
             color: dark ? "#F1F5F9" : "#1E293B",
-            fontSize: 16,
+            fontSize: isMobile ? 14 : 16,
             fontWeight: 700,
             lineHeight: 1.15,
             whiteSpace: "nowrap",
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {value}
@@ -91,10 +123,14 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
   );
 }
 
-// ============================================================
-// CARTE FRAIS COMPACTE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// CARTE FRAIS COMPACTE — ✨ refactorée avec state React
+// ════════════════════════════════════════════════════════════════════
 function FraisCard({ frais, eleve, deviseSymbol, dark, isMobile, onClick }) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
   const estPaye = frais.reste <= 0;
   const resteColor = estPaye
     ? dark
@@ -114,35 +150,56 @@ function FraisCard({ frais, eleve, deviseSymbol, dark, isMobile, onClick }) {
         color: dark ? "#FBBF24" : "#92400E",
       };
 
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
+  const handleTouchStart = () => setPressed(true);
+  const handleTouchEnd = () => setPressed(false);
+  const handleTouchCancel = () => setPressed(false);
+
   return (
     <div
       onClick={onClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
+      onKeyDown={handleKeyDown}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 12,
         padding: isMobile ? "10px 12px" : "12px 14px",
         boxShadow: dark ? "0 1px 2px rgba(0,0,0,0.25)" : "0 1px 2px rgba(0,0,0,0.04)",
-        border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+        border: `1px solid ${
+          focused ? dark ? "#818CF8" : "#4F46E5" : dark ? "#334155" : "#E2E8F0"
+        }`,
         display: "flex",
         alignItems: "center",
         gap: isMobile ? 10 : 12,
         cursor: "pointer",
-        transition: "border-color 0.15s, transform 0.1s",
+        transition: "border-color 0.15s ease, transform 0.1s ease",
         userSelect: "none",
         WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
         minWidth: 0,
+        boxSizing: "border-box",
+        minHeight: isMobile ? 60 : undefined,
+        transform: pressed ? "scale(0.985)" : "scale(1)",
+        outline: focused ? `2px solid ${dark ? "#818CF8" : "#4F46E5"}` : "none",
+        outlineOffset: -2,
       }}
-      onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.99)")}
-      onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      aria-label={`Frais de ${eleve?.nom} ${eleve?.postnom} — ${
+        estPaye ? "soldé" : `reste ${frais.reste.toLocaleString()} ${deviseSymbol}`
+      }`}
     >
       {/* Avatar */}
       <div
@@ -159,6 +216,7 @@ function FraisCard({ frais, eleve, deviseSymbol, dark, isMobile, onClick }) {
           fontSize: 12,
           flexShrink: 0,
         }}
+        aria-hidden="true"
       >
         {eleve?.prenom?.[0]}
         {eleve?.nom?.[0]}
@@ -213,11 +271,11 @@ function FraisCard({ frais, eleve, deviseSymbol, dark, isMobile, onClick }) {
             flexWrap: "wrap",
           }}
         >
-          <span style={{ whiteSpace: "nowrap" }}>
+          <span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
             Total {frais.montantTotal.toLocaleString()} {deviseSymbol}
           </span>
           <span style={{ opacity: 0.5 }}>·</span>
-          <span style={{ whiteSpace: "nowrap" }}>
+          <span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
             Payé {frais.montantPaye.toLocaleString()} {deviseSymbol}
           </span>
         </div>
@@ -230,9 +288,12 @@ function FraisCard({ frais, eleve, deviseSymbol, dark, isMobile, onClick }) {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexWrap: "wrap",
           }}
         >
-          {estPaye ? "Soldé" : `Reste ${frais.reste.toLocaleString()} ${deviseSymbol}`}
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>
+            {estPaye ? "Soldé" : `Reste ${frais.reste.toLocaleString()} ${deviseSymbol}`}
+          </span>
           <span
             style={{
               ...badgeStyle,
@@ -245,25 +306,82 @@ function FraisCard({ frais, eleve, deviseSymbol, dark, isMobile, onClick }) {
               gap: 3,
             }}
           >
-            {estPaye ? <CheckCircle size={9} /> : <Clock size={9} />}
+            {estPaye ? (
+              <CheckCircle size={9} aria-hidden="true" />
+            ) : (
+              <Clock size={9} aria-hidden="true" />
+            )}
             {estPaye ? "Payé" : "Attente"}
           </span>
         </div>
       </div>
 
-      {/* Chevron */}
       <ChevronRight
         size={18}
         color={dark ? "#475569" : "#CBD5E1"}
         style={{ flexShrink: 0 }}
+        aria-hidden="true"
       />
     </div>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// FILTER CHIP — ✨ zone tap 24px
+// ════════════════════════════════════════════════════════════════════
+function FilterChip({ label, onClear, dark }) {
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "4px 4px 4px 10px",
+        background: dark ? "#312E81" : "#EEF2FF",
+        color: dark ? "#C7D2FE" : "#4F46E5",
+        borderRadius: 20,
+        fontSize: 11,
+        fontWeight: 600,
+        minHeight: 28,
+      }}
+    >
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        onTouchStart={() => setPressed(true)}
+        onTouchEnd={() => setPressed(false)}
+        onTouchCancel={() => setPressed(false)}
+        aria-label={`Retirer le filtre ${label}`}
+        style={{
+          background: pressed ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.06)",
+          border: "none",
+          borderRadius: "50%",
+          cursor: "pointer",
+          color: "inherit",
+          width: 24,
+          height: 24,
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transform: pressed ? "scale(0.85)" : "scale(1)",
+          transition: "transform 0.1s ease, background 0.12s ease",
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
+        }}
+      >
+        <X size={12} />
+      </button>
+    </span>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -271,7 +389,14 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
 
   const userId = user?._id;
 
-  // ==================== QUERIES (avec userId requis) ====================
+  // ✨ Feedback tap
+  const [pressedBtn, setPressedBtn] = useState(null);
+  const [focusedSearch, setFocusedSearch] = useState(false);
+
+  const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
+  const releaseBtn = useCallback(() => setPressedBtn(null), []);
+
+  // Queries
   const ecole = useQuery(
     api.ecoles.get,
     ecoleId && userId ? { ecoleId, userId } : "skip"
@@ -295,13 +420,12 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
         : "skip"
     ) ?? [];
 
-  // ==================== MUTATIONS ====================
+  // Mutations
   const upsertFraisClasse = useMutation(api.frais.upsertFraisClasse);
   const upsertFrais = useMutation(api.frais.upsert);
   const upsertBulk = useMutation(api.frais.upsertBulk);
   const removeFrais = useMutation(api.frais.remove);
 
-  // ==================== ÉTAT LOCAL ====================
   const [classeActive, setClasseActive] = useState("");
   const [statutFiltre, setStatutFiltre] = useState("tous");
   const [searchTerm, setSearchTerm] = useState("");
@@ -316,7 +440,7 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
 
   const fraisFileInputRef = useRef(null);
 
-  // ==================== MAPS MÉMOÏSÉS (perf O(n) au lieu de O(n²)) ====================
+  // Maps mémoïsés
   const elevesById = useMemo(
     () => new Map(eleves.map((e) => [e._id, e])),
     [eleves]
@@ -327,7 +451,7 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
     [fraisClasses]
   );
 
-  // ==================== CALCULS ====================
+  // Calculs
   const classesStats = useMemo(() => {
     const map = {};
     for (const e of eleves) {
@@ -394,7 +518,7 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
         const reste = f.montantTotal - f.montantPaye;
         return {
           ...f,
-          _raw: f, // référence brute pour AddFraisModal
+          _raw: f,
           eleveNom: eleve?.nom ?? "—",
           elevePostnom: eleve?.postnom ?? "",
           eleveClasse: eleve?.classe ?? "—",
@@ -423,7 +547,7 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
     return n;
   }, [searchTerm, classeActive, statutFiltre]);
 
-  // ==================== HANDLERS ====================
+  // Handlers
   const resetFilters = () => {
     setSearchTerm("");
     setClasseActive("");
@@ -432,7 +556,6 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
 
   const handleOpenAdd = (mode = "individuel", initialData = null) => {
     setAddModalMode(mode);
-    // Toujours passer la version brute au modal (évite les champs parasites)
     setEditingFrais(initialData?._raw || initialData);
     setShowAddModal(true);
   };
@@ -624,781 +747,844 @@ export function GestionFrais({ ecoleId, eleves, anneeId, anneeActive, user }) {
     }
   };
 
-  // ==================== RENDU PRÉCOCE ====================
-  if (!anneeId) {
-    return (
-      <div
-        style={{
-          maxWidth: 1280,
-          margin: "0 auto",
-          padding: isMobile ? "20px 12px" : "32px 24px",
-          textAlign: "center",
-        }}
-      >
-        <DollarSign
-          size={48}
-          color="#F59E0B"
-          style={{ marginBottom: 16 }}
-        />
-        <h2
-          style={{
-            fontSize: isMobile ? 17 : 22,
-            fontWeight: 700,
-            color: dark ? "#F1F5F9" : "#1E293B",
-            margin: "0 0 8px",
-          }}
-        >
-          Aucune année scolaire active
-        </h2>
-        <p style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 13.5 }}>
-          Veuillez activer une année scolaire.
-        </p>
-      </div>
-    );
-  }
-
-  // ==================== COULEURS ====================
+  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
   const accent = dark ? "#818CF8" : "#4F46E5";
 
-  // ==================== RENDU PRINCIPAL ====================
-  return (
-    <div
-      style={{
-        maxWidth: 1280,
-        margin: "0 auto",
-        padding: isMobile ? "10px 8px 90px" : "20px 16px",
-        width: "100%",
-        boxSizing: "border-box",
-      }}
-    >
-      <style>{`
-        @keyframes gf-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .gf-animate-spin { animation: gf-spin 1s linear infinite; }
-      `}</style>
+  // Padding container avec safe-area
+  const containerPadding = isMobile
+    ? `calc(10px + ${SAFE_TOP}) calc(8px + ${SAFE_RIGHT}) calc(90px + ${SAFE_BOTTOM}) calc(8px + ${SAFE_LEFT})`
+    : "20px 16px";
 
-      {/* En-tête compact */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 10,
-          marginBottom: isMobile ? 12 : 20,
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
+  // ════════════════════════════════════════════════════════════════
+  // RENDU PRÉCOCE : pas d'année
+  // ════════════════════════════════════════════════════════════════
+  if (!anneeId) {
+    return (
+      <>
+        {GestionFraisKeyframes}
+        <div
+          style={{
+            maxWidth: 1280,
+            margin: "0 auto",
+            padding: containerPadding,
+            textAlign: "center",
+            boxSizing: "border-box",
+          }}
+        >
+          <DollarSign
+            size={48}
+            color="#F59E0B"
+            style={{ marginBottom: 16 }}
+            aria-hidden="true"
+          />
           <h2
             style={{
               fontSize: isMobile ? 17 : 22,
               fontWeight: 700,
               color: textPrimary,
-              margin: 0,
-              lineHeight: 1.2,
+              margin: "0 0 8px",
             }}
           >
-            Gestion des frais ({deviseSymbol})
+            Aucune année scolaire active
           </h2>
-          <p
-            style={{
-              color: textSecondary,
-              marginTop: 2,
-              marginBottom: 0,
-              fontSize: isMobile ? 11.5 : 13,
-            }}
-          >
-            {frais.length} élève{frais.length > 1 ? "s" : ""}
-            {anneeActive ? ` · ${anneeActive.nom}` : ""}
+          <p style={{ color: textSecondary, fontSize: 13.5 }}>
+            Veuillez activer une année scolaire.
           </p>
         </div>
+      </>
+    );
+  }
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => setShowConfig(true)}
-            title="Frais par classe"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              padding: isMobile ? "10px" : "8px 12px",
-              background: dark ? "#334155" : "#F1F5F9",
-              color: dark ? "#F1F5F9" : "#1E293B",
-              border: "none",
-              borderRadius: 10,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-            <Settings size={16} />
-            {!isMobile && "Frais par classe"}
-          </button>
+  // ════════════════════════════════════════════════════════════════
+  // RENDU PRINCIPAL
+  // ════════════════════════════════════════════════════════════════
+  return (
+    <>
+      {GestionFraisKeyframes}
+      <div
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: containerPadding,
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        {/* ═══ EN-TÊTE ═══ */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 10,
+            marginBottom: isMobile ? 12 : 20,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <h2
+              style={{
+                fontSize: isMobile ? 17 : 22,
+                fontWeight: 700,
+                color: textPrimary,
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+            >
+              Gestion des frais ({deviseSymbol})
+            </h2>
+            <p
+              style={{
+                color: textSecondary,
+                marginTop: 2,
+                marginBottom: 0,
+                fontSize: isMobile ? 11.5 : 13,
+              }}
+            >
+              {frais.length} élève{frais.length > 1 ? "s" : ""}
+              {anneeActive ? ` · ${anneeActive.nom}` : ""}
+            </p>
+          </div>
 
-          {!isMobile && (
+          <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => handleOpenAdd("individuel")}
+              type="button"
+              onClick={() => setShowConfig(true)}
+              onTouchStart={pressBtn("config")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              title="Frais par classe"
+              aria-label="Configurer les frais par classe"
               style={{
                 display: "flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 6,
-                padding: "8px 14px",
-                borderRadius: 10,
-                background: accent,
-                color: "#FFF",
+                padding: isMobile ? 0 : "8px 12px",
+                background: dark ? "#334155" : "#F1F5F9",
+                color: dark ? "#F1F5F9" : "#1E293B",
                 border: "none",
+                borderRadius: 10,
                 fontWeight: 600,
                 cursor: "pointer",
                 fontSize: 13,
-              }}
-            >
-              <Plus size={15} /> Ajouter
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Stats en scroll horizontal */}
-      <div
-        style={{
-          display: isMobile ? "flex" : "grid",
-          gridTemplateColumns: isMobile
-            ? undefined
-            : "repeat(auto-fit, minmax(150px, 1fr))",
-          gap: isMobile ? 8 : 12,
-          marginBottom: isMobile ? 12 : 18,
-          overflowX: isMobile ? "auto" : "visible",
-          paddingBottom: isMobile ? 4 : 0,
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
-        }}
-      >
-        <StatCard
-          icon={<DollarSign size={16} />}
-          label="Total dû"
-          value={`${totalFrais.toLocaleString()}`}
-          color="#4F46E5"
-          dark={dark}
-          isMobile={isMobile}
-        />
-        <StatCard
-          icon={<CheckCircle size={16} />}
-          label="Total payé"
-          value={`${totalPaye.toLocaleString()}`}
-          color="#10B981"
-          dark={dark}
-          isMobile={isMobile}
-        />
-        <StatCard
-          icon={<FileWarning size={16} />}
-          label="Reste"
-          value={`${resteAPayer.toLocaleString()}`}
-          color="#F59E0B"
-          dark={dark}
-          isMobile={isMobile}
-        />
-        <StatCard
-          icon={<Users size={16} />}
-          label="Payés"
-          value={nbPayes}
-          color="#10B981"
-          dark={dark}
-          isMobile={isMobile}
-        />
-        <StatCard
-          icon={<Clock size={16} />}
-          label="En attente"
-          value={nbAttente}
-          color="#F59E0B"
-          dark={dark}
-          isMobile={isMobile}
-        />
-      </div>
-
-      {/* Barre outils */}
-      {isMobile ? (
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 12,
-            alignItems: "stretch",
-          }}
-        >
-          <div style={{ position: "relative", flex: 1 }}>
-            <Search
-              size={16}
-              style={{
-                position: "absolute",
-                left: 12,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: textSecondary,
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Rechercher un élève…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "12px 12px 12px 38px",
-                borderRadius: 12,
-                border: `1px solid ${cardBorder}`,
-                background: cardBg,
-                color: textPrimary,
-                fontSize: 16,
-                outline: "none",
+                minWidth: isMobile ? MOBILE_TAP : undefined,
+                minHeight: MOBILE_TAP,
+                transform:
+                  pressedBtn === "config" ? "scale(0.96)" : "scale(1)",
+                transition: "transform 0.1s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
                 boxSizing: "border-box",
               }}
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(true)}
-            style={{
-              position: "relative",
-              padding: "0 14px",
-              borderRadius: 12,
-              border: `1px solid ${
-                activeFiltersCount > 0 ? accent : cardBorder
-              }`,
-              background:
-                activeFiltersCount > 0
-                  ? dark
-                    ? "#312E81"
-                    : "#EEF2FF"
-                  : cardBg,
-              color:
-                activeFiltersCount > 0
-                  ? dark
-                    ? "#C7D2FE"
-                    : "#4F46E5"
-                  : textPrimary,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontWeight: 600,
-              fontSize: 13,
-            }}
-          >
-            <SlidersHorizontal size={16} />
-            {activeFiltersCount > 0 && (
-              <span
+            >
+              <Settings size={16} aria-hidden="true" />
+              {!isMobile && "Frais par classe"}
+            </button>
+
+            {!isMobile && (
+              <button
+                type="button"
+                onClick={() => handleOpenAdd("individuel")}
+                onTouchStart={pressBtn("add-header")}
+                onTouchEnd={releaseBtn}
+                onTouchCancel={releaseBtn}
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 14px",
+                  borderRadius: 10,
                   background: accent,
                   color: "#FFF",
-                  borderRadius: 10,
-                  padding: "1px 6px",
-                  fontSize: 10,
-                  fontWeight: 700,
+                  border: "none",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 13,
+                  transform:
+                    pressedBtn === "add-header" ? "scale(0.97)" : "scale(1)",
+                  transition: "transform 0.1s ease",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
                 }}
               >
-                {activeFiltersCount}
-              </span>
+                <Plus size={15} aria-hidden="true" /> Ajouter
+              </button>
             )}
-          </button>
+          </div>
         </div>
-      ) : (
+
+        {/* ═══ STATS — ✨ grille 2×2 mobile ═══ */}
         <div
           style={{
-            display: "flex",
-            gap: 10,
-            marginBottom: 16,
-            alignItems: "stretch",
-            flexWrap: "wrap",
+            display: "grid",
+            gridTemplateColumns: isMobile
+              ? "repeat(2, minmax(0, 1fr))"
+              : "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: isMobile ? 8 : 12,
+            marginBottom: isMobile ? 12 : 18,
           }}
         >
-          <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
-            <Search
-              size={16}
+          <StatCard
+            icon={<DollarSign size={16} />}
+            label="Total dû"
+            value={`${totalFrais.toLocaleString()}`}
+            color="#4F46E5"
+            dark={dark}
+            isMobile={isMobile}
+          />
+          <StatCard
+            icon={<CheckCircle size={16} />}
+            label="Total payé"
+            value={`${totalPaye.toLocaleString()}`}
+            color="#10B981"
+            dark={dark}
+            isMobile={isMobile}
+          />
+          <StatCard
+            icon={<FileWarning size={16} />}
+            label="Reste"
+            value={`${resteAPayer.toLocaleString()}`}
+            color="#F59E0B"
+            dark={dark}
+            isMobile={isMobile}
+          />
+          <StatCard
+            icon={<Users size={16} />}
+            label="Payés"
+            value={nbPayes}
+            color="#10B981"
+            dark={dark}
+            isMobile={isMobile}
+          />
+          <StatCard
+            icon={<Clock size={16} />}
+            label="En attente"
+            value={nbAttente}
+            color="#F59E0B"
+            dark={dark}
+            isMobile={isMobile}
+          />
+        </div>
+
+        {/* ═══ BARRE OUTILS ═══ */}
+        {isMobile ? (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 12,
+              alignItems: "stretch",
+            }}
+          >
+            <div style={{ position: "relative", flex: 1 }}>
+              <Search
+                size={16}
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: textSecondary,
+                  pointerEvents: "none",
+                }}
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                placeholder="Rechercher un élève…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onFocus={() => setFocusedSearch(true)}
+                onBlur={() => setFocusedSearch(false)}
+                inputMode="search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+                aria-label="Rechercher un élève"
+                style={{
+                  width: "100%",
+                  padding: "12px 12px 12px 38px",
+                  borderRadius: 12,
+                  border: `1px solid ${
+                    focusedSearch ? accent : cardBorder
+                  }`,
+                  background: cardBg,
+                  color: textPrimary,
+                  fontSize: 16,
+                  outline: "none",
+                  boxSizing: "border-box",
+                  fontFamily: "inherit",
+                  minHeight: MOBILE_TAP,
+                  transition: "border-color 0.15s ease",
+                  WebkitAppearance: "none",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFilters(true)}
+              onTouchStart={pressBtn("filters")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              aria-label="Ouvrir les filtres"
               style={{
-                position: "absolute",
-                left: 12,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: textSecondary,
+                position: "relative",
+                padding: "0 14px",
+                borderRadius: 12,
+                border: `1px solid ${
+                  activeFiltersCount > 0 ? accent : cardBorder
+                }`,
+                background:
+                  activeFiltersCount > 0
+                    ? dark
+                      ? "#312E81"
+                      : "#EEF2FF"
+                    : cardBg,
+                color:
+                  activeFiltersCount > 0
+                    ? dark
+                      ? "#C7D2FE"
+                      : "#4F46E5"
+                    : textPrimary,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontWeight: 600,
+                fontSize: 13,
+                minHeight: MOBILE_TAP,
+                minWidth: MOBILE_TAP,
+                transform:
+                  pressedBtn === "filters" ? "scale(0.97)" : "scale(1)",
+                transition: "transform 0.1s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
               }}
-            />
-            <input
-              type="text"
-              placeholder="Rechercher un élève…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+            >
+              <SlidersHorizontal size={16} aria-hidden="true" />
+              {activeFiltersCount > 0 && (
+                <span
+                  style={{
+                    background: accent,
+                    color: "#FFF",
+                    borderRadius: 10,
+                    padding: "1px 6px",
+                    fontSize: 10,
+                    fontWeight: 700,
+                  }}
+                >
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginBottom: 16,
+              alignItems: "stretch",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
+              <Search
+                size={16}
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: textSecondary,
+                }}
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                placeholder="Rechercher un élève…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                inputMode="search"
+                autoComplete="off"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px 10px 38px",
+                  borderRadius: 8,
+                  border: `1px solid ${cardBorder}`,
+                  background: cardBg,
+                  color: textPrimary,
+                  fontSize: 14,
+                  outline: "none",
+                  boxSizing: "border-box",
+                  fontFamily: "inherit",
+                }}
+              />
+            </div>
+            <select
+              value={classeActive}
+              onChange={(e) => setClasseActive(e.target.value)}
+              aria-label="Filtrer par classe"
               style={{
-                width: "100%",
-                padding: "10px 12px 10px 38px",
+                padding: "10px 14px",
                 borderRadius: 8,
                 border: `1px solid ${cardBorder}`,
                 background: cardBg,
                 color: textPrimary,
                 fontSize: 14,
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-          <select
-            value={classeActive}
-            onChange={(e) => setClasseActive(e.target.value)}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 8,
-              border: `1px solid ${cardBorder}`,
-              background: cardBg,
-              color: textPrimary,
-              fontSize: 14,
-              cursor: "pointer",
-              minWidth: 180,
-            }}
-          >
-            <option value="">Toutes les classes</option>
-            {classesStats.map((c) => (
-              <option key={c.nom} value={c.nom}>
-                {c.nom} ({c.nbEleves})
-              </option>
-            ))}
-          </select>
-          <select
-            value={statutFiltre}
-            onChange={(e) => setStatutFiltre(e.target.value)}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 8,
-              border: `1px solid ${cardBorder}`,
-              background: cardBg,
-              color: textPrimary,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            <option value="tous">Tous les statuts</option>
-            <option value="paye">Payé</option>
-            <option value="en_attente">En attente</option>
-          </select>
-        </div>
-      )}
-
-      {/* Puces filtres actifs */}
-      {activeFiltersCount > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 6,
-            marginBottom: 12,
-          }}
-        >
-          {searchTerm.trim() && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "4px 10px",
-                background: dark ? "#312E81" : "#EEF2FF",
-                color: dark ? "#C7D2FE" : "#4F46E5",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
+                cursor: "pointer",
+                minWidth: 180,
+                fontFamily: "inherit",
               }}
             >
-              « {searchTerm} »
-              <X
-                size={12}
-                style={{ cursor: "pointer" }}
-                onClick={() => setSearchTerm("")}
-              />
-            </span>
-          )}
-          {classeActive && (
-            <span
+              <option value="">Toutes les classes</option>
+              {classesStats.map((c) => (
+                <option key={c.nom} value={c.nom}>
+                  {c.nom} ({c.nbEleves})
+                </option>
+              ))}
+            </select>
+            <select
+              value={statutFiltre}
+              onChange={(e) => setStatutFiltre(e.target.value)}
+              aria-label="Filtrer par statut"
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "4px 10px",
-                background: dark ? "#312E81" : "#EEF2FF",
-                color: dark ? "#C7D2FE" : "#4F46E5",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
-              }}
-            >
-              {classeActive}
-              <X
-                size={12}
-                style={{ cursor: "pointer" }}
-                onClick={() => setClasseActive("")}
-              />
-            </span>
-          )}
-          {statutFiltre !== "tous" && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "4px 10px",
-                background: dark ? "#312E81" : "#EEF2FF",
-                color: dark ? "#C7D2FE" : "#4F46E5",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
-              }}
-            >
-              {statutFiltre === "paye" ? "Payé" : "En attente"}
-              <X
-                size={12}
-                style={{ cursor: "pointer" }}
-                onClick={() => setStatutFiltre("tous")}
-              />
-            </span>
-          )}
-          <button
-            onClick={resetFilters}
-            style={{
-              padding: "4px 10px",
-              background: "transparent",
-              border: `1px solid ${cardBorder}`,
-              color: textSecondary,
-              borderRadius: 20,
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Tout effacer
-          </button>
-        </div>
-      )}
-
-      {/* Liste */}
-      {enrichedFrais.length === 0 ? (
-        <div
-          style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: isMobile ? 32 : 48,
-            textAlign: "center",
-            boxShadow: dark
-              ? "0 1px 3px rgba(0,0,0,0.3)"
-              : "0 1px 3px rgba(0,0,0,0.05)",
-            border: `1px solid ${cardBorder}`,
-            color: textSecondary,
-          }}
-        >
-          <DollarSign
-            size={isMobile ? 28 : 32}
-            style={{ marginBottom: 8, opacity: 0.5 }}
-          />
-          <p style={{ margin: 0, fontSize: 13.5 }}>
-            {activeFiltersCount > 0
-              ? "Aucun frais ne correspond aux filtres."
-              : "Aucun frais enregistré."}
-          </p>
-          {activeFiltersCount > 0 && (
-            <button
-              onClick={resetFilters}
-              style={{
-                marginTop: 12,
-                padding: "8px 16px",
+                padding: "10px 14px",
                 borderRadius: 8,
                 border: `1px solid ${cardBorder}`,
-                background: "transparent",
+                background: cardBg,
                 color: textPrimary,
+                fontSize: 14,
                 cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 600,
+                fontFamily: "inherit",
               }}
             >
-              Réinitialiser les filtres
-            </button>
-          )}
-        </div>
-      ) : isMobile ? (
-        // Liste de cartes sur mobile
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr",
-            gap: 8,
-          }}
-        >
-          {enrichedFrais.map((f) => (
-            <FraisCard
-              key={f._id}
-              frais={f}
-              eleve={f._eleve}
-              deviseSymbol={deviseSymbol}
-              dark={dark}
-              isMobile={isMobile}
-              onClick={() => setDetailFrais(f)}
-            />
-          ))}
-        </div>
-      ) : (
-        // DataTable sur desktop
-        <DataTable
-          columns={[
-            {
-              header: "Élève",
-              accessor: "eleveNom",
-              sortable: true,
-              render: (f) => (
-                <strong>
-                  {f.eleveNom} {f.elevePostnom}
-                </strong>
-              ),
-            },
-            { header: "Classe", accessor: "eleveClasse", sortable: true },
-            {
-              header: `Total (${deviseSymbol})`,
-              accessor: "montantTotal",
-              sortable: true,
-              render: (f) => f.montantTotal.toLocaleString(),
-            },
-            {
-              header: `Payé (${deviseSymbol})`,
-              accessor: "montantPaye",
-              sortable: true,
-              render: (f) => f.montantPaye.toLocaleString(),
-            },
-            {
-              header: `Reste (${deviseSymbol})`,
-              accessor: "reste",
-              sortable: true,
-              render: (f) => (
-                <span
-                  style={{
-                    color:
-                      f.reste > 0
-                        ? dark
-                          ? "#FBBF24"
-                          : "#F59E0B"
-                        : dark
-                        ? "#34D399"
-                        : "#10B981",
-                    fontWeight: 600,
-                  }}
-                >
-                  {f.reste.toLocaleString()}
-                </span>
-              ),
-            },
-            {
-              header: "Statut",
-              accessor: "estPaye",
-              sortable: true,
-              render: (f) => <BadgeStatut estPaye={f.estPaye} dark={dark} />,
-            },
-            {
-              header: "Commentaire",
-              accessor: "commentaire",
-              render: (f) => f.commentaire || "—",
-            },
-            {
-              header: "Actions",
-              sortable: false,
-              render: (f) => (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button
-                    onClick={() => handleOpenAdd("individuel", f)}
-                    style={{
-                      background: accent,
-                      color: "white",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 10px",
-                      cursor: "pointer",
-                    }}
-                    title="Modifier"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(f)}
-                    style={{
-                      background: "#EF4444",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 10px",
-                      cursor: "pointer",
-                    }}
-                    title="Supprimer"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ),
-            },
-          ]}
-          data={enrichedFrais}
-          loading={false}
-          searchable={false}
-          searchPlaceholder="Rechercher…"
-          pageSize={8}
-          emptyTitle="Aucun frais"
-          emptyMessage="Ajoutez des frais pour un élève."
-        />
-      )}
+              <option value="tous">Tous les statuts</option>
+              <option value="paye">Payé</option>
+              <option value="en_attente">En attente</option>
+            </select>
+          </div>
+        )}
 
-      {/* Bouton export desktop */}
-      {!isMobile && enrichedFrais.length > 0 && (
-        <div style={{ marginTop: 16, textAlign: "right" }}>
-          <button
-            onClick={handleExportExcel}
-            disabled={exporting}
+        {/* ═══ PUCES FILTRES ACTIFS ═══ */}
+        {activeFiltersCount > 0 && (
+          <div
             style={{
-              background: accent,
-              color: "white",
-              border: "none",
-              borderRadius: 10,
-              padding: "10px 20px",
-              fontWeight: 600,
-              cursor: exporting ? "wait" : "pointer",
-              fontSize: 14,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              opacity: exporting ? 0.7 : 1,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 6,
+              marginBottom: 12,
             }}
           >
-            {exporting ? (
-              <Loader size={16} className="gf-animate-spin" />
-            ) : (
-              <Download size={16} />
+            {searchTerm.trim() && (
+              <FilterChip
+                label={`« ${searchTerm} »`}
+                onClear={() => setSearchTerm("")}
+                dark={dark}
+              />
             )}
-            {exporting ? "Export…" : "Exporter en Excel"}
-          </button>
-        </div>
-      )}
+            {classeActive && (
+              <FilterChip
+                label={classeActive}
+                onClear={() => setClasseActive("")}
+                dark={dark}
+              />
+            )}
+            {statutFiltre !== "tous" && (
+              <FilterChip
+                label={statutFiltre === "paye" ? "Payé" : "En attente"}
+                onClear={() => setStatutFiltre("tous")}
+                dark={dark}
+              />
+            )}
+            <button
+              type="button"
+              onClick={resetFilters}
+              style={{
+                padding: "6px 12px",
+                background: "transparent",
+                border: `1px solid ${cardBorder}`,
+                color: textSecondary,
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                minHeight: 32,
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+              }}
+            >
+              Tout effacer
+            </button>
+          </div>
+        )}
 
-      {/* FAB ajouter (mobile) */}
-      {isMobile && (
-        <button
-          onClick={() => handleOpenAdd("individuel")}
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 20,
-            width: 56,
-            height: 56,
-            borderRadius: 28,
-            background: accent,
-            color: "#FFFFFF",
-            border: "none",
-            boxShadow: "0 6px 20px rgba(79,70,229,0.4)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 900,
-            transition: "transform 0.15s ease",
-          }}
-          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.94)")}
-          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          title="Ajouter des frais"
-        >
-          <Plus size={26} />
-        </button>
-      )}
+        {/* ═══ LISTE ═══ */}
+        {enrichedFrais.length === 0 ? (
+          <div
+            style={{
+              background: cardBg,
+              borderRadius: 16,
+              padding: isMobile ? 32 : 48,
+              textAlign: "center",
+              boxShadow: dark
+                ? "0 1px 3px rgba(0,0,0,0.3)"
+                : "0 1px 3px rgba(0,0,0,0.05)",
+              border: `1px solid ${cardBorder}`,
+              color: textSecondary,
+              boxSizing: "border-box",
+            }}
+          >
+            <DollarSign
+              size={isMobile ? 28 : 32}
+              style={{ marginBottom: 8, opacity: 0.5 }}
+              aria-hidden="true"
+            />
+            <p style={{ margin: 0, fontSize: 13.5 }}>
+              {activeFiltersCount > 0
+                ? "Aucun frais ne correspond aux filtres."
+                : "Aucun frais enregistré."}
+            </p>
+            {activeFiltersCount > 0 && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                style={{
+                  marginTop: 12,
+                  padding: "10px 18px",
+                  borderRadius: 8,
+                  border: `1px solid ${cardBorder}`,
+                  background: "transparent",
+                  color: textPrimary,
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  minHeight: MOBILE_TAP,
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  fontFamily: "inherit",
+                }}
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
+        ) : isMobile ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr",
+              gap: 8,
+            }}
+          >
+            {enrichedFrais.map((f) => (
+              <FraisCard
+                key={f._id}
+                frais={f}
+                eleve={f._eleve}
+                deviseSymbol={deviseSymbol}
+                dark={dark}
+                isMobile={isMobile}
+                onClick={() => setDetailFrais(f)}
+              />
+            ))}
+          </div>
+        ) : (
+          <DataTable
+            columns={[
+              {
+                header: "Élève",
+                accessor: "eleveNom",
+                sortable: true,
+                render: (f) => (
+                  <strong>
+                    {f.eleveNom} {f.elevePostnom}
+                  </strong>
+                ),
+              },
+              { header: "Classe", accessor: "eleveClasse", sortable: true },
+              {
+                header: `Total (${deviseSymbol})`,
+                accessor: "montantTotal",
+                sortable: true,
+                render: (f) => (
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {f.montantTotal.toLocaleString()}
+                  </span>
+                ),
+              },
+              {
+                header: `Payé (${deviseSymbol})`,
+                accessor: "montantPaye",
+                sortable: true,
+                render: (f) => (
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {f.montantPaye.toLocaleString()}
+                  </span>
+                ),
+              },
+              {
+                header: `Reste (${deviseSymbol})`,
+                accessor: "reste",
+                sortable: true,
+                render: (f) => (
+                  <span
+                    style={{
+                      color:
+                        f.reste > 0
+                          ? dark
+                            ? "#FBBF24"
+                            : "#F59E0B"
+                          : dark
+                          ? "#34D399"
+                          : "#10B981",
+                      fontWeight: 600,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {f.reste.toLocaleString()}
+                  </span>
+                ),
+              },
+              {
+                header: "Statut",
+                accessor: "estPaye",
+                sortable: true,
+                render: (f) => <BadgeStatut estPaye={f.estPaye} dark={dark} />,
+              },
+              {
+                header: "Commentaire",
+                accessor: "commentaire",
+                render: (f) => f.commentaire || "—",
+              },
+              {
+                header: "Actions",
+                sortable: false,
+                render: (f) => (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAdd("individuel", f)}
+                      onTouchStart={pressBtn("edit-" + f._id)}
+                      onTouchEnd={releaseBtn}
+                      onTouchCancel={releaseBtn}
+                      aria-label={`Modifier les frais de ${f.eleveNom}`}
+                      title="Modifier"
+                      style={{
+                        background: accent,
+                        color: "white",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: 0,
+                        cursor: "pointer",
+                        minWidth: MOBILE_TAP,
+                        minHeight: MOBILE_TAP,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transform:
+                          pressedBtn === "edit-" + f._id ? "scale(0.92)" : "scale(1)",
+                        transition: "transform 0.1s ease",
+                        WebkitTapHighlightColor: "transparent",
+                        touchAction: "manipulation",
+                      }}
+                    >
+                      <Edit2 size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(f)}
+                      onTouchStart={pressBtn("del-" + f._id)}
+                      onTouchEnd={releaseBtn}
+                      onTouchCancel={releaseBtn}
+                      aria-label={`Supprimer les frais de ${f.eleveNom}`}
+                      title="Supprimer"
+                      style={{
+                        background: "#EF4444",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: 0,
+                        cursor: "pointer",
+                        minWidth: MOBILE_TAP,
+                        minHeight: MOBILE_TAP,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transform:
+                          pressedBtn === "del-" + f._id ? "scale(0.92)" : "scale(1)",
+                        transition: "transform 0.1s ease",
+                        WebkitTapHighlightColor: "transparent",
+                        touchAction: "manipulation",
+                      }}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+            data={enrichedFrais}
+            loading={false}
+            searchable={false}
+            searchPlaceholder="Rechercher…"
+            pageSize={8}
+            emptyTitle="Aucun frais"
+            emptyMessage="Ajoutez des frais pour un élève."
+          />
+        )}
 
-      {/* Input file caché */}
-      <input
-        type="file"
-        accept=".xlsx, .xls"
-        onChange={handleImportFraisExcel}
-        style={{ display: "none" }}
-        ref={fraisFileInputRef}
-      />
+        {/* ═══ EXPORT DESKTOP ═══ */}
+        {!isMobile && enrichedFrais.length > 0 && (
+          <div style={{ marginTop: 16, textAlign: "right" }}>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={exporting}
+              onTouchStart={!exporting ? pressBtn("export") : undefined}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={{
+                background: accent,
+                color: "white",
+                border: "none",
+                borderRadius: 10,
+                padding: "10px 20px",
+                fontWeight: 600,
+                cursor: exporting ? "wait" : "pointer",
+                fontSize: 14,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                opacity: exporting ? 0.7 : 1,
+                minHeight: MOBILE_TAP,
+                transform:
+                  pressedBtn === "export" && !exporting ? "scale(0.97)" : "scale(1)",
+                transition: "transform 0.1s ease, opacity 0.15s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+              }}
+            >
+              {exporting ? (
+                <Loader size={16} className="gf-spin" aria-hidden="true" />
+              ) : (
+                <Download size={16} aria-hidden="true" />
+              )}
+              {exporting ? "Export…" : "Exporter en Excel"}
+            </button>
+          </div>
+        )}
 
-      {/* Bottom sheet filtres */}
-      <FraisFiltersSheet
-        open={showFilters}
-        onClose={() => setShowFilters(false)}
-        dark={dark}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        classeActive={classeActive}
-        setClasseActive={setClasseActive}
-        statutFiltre={statutFiltre}
-        setStatutFiltre={setStatutFiltre}
-        classesStats={classesStats}
-        onReset={resetFilters}
-        activeFiltersCount={activeFiltersCount}
-        onImportClick={() => fraisFileInputRef.current?.click()}
-        onDownloadTemplate={handleDownloadTemplate}
-        onExportClick={handleExportExcel}
-        importing={importing}
-        exporting={exporting}
-        deviseSymbol={deviseSymbol}
-      />
+        {/* ═══ FAB ajouter — ✨ design system ═══ */}
+        {isMobile && (
+          <Fab
+            icon={<Plus size={24} />}
+            onClick={() => handleOpenAdd("individuel")}
+            label="Ajouter des frais"
+            bottom={24}
+          />
+        )}
 
-      {/* Modale ajout */}
-      <AddFraisModal
-        open={showAddModal}
-        onClose={handleCloseAdd}
-        initialMode={addModalMode}
-        initialData={editingFrais}
-        eleves={elevesFiltres}
-        fraisClasses={fraisClasses}
-        upsertFrais={upsertFrais}
-        upsertBulk={upsertBulk}
-        ecoleId={ecoleId}
-        anneeId={anneeId}
-        userId={userId}
-        deviseSymbol={deviseSymbol}
-        dark={dark}
-        isMobile={isMobile}
-      />
+        {/* ═══ INPUT FILE CACHÉ ═══ */}
+        <input
+          type="file"
+          accept=".xlsx, .xls"
+          onChange={handleImportFraisExcel}
+          style={{ display: "none" }}
+          ref={fraisFileInputRef}
+          aria-hidden="true"
+        />
 
-      {/* Modale détail */}
-      {detailFrais && (
-        <DetailFraisModal
-          frais={detailFrais}
-          eleve={detailFrais._eleve}
+        {/* ═══ BOTTOM SHEET FILTRES ═══ */}
+        <FraisFiltersSheet
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          dark={dark}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          classeActive={classeActive}
+          setClasseActive={setClasseActive}
+          statutFiltre={statutFiltre}
+          setStatutFiltre={setStatutFiltre}
+          classesStats={classesStats}
+          onReset={resetFilters}
+          activeFiltersCount={activeFiltersCount}
+          onImportClick={() => fraisFileInputRef.current?.click()}
+          onDownloadTemplate={handleDownloadTemplate}
+          onExportClick={handleExportExcel}
+          importing={importing}
+          exporting={exporting}
           deviseSymbol={deviseSymbol}
-          onClose={() => setDetailFrais(null)}
-          onEdit={() => {
-            const raw = detailFrais._raw || detailFrais;
-            setDetailFrais(null);
-            handleOpenAdd("individuel", raw);
-          }}
-          onDelete={() => handleDelete(detailFrais)}
+        />
+
+        {/* ═══ MODALES ═══ */}
+        <AddFraisModal
+          open={showAddModal}
+          onClose={handleCloseAdd}
+          initialMode={addModalMode}
+          initialData={editingFrais}
+          eleves={elevesFiltres}
+          fraisClasses={fraisClasses}
+          upsertFrais={upsertFrais}
+          upsertBulk={upsertBulk}
+          ecoleId={ecoleId}
+          anneeId={anneeId}
+          userId={userId}
+          deviseSymbol={deviseSymbol}
           dark={dark}
           isMobile={isMobile}
         />
-      )}
 
-      {/* Modale config frais par classe */}
-      <ConfigFraisModal
-        open={showConfig}
-        onClose={() => setShowConfig(false)}
-        classesStats={classesStats}
-        upsertFraisClasse={upsertFraisClasse}
-        ecoleId={ecoleId}
-        anneeId={anneeId}
-        userId={userId}
-        deviseSymbol={deviseSymbol}
-        dark={dark}
-        isMobile={isMobile}
-      />
+        {detailFrais && (
+          <DetailFraisModal
+            frais={detailFrais}
+            eleve={detailFrais._eleve}
+            deviseSymbol={deviseSymbol}
+            onClose={() => setDetailFrais(null)}
+            onEdit={() => {
+              const raw = detailFrais._raw || detailFrais;
+              setDetailFrais(null);
+              handleOpenAdd("individuel", raw);
+            }}
+            onDelete={() => handleDelete(detailFrais)}
+            dark={dark}
+            isMobile={isMobile}
+          />
+        )}
 
-      <ConfirmDialog {...dialogProps} />
-    </div>
+        <ConfigFraisModal
+          open={showConfig}
+          onClose={() => setShowConfig(false)}
+          classesStats={classesStats}
+          upsertFraisClasse={upsertFraisClasse}
+          ecoleId={ecoleId}
+          anneeId={anneeId}
+          userId={userId}
+          deviseSymbol={deviseSymbol}
+          dark={dark}
+          isMobile={isMobile}
+        />
+
+        <ConfirmDialog {...dialogProps} />
+      </div>
+    </>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // BADGE STATUT (desktop DataTable)
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function BadgeStatut({ estPaye, dark }) {
   const style = estPaye
     ? {
@@ -1420,9 +1606,14 @@ function BadgeStatut({ estPaye, dark }) {
         borderRadius: 20,
         fontSize: 12,
         fontWeight: 600,
+        flexShrink: 0,
       }}
     >
-      {estPaye ? <CheckCircle size={12} /> : <Clock size={12} />}
+      {estPaye ? (
+        <CheckCircle size={12} aria-hidden="true" />
+      ) : (
+        <Clock size={12} aria-hidden="true" />
+      )}
       {estPaye ? "Payé" : "En attente"}
     </span>
   );

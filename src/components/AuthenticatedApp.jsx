@@ -23,7 +23,6 @@ import { NotificationsManager } from "./NotificationsManager";
 import toast from "react-hot-toast";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { ArrowLeft, School as SchoolIcon } from "lucide-react";
-// ✨ NOUVEAU — Impersonation
 import { useImpersonationStore } from "@/store/impersonationStore";
 import { ImpersonationBanner } from "./ImpersonationBanner";
 import { useActivityPing } from "@/hooks/useActivityPing";
@@ -52,7 +51,7 @@ const ROLE_DEFAULT_PATHS = {
   admin: "/admin/accueil",
   directeur: "/directeur/accueil",
   comptable: "/comptable/dashboard",
-  enseignant: "/enseignant/accueil",
+  enseignant: "/enseignant/dashboard",
   parent: "/parent/enfants",
   eleve: "/eleve/accueil",
   disciplinaire: "/disciplinaire/accueil",
@@ -65,6 +64,10 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // ✅ FIX CRITIQUE : `pathname` lu à chaque render, utilisé en `key=` sur les apps
+  // → force le remontage complet quand l'URL change
+  const pathname = location.pathname;
+
   // ════════════════════════════════════════════════════════════════════
   // ✨ IMPERSONATION — Restauration + user effectif
   // ════════════════════════════════════════════════════════════════════
@@ -76,18 +79,12 @@ export function AuthenticatedApp({ user, handleLogout }) {
   }, [restoreImpersonation]);
 
   const isImpersonating = !!impersonationSession;
-  // effectiveUser : target pendant impersonation, sinon user réel
   const effectiveUser = impersonationSession?.targetUser ?? user;
 
-  // ════════════════════════════════════════════════════════════════════
-  // userId = acting user (target si impersonation, sinon owner)
-  // ════════════════════════════════════════════════════════════════════
   const userId = effectiveUser?._id;
 
-  // ✨ Ping de présence pour les sessions actives
   useActivityPing(userId);
 
-  // ✅ SuperAdmin : rôle + admin sans école (SUR effectiveUser)
   const isSuperAdmin = useMemo(
     () =>
       effectiveUser?.role === "superAdmin" ||
@@ -100,12 +97,10 @@ export function AuthenticatedApp({ user, handleLogout }) {
   // ════════════════════════════════════════════════════════════════════
   const [openedEcoleId, setOpenedEcoleId] = useState(null);
 
-  // Reset quand l'utilisateur effectif change (logout/login/impersonation)
   useEffect(() => {
     setOpenedEcoleId(null);
   }, [userId]);
 
-  // Charger les infos de l'école ouverte
   const openedEcoleArgs = useMemo(
     () =>
       isSuperAdmin && openedEcoleId && userId
@@ -448,7 +443,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
               }}
               aria-label="Retour au dashboard Super Admin"
             >
-              <ArrowLeft size={16} />
+              <ArrowLeft size={16} aria-hidden="true" />
               {!isMobile && "Retour"}
             </button>
 
@@ -461,6 +456,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
               }}
             >
               <div
+                aria-hidden="true"
                 style={{
                   width: 32,
                   height: 32,
@@ -518,7 +514,9 @@ export function AuthenticatedApp({ user, handleLogout }) {
         </div>
 
         {/* ═══════════ Rendu AdminApp ═══════════ */}
+        {/* ✅ FIX : key={pathname} pour forcer le re-render sur changement d'URL */}
         <AdminApp
+          key={pathname}
           user={ecoleUser}
           ecoleId={openedEcoleId}
           eleves={eleves}
@@ -565,6 +563,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
         {AuthenticatedAppKeyframes}
         <NotifBanner notifs={notifs} />
         <SuperAdminDashboard
+          key={pathname}
           user={effectiveUser}
           onLogout={handleLogout}
           onSelectEcole={setOpenedEcoleId}
@@ -603,8 +602,11 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
+      {/* ✅ FIX : key={pathname} sur CHAQUE app pour forcer le re-render */}
+
       {effectiveUser?.role === "disciplinaire" && (
         <DisciplinaireApp
+          key={pathname}
           user={effectiveUser}
           ecoleId={ecoleId}
           punitions={punitions}
@@ -622,6 +624,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
       {effectiveUser?.role === "directeur" && (
         <DirecteurApp
+          key={pathname}
           user={effectiveUser}
           punitions={punitions}
           eleves={eleves}
@@ -638,6 +641,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
       {effectiveUser?.role === "admin" && (
         <AdminApp
+          key={pathname}
           user={effectiveUser}
           ecoleId={ecoleId}
           eleves={eleves}
@@ -665,6 +669,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
       {effectiveUser?.role === "parent" && (
         <ParentApp
+          key={pathname}
           user={effectiveUser}
           ecoleId={ecoleId}
           eleves={enfants}
@@ -680,6 +685,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
       {effectiveUser?.role === "enseignant" && (
         <EnseignantApp
+          key={pathname}
           user={effectiveUser}
           ecoleId={ecoleId}
           eleves={eleves}
@@ -694,6 +700,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
       {effectiveUser?.role === "comptable" && (
         <ComptableApp
+          key={pathname}
           user={effectiveUser}
           ecoleId={ecoleId}
           eleves={eleves}
@@ -707,6 +714,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
 
       {effectiveUser?.role === "eleve" && (
         <EleveApp
+          key={pathname}
           user={effectiveUser}
           ecoleId={ecoleId}
           anneeActive={anneeActive}

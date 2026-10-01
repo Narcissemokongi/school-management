@@ -1,5 +1,6 @@
+// src/components/DirecteurApp.jsx
 import { useMemo, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { Layout } from "./Layout";
@@ -24,34 +25,25 @@ import {
   GraduationCap, School,
 } from "lucide-react";
 
-// Onglets qui nécessitent une année active
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES
+// ════════════════════════════════════════════════════════════════════
 const TABS_REQUIRING_YEAR = [
-  "accueil",
-  "eleves",
-  "classes",
-  "statistiques",
-  "passage",
-  "examens",
-  "emploi-du-temps",
+  "accueil", "eleves", "classes", "statistiques", "passage",
+  "examens", "emploi-du-temps",
 ];
 
-// ✅ Onglets valides (source de vérité pour valider le paramètre URL)
 const VALID_TABS = [
-  "accueil",
-  "passage",
-  "statistiques",
-  "eleves",
-  "classes",
-  "emploi-du-temps",
-  "examens",
-  "messagerie",
-  "appels",
-  "profil",
-  "aide",
-  "mentions",
-  "confidentialite",
+  "accueil", "passage", "statistiques", "eleves", "classes",
+  "emploi-du-temps", "examens", "messagerie", "appels", "profil",
+  "aide", "mentions", "confidentialite",
 ];
 
+const TABS_FULL_HEIGHT = ["messagerie", "appels"];
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT
+// ════════════════════════════════════════════════════════════════════
 export function DirecteurApp({
   user,
   punitions,
@@ -70,15 +62,16 @@ export function DirecteurApp({
   const userId = user?._id;
   const userEcoleId = user?.ecoleId;
 
-  // ========== URL ROUTING ==========
-  // ✅ Source de vérité = URL (React Router), pas Zustand
-  const { tab: tabParam } = useParams();
+  // ✅ FIX : useLocation au lieu de useParams
+  const location = useLocation();
   const navigate = useNavigate();
 
-  const tab = useMemo(
-    () => (VALID_TABS.includes(tabParam) ? tabParam : "accueil"),
-    [tabParam]
-  );
+  // ✅ FIX : extrait le tab depuis le pathname (ex: /directeur/statistiques → "statistiques")
+  const tab = useMemo(() => {
+    const parts = location.pathname.split("/").filter(Boolean);
+    const candidate = parts[1];
+    return VALID_TABS.includes(candidate) ? candidate : "accueil";
+  }, [location.pathname]);
 
   const setTab = useCallback(
     (newTab) => {
@@ -89,17 +82,14 @@ export function DirecteurApp({
     [navigate]
   );
 
-  // ✅ messagingContactId reste en Zustand (cf. rapport §9 basse priorité)
-  const messagingContactId = useAppStore((state) => state.messagingContactId);
   const setMessagingContactId = useAppStore(
     (state) => state.setMessagingContactId
   );
 
-  // ── État local pour la classe sélectionnée (consultation)
+  // ── État local pour la classe sélectionnée
   const [classeConsultation, setClasseConsultation] = useState("");
 
-  // ========== HOOKS ==========
-  // ✅ userId ajouté sur les 2 queries
+  // ── Queries
   const anneesRaw = useQuery(
     api.anneesScolaires.listByEcole,
     userEcoleId && userId ? { ecoleId: userEcoleId, userId } : "skip"
@@ -114,7 +104,6 @@ export function DirecteurApp({
   );
   const inscriptions = useMemo(() => inscriptionsRaw ?? [], [inscriptionsRaw]);
 
-  // ✅ userId déjà requis (patché précédemment)
   const propositionsRaw = useQuery(
     api.propositionsPassage.listPropositions,
     userEcoleId && anneeId && userId
@@ -132,9 +121,13 @@ export function DirecteurApp({
   const handleNavigateToMessaging = useCallback(
     (contactId) => {
       setMessagingContactId(contactId);
-      setTab("messagerie");
+      if (contactId) {
+        navigate(`/directeur/messagerie/chat/${contactId}`);
+      } else {
+        navigate("/directeur/messagerie");
+      }
     },
-    [setMessagingContactId, setTab]
+    [setMessagingContactId, navigate]
   );
 
   // Couleurs
@@ -151,7 +144,6 @@ export function DirecteurApp({
   const tabNeedsYear = TABS_REQUIRING_YEAR.includes(tab);
   const showBanner = !anneeId && !tabNeedsYear;
 
-  // ✅ Menu mémoïsé
   const menu = useMemo(
     () => [
       { id: "accueil", label: "Tableau de bord", icon: <Home size={20} /> },
@@ -184,7 +176,7 @@ export function DirecteurApp({
     [nbElevesSansDecision]
   );
 
-  // ✅ Sélecteur de classe — fonction (pas un composant) pour éviter le remontage
+  // ── Sélecteur de classe
   const renderClasseSelector = () => (
     <div
       style={{
@@ -202,8 +194,9 @@ export function DirecteurApp({
           : "0 1px 3px rgba(0,0,0,0.05)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, width: "100%" }}>
         <div
+          aria-hidden="true"
           style={{
             width: 32,
             height: 32,
@@ -226,7 +219,7 @@ export function DirecteurApp({
             padding: isMobile ? "10px 12px" : "9px 12px",
             border: `1px solid ${cardBorder}`,
             borderRadius: 10,
-            fontSize: isMobile ? 15 : 14,
+            fontSize: isMobile ? 16 : 14,
             outline: "none",
             background: dark ? "#0F172A" : "#F8FAFC",
             color: textPrimary,
@@ -234,7 +227,11 @@ export function DirecteurApp({
             fontFamily: "inherit",
             appearance: "none",
             WebkitAppearance: "none",
+            minHeight: isMobile ? 44 : undefined,
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
           }}
+          aria-label="Choisir une classe"
         >
           <option value="">-- Choisir une classe --</option>
           {classes.map((c) => (
@@ -247,7 +244,7 @@ export function DirecteurApp({
     </div>
   );
 
-  // ✅ Message "aucune année" factorisé
+  // ── Message "aucune année"
   const renderNoAnneeMessage = () => (
     <div
       style={{
@@ -258,6 +255,7 @@ export function DirecteurApp({
       }}
     >
       <div
+        aria-hidden="true"
         style={{
           width: 64,
           height: 64,
@@ -297,7 +295,7 @@ export function DirecteurApp({
     </div>
   );
 
-  // ==================== GUARD : session invalide ====================
+  // ─── GUARD : session invalide ───
   if (!user || !userId) {
     return (
       <Layout
@@ -321,6 +319,7 @@ export function DirecteurApp({
             size={isMobile ? 40 : 48}
             color="#F59E0B"
             style={{ marginBottom: 16 }}
+            aria-hidden="true"
           />
           <h2
             style={{
@@ -345,7 +344,7 @@ export function DirecteurApp({
     );
   }
 
-  // ==================== RENDU ====================
+  // ─── RENDU CONTENU ───
   const renderContent = () => {
     if (!anneeId && tabNeedsYear) {
       return renderNoAnneeMessage();
@@ -484,13 +483,7 @@ export function DirecteurApp({
         );
 
       case "messagerie":
-        return (
-          <MessagerieApp
-            user={user}
-            ecoleId={userEcoleId}
-            initialSelectedUserId={messagingContactId}
-          />
-        );
+        return <MessagerieApp user={user} ecoleId={userEcoleId} />;
 
       case "appels":
         return (
@@ -531,7 +524,9 @@ export function DirecteurApp({
     }
   };
 
-  // ==================== RENDU PRINCIPAL ====================
+  const needsFullHeight = TABS_FULL_HEIGHT.includes(tab);
+
+  // ─── RENDU PRINCIPAL ───
   return (
     <Layout
       menu={menu}
@@ -542,30 +537,46 @@ export function DirecteurApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {showBanner && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: warningBg,
-            color: warningText,
-            padding: isMobile ? "10px 12px" : "10px 16px",
-            fontSize: isMobile ? 12 : 13,
-            fontWeight: 500,
-            borderRadius: 10,
-            marginBottom: isMobile ? 12 : 16,
-            lineHeight: 1.4,
-          }}
-        >
-          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
-          <span>
-            Aucune année scolaire active. Certaines fonctionnalités sont
-            limitées.
-          </span>
-        </div>
-      )}
-      {renderContent()}
+      <div
+        style={
+          needsFullHeight
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                height: "100%",
+                width: "100%",
+                overflow: "hidden",
+              }
+            : undefined
+        }
+      >
+        {showBanner && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: warningBg,
+              color: warningText,
+              padding: isMobile ? "10px 12px" : "10px 16px",
+              fontSize: isMobile ? 12 : 13,
+              fontWeight: 500,
+              borderRadius: 10,
+              marginBottom: isMobile ? 12 : 16,
+              lineHeight: 1.4,
+            }}
+          >
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} aria-hidden="true" />
+            <span>
+              Aucune année scolaire active. Certaines fonctionnalités sont
+              limitées.
+            </span>
+          </div>
+        )}
+        {renderContent()}
+      </div>
     </Layout>
   );
 }

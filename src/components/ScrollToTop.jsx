@@ -42,6 +42,7 @@ export function ScrollToTop({
   const [progress, setProgress] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   const rafRef = useRef(null);
@@ -157,51 +158,55 @@ export function ScrollToTop({
     ? "stt-pulse-dark"
     : "stt-pulse-light";
 
-  // ✅ Style du bouton intérieur (extrait pour clarté)
+  // ✅ Scale combiné : hover (souris) OU pressed (tactile/clic)
+  const isActive = hovered || pressed;
+  const scaleValue = isActive && !prefersReducedMotion ? 1.08 : 1;
+
+  // ✅ Style du bouton intérieur
   const innerButtonStyle = {
     position: "absolute",
     top: "50%",
     left: "50%",
-    background: hovered || focused ? tokens.primaryHover : tokens.primary,
+    background: isActive ? tokens.primaryHover : tokens.primary,
     color: "#FFFFFF",
     border: "none",
     borderRadius: "50%",
     width: dims.innerButtonSize,
     height: dims.innerButtonSize,
+    minWidth: dims.innerButtonSize,
+    minHeight: dims.innerButtonSize,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     cursor: "pointer",
     padding: 0,
+    // ✅ Feedback tactile + 0ms tap delay
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent",
     // ✅ transition sur background + transform
     transition: prefersReducedMotion
       ? "background 0.2s ease"
       : "background 0.2s ease, transform 0.2s ease",
     // ✅ transform combiné (centrage + scale)
-    transform: `translate(-50%, -50%) scale(${
-      hovered && !prefersReducedMotion ? 1.08 : 1
-    })`,
+    transform: `translate(-50%, -50%) scale(${scaleValue})`,
     // ✅ outline visible au focus
     outline: focused ? `2px solid ${tokens.primary}` : "none",
     outlineOffset: 2,
-    // ✅ Pulse appliqué via className (dark-aware + reduced-motion)
-    // Ne s'applique pas si hovered (évite le double effet visuel)
-    WebkitTapHighlightColor: "transparent",
   };
 
   return (
     <>
       {ScrollToTopKeyframes}
       <div
-        // ✅ ARIA — masqué aux lecteurs d'écran quand invisible
+        // ✅ ARIA + inert quand invisible : retire du flux clavier ET du lecteur d'écran
         aria-hidden={!visible}
+        inert={!visible}
         style={{
           position: "fixed",
           bottom: bottomPosition,
           right: rightPosition,
           zIndex: 1000,
           opacity: visible ? 1 : 0,
-          // ✅ scale seulement si pas reduced-motion
           transform:
             visible || prefersReducedMotion ? "scale(1)" : "scale(0.8)",
           transition: prefersReducedMotion
@@ -223,8 +228,6 @@ export function ScrollToTop({
             borderRadius: "50%",
             background: tokens.buttonBg,
             boxShadow: tokens.boxShadow,
-            // ✅ Pulse via className sur ce wrapper (pas sur le bouton intérieur)
-            // → l'ombre ne rentre plus en conflit avec l'anneau SVG
           }}
         >
           {/* SVG de progression */}
@@ -234,7 +237,6 @@ export function ScrollToTop({
             style={{ position: "absolute", top: 0, left: 0 }}
             aria-hidden="true"
           >
-            {/* Anneau de fond */}
             <circle
               cx={dims.center}
               cy={dims.center}
@@ -243,7 +245,6 @@ export function ScrollToTop({
               stroke={tokens.trackColor}
               strokeWidth="3"
             />
-            {/* Anneau de progression */}
             <circle
               cx={dims.center}
               cy={dims.center}
@@ -258,7 +259,6 @@ export function ScrollToTop({
               strokeLinecap="round"
               transform={`rotate(-90 ${dims.center} ${dims.center})`}
               style={{
-                // ✅ transition désactivée si reduced-motion
                 transition: prefersReducedMotion
                   ? "none"
                   : "stroke-dashoffset 0.1s linear",
@@ -266,8 +266,7 @@ export function ScrollToTop({
             />
           </svg>
 
-          {/* ✅ Pulse : appliqué sur un div autour du bouton, pas sur le bouton lui-même
-              → évite la collision visuelle entre box-shadow animé et l'anneau SVG */}
+          {/* Pulse (anneau animé autour) */}
           <div
             className={pulseClass}
             style={{
@@ -288,13 +287,19 @@ export function ScrollToTop({
             onClick={scrollToTop}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
+            onPointerDown={() => setPressed(true)}
+            onPointerUp={() => setPressed(false)}
+            onPointerLeave={() => setPressed(false)}
+            onPointerCancel={() => setPressed(false)}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
+            // ✅ tabIndex -1 quand invisible (évite le "tab fantôme")
+            tabIndex={visible ? 0 : -1}
             aria-label={`Retour en haut (${Math.round(progress)}%)`}
             title="Retour en haut"
             style={innerButtonStyle}
           >
-            <ChevronUp size={dims.iconSize} />
+            <ChevronUp size={dims.iconSize} aria-hidden="true" />
           </button>
         </div>
       </div>

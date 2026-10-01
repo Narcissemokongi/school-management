@@ -12,6 +12,20 @@ const MAX_PIECES_JOINTES = 5;
 const MAX_NOM_FICHIER = 255;
 const MAX_DESTINATAIRES_BULK = 500;
 
+// ════════════════════════════════════════════════════════════════════
+// ✨ TYPES PARTAGÉS
+// ════════════════════════════════════════════════════════════════════
+type PieceJointe = {
+  nom: string;
+  type: string;
+  url: string;
+  storageId?: string;
+};
+
+// ════════════════════════════════════════════════════════════════════
+// AUTH HELPERS
+// ════════════════════════════════════════════════════════════════════
+
 /**
  * 🔴 FIX GLOBAL : tout superAdmin passe désormais.
  */
@@ -49,14 +63,16 @@ async function requireEcoleRole(
   return user;
 }
 
+// ════════════════════════════════════════════════════════════════════
+// VALIDATION HELPERS
+// ════════════════════════════════════════════════════════════════════
+
 /**
  * ✅ FIX SÉCURITÉ : validation centralisée des pièces jointes.
- * Utilisée par `send` et `sendToGroupe`.
+ * ✨ Supporte storageId optionnel (Convex _storage).
  */
 function validatePiecesJointes(
-  piecesJointes:
-    | Array<{ nom: string; type: string; url: string }>
-    | undefined
+  piecesJointes: PieceJointe[] | undefined
 ) {
   if (!piecesJointes) return;
   if (piecesJointes.length > MAX_PIECES_JOINTES) {
@@ -78,6 +94,21 @@ function validatePiecesJointes(
     ) {
       throw new Error("URL de pièce jointe invalide.");
     }
+
+    // ✨ Validation storageId (optionnel mais contrôlé si présent)
+    if (pj.storageId !== undefined) {
+      if (typeof pj.storageId !== "string") {
+        throw new Error("storageId invalide (doit être une chaîne).");
+      }
+      if (pj.storageId.length < 10 || pj.storageId.length > 100) {
+        throw new Error("storageId invalide (longueur anormale).");
+      }
+      // Les IDs de _storage Convex commencent par "kg"
+      if (!pj.storageId.startsWith("kg")) {
+        throw new Error("storageId invalide (format inattendu).");
+      }
+    }
+
     const ext = pj.nom.split(".").pop()?.toLowerCase() ?? "";
     if (dangerousTypes.includes(ext)) {
       throw new Error(`Type de fichier interdit : .${ext}`);
@@ -86,20 +117,33 @@ function validatePiecesJointes(
 }
 
 /**
- * ✅ FIX SÉCURITÉ : validation centralisée du contenu.
+ * ✅ FIX SÉCURITÉ + UX : validation centralisée du contenu.
+ * ✨ Autorise un contenu vide SI au moins 1 pièce jointe est fournie.
  */
-function validateContenu(contenu: string): string {
+function validateContenu(
+  contenu: string,
+  hasPiecesJointes: boolean = false
+): string {
   const trimmed = contenu.trim();
-  if (!trimmed) throw new Error("Le message ne peut pas être vide.");
+
+  if (!trimmed && !hasPiecesJointes) {
+    throw new Error(
+      "Le message ne peut pas être vide (texte ou pièce jointe requis)."
+    );
+  }
+
   if (trimmed.length > MAX_MESSAGE_LENGTH) {
     throw new Error(
       `Message trop long (${MAX_MESSAGE_LENGTH} caractères maximum).`
     );
   }
+
   return trimmed;
 }
 
-// ========== QUERIES ==========
+// ════════════════════════════════════════════════════════════════════
+// QUERIES
+// ════════════════════════════════════════════════════════════════════
 
 export const listRecus = query({
   args: {
@@ -185,7 +229,9 @@ export const listByGroupe = query({
   },
 });
 
-// ========== MUTATIONS ==========
+// ════════════════════════════════════════════════════════════════════
+// MUTATIONS
+// ════════════════════════════════════════════════════════════════════
 
 export const send = mutation({
   args: {
@@ -199,6 +245,7 @@ export const send = mutation({
           nom: v.string(),
           type: v.string(),
           url: v.string(),
+          storageId: v.optional(v.string()), // ✨ AJOUTÉ
         })
       )
     ),
@@ -215,8 +262,9 @@ export const send = mutation({
       "eleve",
     ]);
 
-    // Validation contenu
-    const contenu = validateContenu(args.contenu);
+    // ✨ Autoriser contenu vide si PJ présente
+    const hasPJ = !!args.piecesJointes && args.piecesJointes.length > 0;
+    const contenu = validateContenu(args.contenu, hasPJ);
 
     // Validation pièces jointes
     validatePiecesJointes(args.piecesJointes);
@@ -227,11 +275,14 @@ export const send = mutation({
       throw new Error("Le destinataire n'appartient pas à cette école.");
     }
 
+    // ✨ Fallback : contenu = "(pièce jointe)" si vide et PJ présente
+    const contenuFinal = contenu || "(pièce jointe)";
+
     const messageId = await ctx.db.insert("messages", {
       ecoleId: args.ecoleId,
       expediteurId: args.expediteurId,
       destinataireId: args.destinataireId,
-      contenu,
+      contenu: contenuFinal,
       piecesJointes: args.piecesJointes,
       date: new Date().toISOString(),
       lu: false,
@@ -243,7 +294,7 @@ export const send = mutation({
       await ctx.scheduler.runAfter(0, internal.fcm.sendFCMNotification, {
         fcmToken: destinataire.fcmToken,
         title: `📩 Nouveau message de ${expediteur?.nom ?? "Utilisateur"}`,
-        body: contenu.substring(0, 100),
+        body: contenuFinal.substring(0, 100),
       });
     }
 
@@ -284,6 +335,43 @@ export const markAsRead = mutation({
   },
 });
 
+// ════════════════════════════════════════════════════════════════════
+// ✨ NOUVEAU — Marquer TOUTE une conversation comme lue (batch)
+// Évite N mutations quand on ouvre une conv avec 50 messages non lus.
+// ════════════════════════════════════════════════════════════════════
+export const markConversationAsRead = mutation({
+  args: {
+    userId: v.id("users"),
+    expediteurId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller) throw new Error("Authentification requise");
+
+    // Sécurité : on ne peut marquer que SES messages (comme destinataire)
+    // (l'expéditeurId est celui de l'autre → on cherche les messages
+    // reçus PAR userId, envoyés PAR expediteurId, non lus)
+    const unread = await ctx.db
+      .query("messages")
+      .withIndex("by_destinataire", (q) =>
+        q.eq("destinataireId", args.userId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("expediteurId"), args.expediteurId),
+          q.eq(q.field("lu"), false)
+        )
+      )
+      .take(500);
+
+    for (const msg of unread) {
+      await ctx.db.patch(msg._id, { lu: true });
+    }
+
+    return { marked: unread.length };
+  },
+});
+
 export const sendToAllParents = mutation({
   args: {
     ecoleId: v.id("ecoles"),
@@ -297,8 +385,9 @@ export const sendToAllParents = mutation({
       "disciplinaire",
     ]);
 
-    // ✅ FIX SÉCURITÉ : valider le contenu (manquait sur sendToAllParents)
-    const contenu = validateContenu(args.contenu);
+    // ✅ FIX SÉCURITÉ : valider le contenu
+    // ⚠️ Pas de PJ possible ici → contenu obligatoire
+    const contenu = validateContenu(args.contenu, false);
 
     const parents = await ctx.db
       .query("users")
@@ -348,12 +437,186 @@ export const sendToAllParents = mutation({
   },
 });
 
+// ════════════════════════════════════════════════════════════════════
+// ✨ DIFFUSION GROUPÉE — Élèves & Classe
+// ════════════════════════════════════════════════════════════════════
+
+export const sendToAllEleves = mutation({
+  args: {
+    ecoleId: v.id("ecoles"),
+    expediteurId: v.id("users"),
+    contenu: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireEcoleRole(ctx, args.expediteurId, args.ecoleId, [
+      "admin",
+      "directeur",
+      "disciplinaire",
+    ]);
+
+    // Contenu obligatoire (pas de PJ)
+    const contenu = validateContenu(args.contenu, false);
+
+    // ✨ .take() limite — on ne charge que 500 élèves max
+    const eleves = await ctx.db
+      .query("users")
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
+      .filter((q) => q.eq(q.field("role"), "eleve"))
+      .take(MAX_DESTINATAIRES_BULK);
+
+    if (eleves.length === 0) {
+      throw new Error("Aucun élève trouvé dans cette école.");
+    }
+
+    const now = new Date().toISOString();
+    let sent = 0;
+    let skipped = 0;
+
+    for (const eleve of eleves) {
+      if (eleve._id === args.expediteurId) {
+        skipped++;
+        continue;
+      }
+      if (eleve.isActive === false) {
+        skipped++;
+        continue;
+      }
+
+      await ctx.db.insert("messages", {
+        ecoleId: args.ecoleId,
+        expediteurId: args.expediteurId,
+        destinataireId: eleve._id,
+        contenu,
+        date: now,
+        lu: false,
+      });
+      sent++;
+    }
+
+    // Audit
+    await ctx.db.insert("audit", {
+      userId: args.expediteurId,
+      action: "send_to_all_eleves",
+      table: "messages",
+      documentId: args.ecoleId,
+      date: now,
+      ecoleId: args.ecoleId,
+      details: `Message envoyé à ${sent} élève(s)${
+        skipped ? `, ${skipped} ignoré(s)` : ""
+      }`,
+    });
+
+    return { success: true, sent, skipped };
+  },
+});
+
+export const sendToClasse = mutation({
+  args: {
+    ecoleId: v.id("ecoles"),
+    expediteurId: v.id("users"),
+    classe: v.string(),
+    contenu: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireEcoleRole(ctx, args.expediteurId, args.ecoleId, [
+      "admin",
+      "directeur",
+      "disciplinaire",
+    ]);
+
+    const contenu = validateContenu(args.contenu, false);
+
+    // ✨ Valider la classe
+    const classe = args.classe.trim();
+    if (!classe || classe.length > 50) {
+      throw new Error("Nom de classe invalide.");
+    }
+
+    // ✨ .take() — 500 max
+    const eleves = await ctx.db
+      .query("users")
+      .withIndex("by_ecoleId", (q) => q.eq("ecoleId", args.ecoleId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("role"), "eleve"),
+          q.eq(q.field("classe"), classe)
+        )
+      )
+      .take(MAX_DESTINATAIRES_BULK);
+
+    if (eleves.length === 0) {
+      throw new Error(`Aucun élève trouvé dans la classe ${classe}.`);
+    }
+
+    const now = new Date().toISOString();
+    let sent = 0;
+    let skipped = 0;
+
+    for (const eleve of eleves) {
+      if (eleve._id === args.expediteurId) {
+        skipped++;
+        continue;
+      }
+      if (eleve.isActive === false) {
+        skipped++;
+        continue;
+      }
+
+      await ctx.db.insert("messages", {
+        ecoleId: args.ecoleId,
+        expediteurId: args.expediteurId,
+        destinataireId: eleve._id,
+        contenu,
+        date: now,
+        lu: false,
+      });
+      sent++;
+    }
+
+    // Audit
+    await ctx.db.insert("audit", {
+      userId: args.expediteurId,
+      action: "send_to_classe",
+      table: "messages",
+      documentId: args.ecoleId,
+      date: now,
+      ecoleId: args.ecoleId,
+      details: `Message envoyé à ${sent} élève(s) de ${classe}${
+        skipped ? `, ${skipped} ignoré(s)` : ""
+      }`,
+    });
+
+    return { success: true, sent, skipped };
+  },
+});
+
 export const generateUploadUrl = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const caller = await ctx.db.get(args.userId);
     if (!caller) throw new Error("Authentification requise");
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * ✨ Retourne l'URL publique d'un fichier stocké.
+ * Utilisé après un upload pour construire la vraie URL (au lieu
+ * de l'URL d'upload temporaire).
+ */
+export const getStorageUrl = mutation({
+  args: {
+    userId: v.id("users"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const caller = await ctx.db.get(args.userId);
+    if (!caller) throw new Error("Authentification requise");
+
+    const url = await ctx.storage.getUrl(args.storageId);
+    if (!url) throw new Error("Fichier introuvable");
+
+    return { url };
   },
 });
 
@@ -369,6 +632,7 @@ export const sendToGroupe = mutation({
           nom: v.string(),
           type: v.string(),
           url: v.string(),
+          storageId: v.optional(v.string()), // ✨ AJOUTÉ
         })
       )
     ),
@@ -382,20 +646,24 @@ export const sendToGroupe = mutation({
       "eleve",
     ]);
 
-    // ✅ FIX SÉCURITÉ : valider contenu + pièces jointes (manquaient)
-    const contenu = validateContenu(args.contenu);
+    // ✨ Autoriser contenu vide si PJ présente
+    const hasPJ = !!args.piecesJointes && args.piecesJointes.length > 0;
+    const contenu = validateContenu(args.contenu, hasPJ);
     validatePiecesJointes(args.piecesJointes);
 
-    // ✅ FIX SÉCURITÉ : valider le groupeId (éviter les abus)
+    // ✅ FIX SÉCURITÉ : valider le groupeId
     const groupeId = args.groupeId.trim();
     if (!groupeId || groupeId.length > 100) {
       throw new Error("Identifiant de groupe invalide.");
     }
 
+    // ✨ Fallback
+    const contenuFinal = contenu || "(pièce jointe)";
+
     const messageId = await ctx.db.insert("messages", {
       ecoleId: args.ecoleId,
       expediteurId: args.expediteurId,
-      contenu,
+      contenu: contenuFinal,
       groupeId,
       date: new Date().toISOString(),
       lu: false,

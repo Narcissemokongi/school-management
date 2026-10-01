@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useId } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -13,6 +13,27 @@ import {
 } from "lucide-react";
 
 // ============================================================
+// CONSTANTES MODULE-LEVEL (mobile + a11y)
+// ============================================================
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const INPUT_MOBILE = { fontSize: 16 }; // évite zoom iOS
+
+const FOCUS_RING = (dark) => ({
+  outline: `2px solid ${dark ? "#818CF8" : "#4F46E5"}`,
+  outlineOffset: 2,
+});
+
+// ============================================================
 // HELPER ERREUR
 // ============================================================
 function extractErrMsg(err, fallback = "Erreur inconnue") {
@@ -23,12 +44,72 @@ function extractErrMsg(err, fallback = "Erreur inconnue") {
 }
 
 // ============================================================
+// KEYFRAMES MODULE-LEVEL
+// ============================================================
+function GaKeyframes() {
+  return (
+    <style>{`
+      @keyframes ga-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      .ga-spin { animation: ga-spin 1s linear infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .ga-spin { animation: none !important; }
+      }
+    `}</style>
+  );
+}
+
+// ============================================================
+// PRESSABLE — feedback tap + focus ring via state React
+// ============================================================
+function Pressable({
+  onClick,
+  style,
+  children,
+  disabled = false,
+  type = "button",
+  dark = false,
+  ariaLabel,
+  ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed && !disabled ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.2s, border-color 0.2s",
+        ...(focused && !disabled ? FOCUS_RING(dark) : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ============================================================
 // COMPOSANT PRINCIPAL
 // ============================================================
 export function GestionAnnees({ ecoleId, userId }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
   const { confirm, dialogProps } = useConfirm();
+
+  const regionId = useId();
+  const searchId = useId();
+  const newNameId = useId();
 
   // États
   const [nouveauNom, setNouveauNom] = useState("");
@@ -42,7 +123,6 @@ export function GestionAnnees({ ecoleId, userId }) {
   const [savingRename, setSavingRename] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  // ✅ userId ajouté à la query
   const anneesRaw = useQuery(
     api.anneesScolaires.listByEcole,
     ecoleId && userId ? { ecoleId, userId } : "skip"
@@ -70,17 +150,6 @@ export function GestionAnnees({ ecoleId, userId }) {
     ? "0 1px 3px rgba(0,0,0,0.3)"
     : "0 1px 3px rgba(0,0,0,0.05)";
 
-  // ✅ Keyframes injectés dans les 2 branches (loading + principal)
-  const Keyframes = (
-    <style>{`
-      @keyframes ga-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      .ga-spin { animation: ga-spin 1s linear infinite; }
-      @media (prefers-reduced-motion: reduce) {
-        .ga-spin { animation: none !important; }
-      }
-    `}</style>
-  );
-
   // Stats
   const stats = useMemo(() => {
     const list = anneesRaw ?? [];
@@ -107,7 +176,6 @@ export function GestionAnnees({ ecoleId, userId }) {
         valA = a.estActive ? 1 : 0;
         valB = b.estActive ? 1 : 0;
       }
-      // ✅ Retourne 0 en cas d'égalité
       if (valA === valB) return 0;
       if (sortDir === "asc") return valA < valB ? -1 : 1;
       return valA > valB ? -1 : 1;
@@ -159,7 +227,6 @@ export function GestionAnnees({ ecoleId, userId }) {
       if (!ok) return;
       setActivating(anneeId);
       try {
-        // ✅ requesterId ajouté (cohérent avec AnneeSelector)
         await setActive({ anneeId, userId });
         toast.success(`Année ${nom} activée`);
       } catch (err) {
@@ -241,13 +308,16 @@ export function GestionAnnees({ ecoleId, userId }) {
   };
 
   // ============================================================
-  // LOADING — Keyframes injectés ici aussi
+  // LOADING
   // ============================================================
   if (anneesRaw === undefined) {
     return (
       <>
-        {Keyframes}
+        <GaKeyframes />
         <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
           style={{
             background: cardBg,
             border: `1px solid ${cardBorder}`,
@@ -258,19 +328,27 @@ export function GestionAnnees({ ecoleId, userId }) {
             padding: 40,
           }}
         >
-          <Loader size={24} className="ga-spin" style={{ color: accent }} />
+          <Loader
+            size={24}
+            className="ga-spin"
+            style={{ color: accent }}
+            aria-hidden="true"
+          />
+          <span style={{ position: "absolute", left: -9999 }}>
+            Chargement des années scolaires
+          </span>
         </div>
       </>
     );
   }
 
   // Styles
-  const inputStyle = {
+  const inputStyle = (hasError = false) => ({
     width: "100%",
     padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${cardBorder}`,
+    border: `1px solid ${hasError ? danger : cardBorder}`,
     borderRadius: 10,
-    fontSize: isMobile ? 15 : 14,
+    ...(isMobile ? INPUT_MOBILE : { fontSize: 14 }),
     outline: "none",
     background: inputBg,
     color: inputText,
@@ -278,10 +356,30 @@ export function GestionAnnees({ ecoleId, userId }) {
     fontFamily: "inherit",
     appearance: "none",
     WebkitAppearance: "none",
+    ...TAP_BASE,
+    minHeight: 44,
+  });
+
+  const btnSecondary = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    padding: "10px 12px",
+    border: `1px solid ${cardBorder}`,
+    borderRadius: 10,
+    background: "transparent",
+    color: textPrimary,
+    fontWeight: 600,
+    fontSize: 13,
+    ...TAP_BASE,
+    minHeight: 44,
   };
 
   return (
     <div
+      role="region"
+      aria-labelledby={regionId}
       style={{
         background: cardBg,
         border: `1px solid ${cardBorder}`,
@@ -292,7 +390,7 @@ export function GestionAnnees({ ecoleId, userId }) {
         boxSizing: "border-box",
       }}
     >
-      {Keyframes}
+      <GaKeyframes />
 
       {/* ==================== EN-TÊTE ==================== */}
       <div
@@ -307,6 +405,7 @@ export function GestionAnnees({ ecoleId, userId }) {
         }}
       >
         <div
+          aria-hidden="true"
           style={{
             width: 32,
             height: 32,
@@ -323,6 +422,7 @@ export function GestionAnnees({ ecoleId, userId }) {
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
+            id={regionId}
             style={{
               fontSize: isMobile ? 14 : 15,
               fontWeight: 700,
@@ -340,8 +440,7 @@ export function GestionAnnees({ ecoleId, userId }) {
             }}
           >
             {stats.total} année{stats.total > 1 ? "s" : ""} · {stats.active}{" "}
-            active
-            {stats.active > 1 ? "s" : ""}
+            active{stats.active > 1 ? "s" : ""}
           </div>
         </div>
         {stats.active > 0 && (
@@ -358,7 +457,7 @@ export function GestionAnnees({ ecoleId, userId }) {
               gap: 4,
             }}
           >
-            <CheckCircle2 size={11} />
+            <CheckCircle2 size={11} aria-hidden="true" />
             {stats.active} active{stats.active > 1 ? "s" : ""}
           </span>
         )}
@@ -374,15 +473,25 @@ export function GestionAnnees({ ecoleId, userId }) {
           flexDirection: isMobile ? "column" : "row",
         }}
       >
+        <label htmlFor={newNameId} style={{ position: "absolute", left: -9999 }}>
+          Nom de la nouvelle année scolaire
+        </label>
         <input
+          id={newNameId}
           placeholder="Ex : 2025-2026"
+          aria-label="Nom de la nouvelle année scolaire"
           value={nouveauNom}
           onChange={(e) => setNouveauNom(e.target.value)}
-          style={{ ...inputStyle, flex: 1 }}
+          enterKeyHint="done"
+          autoCorrect="off"
+          spellCheck="false"
+          style={{ ...inputStyle(false), flex: 1 }}
         />
-        <button
+        <Pressable
           type="submit"
           disabled={adding || !nouveauNom.trim()}
+          dark={dark}
+          aria-busy={adding}
           style={{
             display: "flex",
             alignItems: "center",
@@ -395,25 +504,23 @@ export function GestionAnnees({ ecoleId, userId }) {
                   ? "#334155"
                   : "#CBD5E1"
                 : accent,
-            color:
-              adding || !nouveauNom.trim() ? textSecondary : "#FFFFFF",
+            color: adding || !nouveauNom.trim() ? textSecondary : "#FFFFFF",
             border: "none",
             borderRadius: 10,
             fontWeight: 700,
-            cursor:
-              adding || !nouveauNom.trim() ? "not-allowed" : "pointer",
+            cursor: adding || !nouveauNom.trim() ? "not-allowed" : "pointer",
             fontSize: 13.5,
             width: isMobile ? "100%" : "auto",
             whiteSpace: "nowrap",
           }}
         >
           {adding ? (
-            <Loader size={14} className="ga-spin" />
+            <Loader size={14} className="ga-spin" role="status" aria-label="Ajout en cours" />
           ) : (
-            <Plus size={14} />
+            <Plus size={14} aria-hidden="true" />
           )}
           {adding ? "Ajout…" : "Ajouter"}
-        </button>
+        </Pressable>
       </form>
 
       {/* ==================== RECHERCHE + TRI ==================== */}
@@ -427,22 +534,33 @@ export function GestionAnnees({ ecoleId, userId }) {
         }}
       >
         <div style={{ position: "relative", flex: 1 }}>
+          <label htmlFor={searchId} style={{ position: "absolute", left: -9999 }}>
+            Rechercher une année scolaire
+          </label>
           <Search
             size={16}
+            aria-hidden="true"
             style={{
               position: "absolute",
               left: 12,
               top: "50%",
               transform: "translateY(-50%)",
               color: textSecondary,
+              pointerEvents: "none",
             }}
           />
           <input
-            type="text"
+            id={searchId}
+            type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoCorrect="off"
+            spellCheck="false"
             placeholder="Rechercher une année…"
+            aria-label="Rechercher une année scolaire"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ ...inputStyle, paddingLeft: 36 }}
+            style={{ ...inputStyle(false), paddingLeft: 36 }}
           />
         </div>
         <div
@@ -452,84 +570,87 @@ export function GestionAnnees({ ecoleId, userId }) {
             width: isMobile ? "100%" : "auto",
           }}
         >
-          <button
-            type="button"
+          <Pressable
             onClick={() => toggleSort("nom")}
+            dark={dark}
+            ariaLabel={`Trier par nom ${sortBy === "nom" ? (sortDir === "asc" ? "croissant" : "décroissant") : ""}`}
+            aria-pressed={sortBy === "nom"}
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
-              padding: "10px 12px",
+              ...btnSecondary,
               background: sortBy === "nom" ? accentBg : "transparent",
-              border: `1px solid ${
-                sortBy === "nom" ? accent : cardBorder
-              }`,
-              borderRadius: 10,
+              border: `1px solid ${sortBy === "nom" ? accent : cardBorder}`,
               color: sortBy === "nom" ? accent : textSecondary,
-              cursor: "pointer",
               fontSize: 12.5,
-              fontWeight: 600,
               flex: isMobile ? 1 : "none",
             }}
           >
             Nom
             {sortBy === "nom" &&
               (sortDir === "asc" ? (
-                <ChevronUp size={13} />
+                <ChevronUp size={13} aria-hidden="true" />
               ) : (
-                <ChevronDown size={13} />
+                <ChevronDown size={13} aria-hidden="true" />
               ))}
-          </button>
-          <button
-            type="button"
+          </Pressable>
+          <Pressable
             onClick={() => toggleSort("statut")}
+            dark={dark}
+            ariaLabel={`Trier par statut ${sortBy === "statut" ? (sortDir === "asc" ? "croissant" : "décroissant") : ""}`}
+            aria-pressed={sortBy === "statut"}
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
-              padding: "10px 12px",
+              ...btnSecondary,
               background: sortBy === "statut" ? accentBg : "transparent",
-              border: `1px solid ${
-                sortBy === "statut" ? accent : cardBorder
-              }`,
-              borderRadius: 10,
+              border: `1px solid ${sortBy === "statut" ? accent : cardBorder}`,
               color: sortBy === "statut" ? accent : textSecondary,
-              cursor: "pointer",
               fontSize: 12.5,
-              fontWeight: 600,
               flex: isMobile ? 1 : "none",
             }}
           >
             Statut
             {sortBy === "statut" &&
               (sortDir === "asc" ? (
-                <ChevronUp size={13} />
+                <ChevronUp size={13} aria-hidden="true" />
               ) : (
-                <ChevronDown size={13} />
+                <ChevronDown size={13} aria-hidden="true" />
               ))}
-          </button>
+          </Pressable>
         </div>
       </div>
 
       {/* ==================== LISTE ==================== */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <ul
+        role="list"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          ...SCROLL_AREA,
+        }}
+      >
         {filteredAndSorted.length === 0 && (
-          <div
+          <li
+            role="status"
+            aria-live="polite"
             style={{
               textAlign: "center",
               padding: "24px 16px",
               color: textSecondary,
             }}
           >
-            <Calendar size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
+            <Calendar
+              size={32}
+              aria-hidden="true"
+              style={{ marginBottom: 8, opacity: 0.5 }}
+            />
             <p style={{ margin: 0, fontSize: 13 }}>
               {searchTerm
                 ? "Aucune année ne correspond à la recherche."
                 : "Aucune année scolaire enregistrée."}
             </p>
-          </div>
+          </li>
         )}
 
         {filteredAndSorted.map((annee) => {
@@ -539,230 +660,245 @@ export function GestionAnnees({ ecoleId, userId }) {
           const isDeleting = deletingId === annee._id;
 
           return (
-            <div
-              key={annee._id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: isMobile ? "10px 12px" : "10px 14px",
-                borderRadius: 10,
-                border: `1px solid ${isActive ? success : cardBorder}`,
-                background: isActive
-                  ? successBg
-                  : dark
-                  ? "transparent"
-                  : "#FFFFFF",
-                flexWrap: isMobile ? "wrap" : "nowrap",
-              }}
-            >
-              {/* Nom ou édition */}
-              <div
+            <li key={annee._id}>
+              <article
                 style={{
-                  flex: 1,
-                  minWidth: 0,
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
+                  padding: isMobile ? "10px 12px" : "10px 14px",
+                  borderRadius: 10,
+                  border: `1px solid ${isActive ? success : cardBorder}`,
+                  background: isActive
+                    ? successBg
+                    : dark
+                    ? "transparent"
+                    : "#FFFFFF",
+                  flexWrap: isMobile ? "wrap" : "nowrap",
+                  minHeight: 44,
                 }}
               >
-                {isEditing ? (
-                  <input
-                    value={editingNom}
-                    onChange={(e) => setEditingNom(e.target.value)}
-                    autoFocus
-                    style={{
-                      ...inputStyle,
-                      padding: "6px 10px",
-                      fontSize: 14,
-                      flex: 1,
-                      minWidth: 100,
-                    }}
-                  />
-                ) : (
-                  <>
-                    <span
-                      style={{
-                        fontWeight: isActive ? 700 : 500,
-                        color: isActive ? successText : textPrimary,
-                        fontSize: isMobile ? 14 : 14.5,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {annee.nom}
-                    </span>
-                    {isActive && (
+                {/* Nom ou édition */}
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  {isEditing ? (
+                    <>
+                      <label
+                        htmlFor={`edit-${annee._id}`}
+                        style={{ position: "absolute", left: -9999 }}
+                      >
+                        Renommer l'année {annee.nom}
+                      </label>
+                      <input
+                        id={`edit-${annee._id}`}
+                        value={editingNom}
+                        onChange={(e) => setEditingNom(e.target.value)}
+                        autoFocus
+                        enterKeyHint="done"
+                        aria-label={`Renommer l'année ${annee.nom}`}
+                        style={{
+                          ...inputStyle(false),
+                          padding: "6px 10px",
+                          fontSize: isMobile ? 16 : 14,
+                          flex: 1,
+                          minWidth: 100,
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <>
                       <span
                         style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 3,
-                          padding: "2px 8px",
-                          borderRadius: 10,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          background: successBg,
-                          color: successText,
-                          border: `1px solid ${success}`,
-                          flexShrink: 0,
+                          fontWeight: isActive ? 700 : 500,
+                          color: isActive ? successText : textPrimary,
+                          fontSize: isMobile ? 14 : 14.5,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        <Check size={10} />
-                        Active
+                        {annee.nom}
                       </span>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 4,
-                  alignItems: "center",
-                  justifyContent: isMobile ? "flex-end" : "flex-start",
-                  width: isMobile ? "100%" : "auto",
-                  flexShrink: 0,
-                }}
-              >
-                {isEditing ? (
-                  <>
-                    <button
-                      onClick={() => saveRename(annee._id)}
-                      disabled={savingRename}
-                      title="Enregistrer"
-                      aria-label="Enregistrer"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "6px 10px",
-                        background: success,
-                        color: "#FFFFFF",
-                        border: "none",
-                        borderRadius: 8,
-                        cursor: savingRename ? "not-allowed" : "pointer",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        gap: 4,
-                      }}
-                    >
-                      {savingRename ? (
-                        <Loader size={12} className="ga-spin" />
-                      ) : (
-                        <Check size={12} />
-                      )}
-                      Enregistrer
-                    </button>
-                    <button
-                      onClick={cancelRename}
-                      title="Annuler"
-                      aria-label="Annuler"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "6px 8px",
-                        background: "transparent",
-                        color: textSecondary,
-                        border: `1px solid ${cardBorder}`,
-                        borderRadius: 8,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <X size={14} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {!isActive && (
-                      <>
-                        <button
-                          onClick={() => startRename(annee)}
-                          title="Renommer"
-                          aria-label="Renommer"
+                      {isActive && (
+                        <span
                           style={{
-                            display: "flex",
+                            display: "inline-flex",
                             alignItems: "center",
-                            justifyContent: "center",
-                            padding: "8px 10px",
-                            background: "transparent",
-                            color: accent,
-                            border: `1px solid ${cardBorder}`,
-                            borderRadius: 8,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleActivate(annee._id, annee.nom)}
-                          disabled={isActivating}
-                          title="Activer cette année"
-                          aria-label="Activer cette année"
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 4,
-                            padding: isMobile ? "8px 12px" : "8px 14px",
-                            background: success,
-                            color: "#FFFFFF",
-                            border: "none",
-                            borderRadius: 8,
+                            gap: 3,
+                            padding: "2px 8px",
+                            borderRadius: 10,
+                            fontSize: 10,
                             fontWeight: 700,
-                            cursor: isActivating ? "not-allowed" : "pointer",
-                            fontSize: 12.5,
-                            opacity: isActivating ? 0.7 : 1,
+                            background: successBg,
+                            color: successText,
+                            border: `1px solid ${success}`,
+                            flexShrink: 0,
                           }}
                         >
-                          {isActivating ? (
-                            <Loader size={12} className="ga-spin" />
-                          ) : (
-                            <Clock size={12} />
-                          )}
-                          Activer
-                        </button>
-                        <button
-                          onClick={() => handleDelete(annee._id, annee.nom)}
-                          disabled={isDeleting}
-                          title="Supprimer"
-                          aria-label="Supprimer"
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: "8px 10px",
-                            background: "transparent",
-                            color: danger,
-                            border: `1px solid ${cardBorder}`,
-                            borderRadius: 8,
-                            cursor: isDeleting ? "not-allowed" : "pointer",
-                            opacity: isDeleting ? 0.6 : 1,
-                          }}
-                        >
-                          {isDeleting ? (
-                            <Loader size={14} className="ga-spin" />
-                          ) : (
-                            <Trash2 size={14} />
-                          )}
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
+                          <Check size={10} aria-hidden="true" />
+                          Active
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 4,
+                    alignItems: "center",
+                    justifyContent: isMobile ? "flex-end" : "flex-start",
+                    width: isMobile ? "100%" : "auto",
+                    flexShrink: 0,
+                  }}
+                >
+                  {isEditing ? (
+                    <>
+                      <Pressable
+                        onClick={() => saveRename(annee._id)}
+                        disabled={savingRename}
+                        dark={dark}
+                        ariaLabel={`Enregistrer le nouveau nom de ${annee.nom}`}
+                        aria-busy={savingRename}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: "10px 12px",
+                          background: success,
+                          color: "#FFFFFF",
+                          border: "none",
+                          borderRadius: 8,
+                          cursor: savingRename ? "not-allowed" : "pointer",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          gap: 4,
+                        }}
+                      >
+                        {savingRename ? (
+                          <Loader size={12} className="ga-spin" role="status" aria-label="Enregistrement" />
+                        ) : (
+                          <Check size={12} aria-hidden="true" />
+                        )}
+                        Enregistrer
+                      </Pressable>
+                      <Pressable
+                        onClick={cancelRename}
+                        dark={dark}
+                        ariaLabel="Annuler le renommage"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: "10px 12px",
+                          background: "transparent",
+                          color: textSecondary,
+                          border: `1px solid ${cardBorder}`,
+                          borderRadius: 8,
+                        }}
+                      >
+                        <X size={14} aria-hidden="true" />
+                      </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      {!isActive && (
+                        <>
+                          <Pressable
+                            onClick={() => startRename(annee)}
+                            dark={dark}
+                            ariaLabel={`Renommer l'année ${annee.nom}`}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: "10px 12px",
+                              background: "transparent",
+                              color: accent,
+                              border: `1px solid ${cardBorder}`,
+                              borderRadius: 8,
+                            }}
+                          >
+                            <Edit2 size={14} aria-hidden="true" />
+                          </Pressable>
+                          <Pressable
+                            onClick={() => handleActivate(annee._id, annee.nom)}
+                            disabled={isActivating}
+                            dark={dark}
+                            ariaLabel={`Activer l'année ${annee.nom}`}
+                            aria-busy={isActivating}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 4,
+                              padding: isMobile ? "10px 14px" : "10px 16px",
+                              background: success,
+                              color: "#FFFFFF",
+                              border: "none",
+                              borderRadius: 8,
+                              fontWeight: 700,
+                              cursor: isActivating ? "not-allowed" : "pointer",
+                              fontSize: 12.5,
+                              opacity: isActivating ? 0.7 : 1,
+                            }}
+                          >
+                            {isActivating ? (
+                              <Loader size={12} className="ga-spin" role="status" aria-label="Activation" />
+                            ) : (
+                              <Clock size={12} aria-hidden="true" />
+                            )}
+                            Activer
+                          </Pressable>
+                          <Pressable
+                            onClick={() => handleDelete(annee._id, annee.nom)}
+                            disabled={isDeleting}
+                            dark={dark}
+                            ariaLabel={`Supprimer l'année ${annee.nom}`}
+                            aria-busy={isDeleting}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: "10px 12px",
+                              background: "transparent",
+                              color: danger,
+                              border: `1px solid ${cardBorder}`,
+                              borderRadius: 8,
+                              cursor: isDeleting ? "not-allowed" : "pointer",
+                              opacity: isDeleting ? 0.6 : 1,
+                            }}
+                          >
+                            {isDeleting ? (
+                              <Loader size={14} className="ga-spin" role="status" aria-label="Suppression" />
+                            ) : (
+                              <Trash2 size={14} aria-hidden="true" />
+                            )}
+                          </Pressable>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </article>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       {/* ==================== NOTE ==================== */}
       {stats.active === 0 && stats.total > 0 && (
         <div
+          role="alert"
           style={{
             marginTop: 12,
             padding: "10px 12px",
@@ -777,7 +913,7 @@ export function GestionAnnees({ ecoleId, userId }) {
             lineHeight: 1.4,
           }}
         >
-          <AlertCircle size={14} style={{ flexShrink: 0 }} />
+          <AlertCircle size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span>
             Aucune année n'est active. Activez-en une pour permettre la saisie
             des données.

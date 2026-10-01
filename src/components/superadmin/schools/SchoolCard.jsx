@@ -1,27 +1,28 @@
 // src/components/SuperAdmin/schools/SchoolCard.jsx
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   Building2, Users, CalendarDays, CheckSquare, Square,
   Ban, Power, Trash2, ArrowRight, Edit2, Save, X,
-  Eye, // ✨ NOUVEAU — drill-down
+  Eye,
 } from "lucide-react";
 import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { Badge } from "@/components/ui";
 
-/**
- * Carte d'une école dans la liste Super Admin.
- *
- * Props :
- * @param {object} ecole
- * @param {boolean} [selected=false]
- * @param {Function} [onToggleSelect]
- * @param {Function} [onToggleStatus]
- * @param {Function} [onDelete]
- * @param {Function} [onOpen]
- * @param {Function} [onDrilldown] — (ecoleId) => void → ouvre la page détail
- * @param {Function} [onRename] — (ecoleId, nouveauNom) => Promise
- */
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
 export function SchoolCard({
   ecole,
   selected = false,
@@ -29,18 +30,39 @@ export function SchoolCard({
   onToggleStatus,
   onDelete,
   onOpen,
-  onDrilldown,  // ✨ NOUVEAU
+  onDrilldown,
   onRename,
 }) {
   const t = useTokens();
   const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editNom, setEditNom] = useState(ecole.nom);
   const [saving, setSaving] = useState(false);
 
   const isActive = ecole.statut === "active";
   const canRename = typeof onRename === "function";
+  const isClickable = !isEditing && typeof onOpen === "function";
+
+  // ────────────────────────────────────────────────────────────
+  // Handlers card (role="button")
+  // ────────────────────────────────────────────────────────────
+  const handleCardClick = useCallback(() => {
+    if (isClickable) onOpen(ecole._id);
+  }, [isClickable, onOpen, ecole._id]);
+
+  const handleCardKeyDown = useCallback(
+    (e) => {
+      if (!isClickable) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handleCardClick();
+      }
+    },
+    [isClickable, handleCardClick]
+  );
 
   // ────────────────────────────────────────────────────────────
   // Handlers rename
@@ -85,24 +107,45 @@ export function SchoolCard({
   // ────────────────────────────────────────────────────────────
   return (
     <div
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      aria-label={isClickable ? `Ouvrir l'école ${ecole.nom}` : undefined}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => !isEditing && onOpen?.(ecole._id)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerDown={() => isClickable && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
       style={{
+        ...TAP_BASE,
         background: t.surface.default,
         borderRadius: t.radius.lg,
         padding: isMobile ? 14 : 20,
         boxShadow: hovered ? t.shadow.md : t.shadow.sm,
         border: `1px solid ${
-          selected ? t.accent.primary : t.border.default
+          selected
+            ? t.accent.primary
+            : focused
+            ? t.accent.primary
+            : t.border.default
         }`,
-        cursor: isEditing ? "default" : "pointer",
-        transition: `transform ${t.transition.normal}, box-shadow ${t.transition.normal}, border-color ${t.transition.fast}`,
-        transform: hovered && !isEditing ? "translateY(-2px)" : "translateY(0)",
+        cursor: isEditing ? "default" : isClickable ? "pointer" : "default",
+        transition: `transform 0.15s ease, box-shadow 0.2s, border-color 0.15s`,
+        transform:
+          pressed && !isEditing
+            ? "scale(0.99)"
+            : hovered && !isEditing
+            ? "translateY(-2px)"
+            : "translateY(0)",
         display: "flex",
         flexDirection: "column",
         gap: isMobile ? 8 : 12,
         position: "relative",
+        outline: "none",
       }}
     >
       {/* Checkbox sélection — masqué en mode édition */}
@@ -113,22 +156,32 @@ export function SchoolCard({
             e.stopPropagation();
             onToggleSelect?.(ecole._id);
           }}
+          aria-label={selected ? "Désélectionner" : "Sélectionner"}
           style={{
             position: "absolute",
-            top: 10,
-            right: 10,
+            top: 4,
+            right: 4,
             background: "none",
             border: "none",
             cursor: "pointer",
-            padding: 4,
+            padding: 10,
             color: selected ? t.accent.primary : t.text.muted,
             zIndex: 1,
             display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             outline: "none",
+            minWidth: 44,
+            minHeight: 44,
+            touchAction: "manipulation",
+            WebkitTapHighlightColor: "transparent",
           }}
-          aria-label={selected ? "Désélectionner" : "Sélectionner"}
         >
-          {selected ? <CheckSquare size={18} /> : <Square size={18} />}
+          {selected ? (
+            <CheckSquare size={18} aria-hidden="true" />
+          ) : (
+            <Square size={18} aria-hidden="true" />
+          )}
         </button>
       )}
 
@@ -143,7 +196,11 @@ export function SchoolCard({
               paddingRight: 8,
             }}
           >
-            <Building2 size={isMobile ? 20 : 24} color={t.accent.primary} />
+            <Building2
+              size={isMobile ? 20 : 24}
+              color={t.accent.primary}
+              aria-hidden="true"
+            />
             <span
               style={{
                 fontSize: 12,
@@ -162,8 +219,12 @@ export function SchoolCard({
               value={editNom}
               onChange={(e) => setEditNom(e.target.value)}
               onKeyDown={handleKeyDown}
+              onClick={(e) => e.stopPropagation()}
               autoFocus
               disabled={saving}
+              enterKeyHint="done"
+              autoCorrect="off"
+              spellCheck="false"
               aria-label="Nouveau nom de l'école"
               style={{
                 flex: 1,
@@ -172,10 +233,11 @@ export function SchoolCard({
                 border: `1px solid ${t.accent.primary}`,
                 background: t.surface.input,
                 color: t.text.primary,
-                fontSize: isMobile ? 15 : 14,
+                fontSize: isMobile ? 16 : 14,
                 outline: "none",
                 fontFamily: t.font.family,
                 boxSizing: "border-box",
+                minHeight: 44,
               }}
             />
             <button
@@ -195,9 +257,13 @@ export function SchoolCard({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                minWidth: 44,
+                minHeight: 44,
+                touchAction: "manipulation",
+                WebkitTapHighlightColor: "transparent",
               }}
             >
-              <Save size={16} />
+              <Save size={16} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -215,9 +281,13 @@ export function SchoolCard({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                minWidth: 44,
+                minHeight: 44,
+                touchAction: "manipulation",
+                WebkitTapHighlightColor: "transparent",
               }}
             >
-              <X size={16} />
+              <X size={16} aria-hidden="true" />
             </button>
           </div>
         </>
@@ -234,7 +304,11 @@ export function SchoolCard({
               gap: 8,
             }}
           >
-            <Building2 size={isMobile ? 20 : 24} color={t.accent.primary} />
+            <Building2
+              size={isMobile ? 20 : 24}
+              color={t.accent.primary}
+              aria-hidden="true"
+            />
             <Badge variant={isActive ? "success" : "danger"} size="sm">
               {isActive ? "Active" : "Suspendue"}
             </Badge>
@@ -265,7 +339,14 @@ export function SchoolCard({
                 }}
               >
                 Code :{" "}
-                <span style={{ fontFamily: t.font.mono }}>{ecole.code}</span>
+                <span
+                  style={{
+                    fontFamily: t.font.mono,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {ecole.code}
+                </span>
               </div>
             )}
 
@@ -279,7 +360,7 @@ export function SchoolCard({
                 marginTop: 4,
               }}
             >
-              <CalendarDays size={14} />
+              <CalendarDays size={14} aria-hidden="true" />
               <span>
                 Créée le{" "}
                 {new Date(ecole._creationTime).toLocaleDateString("fr-FR")}
@@ -296,7 +377,7 @@ export function SchoolCard({
                 marginTop: 2,
               }}
             >
-              <Users size={14} />
+              <Users size={14} aria-hidden="true" />
               <span>{ecole.userCount ?? 0} utilisateur(s)</span>
             </div>
           </div>
@@ -318,7 +399,7 @@ export function SchoolCard({
               }}
               style={{
                 flex: 1,
-                padding: isMobile ? "10px 12px" : "8px 12px",
+                padding: isMobile ? "10px 12px" : "10px 12px",
                 background: t.accent.primary,
                 color: "#FFFFFF",
                 border: "none",
@@ -331,9 +412,12 @@ export function SchoolCard({
                 gap: 6,
                 fontSize: 14,
                 fontFamily: t.font.family,
+                minHeight: 44,
+                touchAction: "manipulation",
+                WebkitTapHighlightColor: "transparent",
               }}
             >
-              Ouvrir <ArrowRight size={14} />
+              Ouvrir <ArrowRight size={14} aria-hidden="true" />
             </button>
 
             <div
@@ -343,12 +427,13 @@ export function SchoolCard({
                 justifyContent: isMobile ? "space-between" : "flex-start",
               }}
             >
-              {/* ✨ NOUVEAU — Bouton Détails (drill-down) */}
+              {/* Bouton Détails (drill-down) */}
               {onDrilldown && (
                 <SmallIconButton
-                  icon={<Eye size={16} />}
+                  icon={<Eye size={16} aria-hidden="true" />}
                   label="Voir le détail"
                   color={t.accent.primary}
+                  t={t}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDrilldown(ecole._id);
@@ -356,20 +441,28 @@ export function SchoolCard({
                 />
               )}
 
-              {/* Bouton rename (si handler fourni) */}
+              {/* Bouton rename */}
               {canRename && (
                 <SmallIconButton
-                  icon={<Edit2 size={16} />}
+                  icon={<Edit2 size={16} aria-hidden="true" />}
                   label="Renommer"
                   color={t.accent.primary}
+                  t={t}
                   onClick={startEdit}
                 />
               )}
 
               <SmallIconButton
-                icon={isActive ? <Ban size={16} /> : <Power size={16} />}
+                icon={
+                  isActive ? (
+                    <Ban size={16} aria-hidden="true" />
+                  ) : (
+                    <Power size={16} aria-hidden="true" />
+                  )
+                }
                 label={isActive ? "Suspendre" : "Réactiver"}
                 color={isActive ? "#F59E0B" : "#10B981"}
+                t={t}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleStatus?.(ecole);
@@ -377,9 +470,10 @@ export function SchoolCard({
               />
 
               <SmallIconButton
-                icon={<Trash2 size={16} />}
+                icon={<Trash2 size={16} aria-hidden="true" />}
                 label="Supprimer"
                 color="#EF4444"
+                t={t}
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete?.(ecole._id, ecole.nom);
@@ -396,21 +490,30 @@ export function SchoolCard({
 // ────────────────────────────────────────────────────────────
 // Sous-composant
 // ────────────────────────────────────────────────────────────
-function SmallIconButton({ icon, label, color, onClick }) {
-  const t = useTokens();
+function SmallIconButton({ icon, label, color, t, onClick }) {
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const isActive = hovered || pressed;
 
   return (
     <button
       type="button"
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       title={label}
       aria-label={label}
       style={{
-        padding: 8,
-        background: hovered ? t.surface.hover : "transparent",
+        padding: 10,
+        background: isActive ? t.surface.hover : "transparent",
         border: `1px solid ${t.border.default}`,
         borderRadius: t.radius.sm,
         color,
@@ -419,7 +522,13 @@ function SmallIconButton({ icon, label, color, onClick }) {
         alignItems: "center",
         justifyContent: "center",
         outline: "none",
-        transition: `background ${t.transition.fast}`,
+        minWidth: 44,
+        minHeight: 44,
+        touchAction: "manipulation",
+        WebkitTapHighlightColor: "transparent",
+        transform: pressed ? "scale(0.95)" : "scale(1)",
+        transition: `background ${t.transition.fast}, transform 0.12s ease`,
+        ...(focused ? FOCUS_RING(color) : null),
       }}
     >
       {icon}

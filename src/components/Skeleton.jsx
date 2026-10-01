@@ -1,11 +1,10 @@
 // src/components/Skeleton.jsx
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, memo } from "react";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES module-level (injectés UNE SEULE FOIS via <style>)
-// React déduplique par référence JSX stable → pas de rendu multiple
+// KEYFRAMES module-level (injectés UNE SEULE FOIS)
 // ════════════════════════════════════════════════════════════════════
 const SkeletonKeyframes = (
   <style>{`
@@ -14,19 +13,35 @@ const SkeletonKeyframes = (
       100% { background-position: -200% 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .sk-shimmer,
-      [data-skeleton] {
+      .sk-shimmer {
         animation: none !important;
       }
     }
   `}</style>
 );
 
-export function Skeleton({
+// ════════════════════════════════════════════════════════════════════
+// HELPERS — Normalisation numérique
+// ════════════════════════════════════════════════════════════════════
+
+/** Convertit une valeur CSS en nombre (pour les calculs arithmétiques). */
+function toNumber(value, fallback) {
+  if (typeof value === "number" && !isNaN(value)) return value;
+  if (typeof value === "string") {
+    const n = parseFloat(value);
+    if (!isNaN(n)) return n;
+  }
+  return fallback;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT
+// ════════════════════════════════════════════════════════════════════
+function SkeletonBase({
   width = "100%",
   height = 20,
   style,
-  variant = "rect", // "rect" | "circle" | "text" | "card" | "list" | "table" | "avatar" | "list-item"
+  variant = "rect",
   lines = 3,
   gap = 8,
   count = 1,
@@ -34,6 +49,9 @@ export function Skeleton({
   speed = 1.5,
   borderRadius = 8,
   className,
+  // ✅ NOUVEAU — pour les groupes de skeletons (évite les annonces multiples)
+  decorative = false,
+  ariaLabel = "Chargement…",
 }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -66,10 +84,27 @@ export function Skeleton({
     [speed]
   );
 
+  // ✅ FIX #1 & #2 — Normalisation numérique
+  // Garantit que height et borderRadius sont TOUJOURS des nombres
+  const safeHeight = useMemo(() => toNumber(height, 20), [height]);
+  const safeBorderRadius = useMemo(
+    () => toNumber(borderRadius, 8),
+    [borderRadius]
+  );
+  const safeGap = useMemo(() => toNumber(gap, 8), [gap]);
+  const safeLines = useMemo(
+    () => Math.max(1, Math.floor(toNumber(lines, 3))),
+    [lines]
+  );
+  const safeCount = useMemo(
+    () => Math.max(1, Math.floor(toNumber(count, 1))),
+    [count]
+  );
+
   // ✅ Responsive tokens
-  const effectiveGap = isMobile ? Math.min(gap, 6) : gap;
+  const effectiveGap = isMobile ? Math.min(safeGap, 6) : safeGap;
   const effectivePadding = isMobile ? 10 : 12;
-  const effectiveBorderRadius = isMobile ? 6 : borderRadius;
+  const effectiveBorderRadius = isMobile ? 6 : safeBorderRadius;
 
   const baseColor = dark ? "#334155" : "#E2E8F0";
   const highlightColor = dark ? "#475569" : "#F1F5F9";
@@ -85,55 +120,57 @@ export function Skeleton({
         ? `sk-shimmer ${safeSpeed}s linear infinite`
         : "none",
       borderRadius: effectiveBorderRadius,
-      // ✅ FIX — box-sizing pour éviter le débordement
       boxSizing: "border-box",
     }),
     [baseColor, highlightColor, shouldAnimate, safeSpeed, effectiveBorderRadius]
   );
 
-  // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX MAJEUR — Plus de `display: contents`
-  // On utilise un fragment <> qui laisse chaque Skeleton être un vrai
-  // élément de layout dans le parent (grid item, flex item, block...).
-  // ════════════════════════════════════════════════════════════════════
+  // ✅ FIX #3 — A11y : wrapper optionnellement silencieux
   const wrap = (content, extraWrapperStyle = {}) => (
     <>
       {SkeletonKeyframes}
       <div
         className={className}
-        role="status"
-        aria-busy="true"
-        aria-live="polite"
+        {...(decorative
+          ? { "aria-hidden": "true" }
+          : {
+              role: "status",
+              "aria-busy": "true",
+              "aria-live": "polite",
+            })}
         data-skeleton
         style={{
-          // ✅ Box model cohérent partout
           boxSizing: "border-box",
           minWidth: 0,
           maxWidth: "100%",
-          // ✅ Le style utilisateur est appliqué sur le wrapper (pas en dessous)
           ...extraWrapperStyle,
           ...style,
         }}
       >
-        <span
-          style={{
-            position: "absolute",
-            width: 1,
-            height: 1,
-            overflow: "hidden",
-            clip: "rect(0 0 0 0)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Chargement…
-        </span>
+        {!decorative && (
+          <span
+            style={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              padding: 0,
+              margin: -1,
+              overflow: "hidden",
+              clip: "rect(0 0 0 0)",
+              whiteSpace: "nowrap",
+              border: 0,
+            }}
+          >
+            {ariaLabel}
+          </span>
+        )}
         {content}
       </div>
     </>
   );
 
   // ════════════════════════════════════════════════════════════════════
-  // VARIANTES
+  // VARIANTES (utilisent safeHeight partout)
   // ════════════════════════════════════════════════════════════════════
 
   const renderTextLines = () => (
@@ -146,12 +183,12 @@ export function Skeleton({
         boxSizing: "border-box",
       }}
     >
-      {Array.from({ length: lines }).map((_, index) => (
+      {Array.from({ length: safeLines }).map((_, index) => (
         <div
           key={index}
           style={{
-            width: index === lines - 1 ? "70%" : "100%",
-            height,
+            width: index === safeLines - 1 ? "70%" : "100%",
+            height: safeHeight,
             ...shimmerStyle,
           }}
           aria-hidden="true"
@@ -180,7 +217,7 @@ export function Skeleton({
       <div
         style={{
           width: "100%",
-          height: height * 3,
+          height: safeHeight * 3,
           ...shimmerStyle,
         }}
         aria-hidden="true"
@@ -193,11 +230,11 @@ export function Skeleton({
         }}
       >
         <div
-          style={{ width: "80%", height: height * 0.7, ...shimmerStyle }}
+          style={{ width: "80%", height: safeHeight * 0.7, ...shimmerStyle }}
           aria-hidden="true"
         />
         <div
-          style={{ width: "60%", height: height * 0.7, ...shimmerStyle }}
+          style={{ width: "60%", height: safeHeight * 0.7, ...shimmerStyle }}
           aria-hidden="true"
         />
       </div>
@@ -214,7 +251,7 @@ export function Skeleton({
         boxSizing: "border-box",
       }}
     >
-      {Array.from({ length: count }).map((_, idx) => (
+      {Array.from({ length: safeCount }).map((_, idx) => (
         <div
           key={idx}
           style={{
@@ -248,11 +285,11 @@ export function Skeleton({
             }}
           >
             <div
-              style={{ width: "70%", height: height * 0.6, ...shimmerStyle }}
+              style={{ width: "70%", height: safeHeight * 0.6, ...shimmerStyle }}
               aria-hidden="true"
             />
             <div
-              style={{ width: "40%", height: height * 0.5, ...shimmerStyle }}
+              style={{ width: "40%", height: safeHeight * 0.5, ...shimmerStyle }}
               aria-hidden="true"
             />
           </div>
@@ -267,9 +304,12 @@ export function Skeleton({
         width: "100%",
         boxSizing: "border-box",
         overflowX: "auto",
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       <table
+        role="presentation"
         style={{
           width: "100%",
           borderCollapse: "collapse",
@@ -278,9 +318,10 @@ export function Skeleton({
       >
         <thead>
           <tr>
-            {Array.from({ length: lines }).map((_, idx) => (
+            {Array.from({ length: safeLines }).map((_, idx) => (
               <th
                 key={idx}
+                scope="col"
                 style={{
                   padding: effectivePadding,
                   borderBottom: `1px solid ${borderColor}`,
@@ -290,7 +331,7 @@ export function Skeleton({
                 <div
                   style={{
                     width: "80%",
-                    height: height * 0.6,
+                    height: safeHeight * 0.6,
                     ...shimmerStyle,
                   }}
                   aria-hidden="true"
@@ -300,9 +341,9 @@ export function Skeleton({
           </tr>
         </thead>
         <tbody>
-          {Array.from({ length: count }).map((_, rowIdx) => (
+          {Array.from({ length: safeCount }).map((_, rowIdx) => (
             <tr key={rowIdx}>
-              {Array.from({ length: lines }).map((_, colIdx) => (
+              {Array.from({ length: safeLines }).map((_, colIdx) => (
                 <td
                   key={colIdx}
                   style={{
@@ -313,8 +354,8 @@ export function Skeleton({
                 >
                   <div
                     style={{
-                      width: colIdx === lines - 1 ? "60%" : "90%",
-                      height: height * 0.6,
+                      width: colIdx === safeLines - 1 ? "60%" : "90%",
+                      height: safeHeight * 0.6,
                       ...shimmerStyle,
                     }}
                     aria-hidden="true"
@@ -328,9 +369,7 @@ export function Skeleton({
     </div>
   );
 
-  // ✅ FIX — renderAvatar : width ET height explicites, jamais "100%"
   const renderAvatar = () => {
-    // Si width n'est pas numérique, on prend 40 par défaut
     const avatarSize =
       typeof width === "number"
         ? width
@@ -386,11 +425,11 @@ export function Skeleton({
         }}
       >
         <div
-          style={{ width: "70%", height: height * 0.6, ...shimmerStyle }}
+          style={{ width: "70%", height: safeHeight * 0.6, ...shimmerStyle }}
           aria-hidden="true"
         />
         <div
-          style={{ width: "40%", height: height * 0.5, ...shimmerStyle }}
+          style={{ width: "40%", height: safeHeight * 0.5, ...shimmerStyle }}
           aria-hidden="true"
         />
       </div>
@@ -426,7 +465,7 @@ export function Skeleton({
         <div
           style={{
             width: "100%",
-            height,
+            height: safeHeight,
             ...shimmerStyle,
           }}
           aria-hidden="true"
@@ -435,3 +474,7 @@ export function Skeleton({
       );
   }
 }
+
+// ✅ FIX #4 — React.memo : évite les re-renders inutiles
+export const Skeleton = memo(SkeletonBase);
+Skeleton.displayName = "Skeleton";

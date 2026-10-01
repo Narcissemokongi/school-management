@@ -9,7 +9,22 @@ import toast from "react-hot-toast";
 import { Loader, Save, Key, Eye, EyeOff, Info } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES (module-level, préfixés `st-*`)
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+const MIN_PASSWORD_LENGTH = 8;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL
 // ════════════════════════════════════════════════════════════════════
 const SettingsTabKeyframes = (
   <style>{`
@@ -25,23 +40,24 @@ const SettingsTabKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// VALIDATION MOT DE PASSE (alignée backend)
+// VALIDATION
 // ════════════════════════════════════════════════════════════════════
-const MIN_PASSWORD_LENGTH = 8;
-
 function validatePasswordStrength(password) {
   if (!password || password.length < MIN_PASSWORD_LENGTH) {
     return `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`;
   }
-  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+  if (
+    !/[A-Z]/.test(password) ||
+    !/[a-z]/.test(password) ||
+    !/[0-9]/.test(password)
+  ) {
     return "Le mot de passe doit contenir majuscule, minuscule et chiffre.";
   }
   return null;
 }
 
 // ════════════════════════════════════════════════════════════════════
-// PasswordField — extrait du composant principal
-// (évite le remontage de l'input à chaque keystroke = perte de focus)
+// PasswordField
 // ════════════════════════════════════════════════════════════════════
 function PasswordField({
   id,
@@ -53,7 +69,10 @@ function PasswordField({
   autoComplete,
   t,
   isMobile,
+  describedBy,
 }) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <div>
       <label
@@ -76,13 +95,22 @@ function PasswordField({
           type={show ? "text" : "password"}
           value={value}
           onChange={onChange}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           required
           minLength={MIN_PASSWORD_LENGTH}
           autoComplete={autoComplete}
+          enterKeyHint="next"
+          aria-describedby={describedBy}
           style={{
+            ...TAP_BASE,
             width: "100%",
-            padding: isMobile ? "12px 44px 12px 14px" : "10px 44px 10px 14px",
-            border: `1px solid ${t.border.default}`,
+            padding: isMobile
+              ? "12px 52px 12px 14px"
+              : "10px 52px 10px 14px",
+            border: `1px solid ${
+              focused ? t.accent.primary : t.border.default
+            }`,
             borderRadius: t.radius.sm,
             background: t.surface.input,
             color: t.text.primary,
@@ -90,28 +118,40 @@ function PasswordField({
             fontSize: isMobile ? 16 : 14,
             fontFamily: t.font.family,
             boxSizing: "border-box",
+            minHeight: 44,
+            transition: "border-color 0.15s",
           }}
         />
         <button
           type="button"
           onClick={onToggle}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
           style={{
+            ...TAP_BASE,
             position: "absolute",
-            right: 10,
+            right: 4,
             top: "50%",
             transform: "translateY(-50%)",
             background: "none",
             border: "none",
             cursor: "pointer",
             color: t.text.muted,
-            padding: 4,
+            padding: 8,
+            minWidth: 44,
+            minHeight: 44,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            borderRadius: t.radius.sm,
           }}
-          aria-label={show ? "Masquer" : "Afficher"}
         >
-          {show ? <EyeOff size={isMobile ? 20 : 18} /> : <Eye size={isMobile ? 20 : 18} />}
+          {show ? (
+            <EyeOff size={isMobile ? 20 : 18} aria-hidden="true" />
+          ) : (
+            <Eye size={isMobile ? 20 : 18} aria-hidden="true" />
+          )}
         </button>
       </div>
     </div>
@@ -130,24 +170,16 @@ export function SettingsTab({ user }) {
     (user?.role === "admin" && !user?.ecoleId) ||
     (user?.role === "superAdmin" && user?.isOwner === true);
 
-  // ⚠️ Cette query n'exige pas `userId` côté backend actuellement.
-  //    Si le backend est patché pour exiger userId, décommenter le fallback.
+  // ⚠️ Query sans userId — si le backend exige userId, décommenter le fallback
   const settingsRaw = useQuery(api.settings.getGlobalSettings);
-  // const settingsRaw = useQuery(
-  //   api.settings.getGlobalSettings,
-  //   userId ? { userId } : "skip"
-  // );
 
   const settings = useMemo(() => settingsRaw ?? null, [settingsRaw]);
   const isLoadingSettings = settingsRaw === undefined;
 
-  // Mutations
   const updateSettings = useMutation(api.settings.updateGlobalSettings);
   const changePassword = useMutation(api.users.changePassword);
 
-  // ────────────────────────────────────────────────────────────
-  // États
-  // ────────────────────────────────────────────────────────────
+  // ─── États ──────────────────────────────────────────────────
   const [settingsForm, setSettingsForm] = useState({
     appName: "",
     supportEmail: "",
@@ -169,7 +201,7 @@ export function SettingsTab({ user }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
-  // Sync form avec settings chargés
+  // ─── Sync settings → form ───────────────────────────────────
   useEffect(() => {
     if (!settings) return;
     setSettingsForm({
@@ -183,7 +215,7 @@ export function SettingsTab({ user }) {
     });
   }, [settings]);
 
-  // Setters fonctionnels (safe en rafale)
+  // ─── Setters fonctionnels ───────────────────────────────────
   const updateSettingsField = useCallback((field, value) => {
     setSettingsForm((prev) => ({ ...prev, [field]: value }));
   }, []);
@@ -192,9 +224,7 @@ export function SettingsTab({ user }) {
     setPasswordForm((prev) => ({ ...prev, [field]: value }));
   }, []);
 
-  // ────────────────────────────────────────────────────────────
-  // Save settings
-  // ────────────────────────────────────────────────────────────
+  // ─── Save settings ──────────────────────────────────────────
   const handleSaveSettings = useCallback(
     async (e) => {
       e.preventDefault();
@@ -205,14 +235,17 @@ export function SettingsTab({ user }) {
         return;
       }
 
-      // ✅ Guard owner-only
       if (!isOwner) {
-        toast.error("Seul le propriétaire peut modifier les paramètres globaux.");
+        toast.error(
+          "Seul le propriétaire peut modifier les paramètres globaux."
+        );
         return;
       }
 
       if (!settingsForm.appName.trim() || !settingsForm.supportEmail.trim()) {
-        toast.error("Le nom de l'application et l'email de support sont obligatoires.");
+        toast.error(
+          "Le nom de l'application et l'email de support sont obligatoires."
+        );
         return;
       }
 
@@ -230,7 +263,9 @@ export function SettingsTab({ user }) {
         });
         toast.success("Paramètres enregistrés avec succès");
       } catch (err) {
-        toast.error("Impossible d'enregistrer : " + (err?.message || "erreur inconnue"));
+        toast.error(
+          "Impossible d'enregistrer : " + (err?.message || "erreur inconnue")
+        );
       } finally {
         setSavingSettings(false);
       }
@@ -238,9 +273,7 @@ export function SettingsTab({ user }) {
     [savingSettings, userId, isOwner, settingsForm, updateSettings]
   );
 
-  // ────────────────────────────────────────────────────────────
-  // Change password
-  // ────────────────────────────────────────────────────────────
+  // ─── Change password ────────────────────────────────────────
   const handleChangePassword = useCallback(
     async (e) => {
       e.preventDefault();
@@ -261,7 +294,9 @@ export function SettingsTab({ user }) {
         return;
       }
 
-      const validationError = validatePasswordStrength(passwordForm.newPassword);
+      const validationError = validatePasswordStrength(
+        passwordForm.newPassword
+      );
       if (validationError) {
         toast.error(validationError);
         return;
@@ -269,7 +304,6 @@ export function SettingsTab({ user }) {
 
       setChangingPassword(true);
       try {
-        // ✅ Pas de `requesterId` (backend refuse — cf. rapport §13.4)
         await changePassword({
           userId,
           currentPassword: passwordForm.currentPassword,
@@ -296,54 +330,74 @@ export function SettingsTab({ user }) {
     [changingPassword, userId, passwordForm, changePassword]
   );
 
-  // ────────────────────────────────────────────────────────────
-  // Styles partagés
-  // ────────────────────────────────────────────────────────────
-  const cardStyle = {
-    background: t.surface.default,
-    borderRadius: t.radius.lg,
-    padding: isMobile ? 16 : 24,
-    boxShadow: t.shadow.sm,
-    border: `1px solid ${t.border.default}`,
-  };
+  // ─── Styles partagés ────────────────────────────────────────
+  const cardStyle = useMemo(
+    () => ({
+      background: t.surface.default,
+      borderRadius: t.radius.lg,
+      padding: isMobile ? 16 : 24,
+      boxShadow: t.shadow.sm,
+      border: `1px solid ${t.border.default}`,
+    }),
+    [t, isMobile]
+  );
 
-  const cardTitleStyle = {
-    fontSize: isMobile ? 16 : 18,
-    fontWeight: 700,
-    color: t.text.primary,
-    marginBottom: isMobile ? 16 : 20,
-    margin: 0,
-  };
+  const cardTitleStyle = useMemo(
+    () => ({
+      fontSize: isMobile ? 16 : 18,
+      fontWeight: 700,
+      color: t.text.primary,
+      marginBottom: isMobile ? 16 : 20,
+      margin: 0,
+    }),
+    [t, isMobile]
+  );
 
-  const inputStyle = {
-    width: "100%",
-    padding: isMobile ? "12px 14px" : "10px 14px",
-    border: `1px solid ${t.border.default}`,
-    borderRadius: t.radius.sm,
-    background: t.surface.input,
-    color: t.text.primary,
-    outline: "none",
-    fontSize: isMobile ? 16 : 14,
-    fontFamily: t.font.family,
-    boxSizing: "border-box",
-  };
+  const inputStyle = useMemo(
+    () => ({
+      ...TAP_BASE,
+      width: "100%",
+      padding: isMobile ? "12px 14px" : "10px 14px",
+      border: `1px solid ${t.border.default}`,
+      borderRadius: t.radius.sm,
+      background: t.surface.input,
+      color: t.text.primary,
+      outline: "none",
+      fontSize: isMobile ? 16 : 14,
+      fontFamily: t.font.family,
+      boxSizing: "border-box",
+      minHeight: 44,
+    }),
+    [t, isMobile]
+  );
 
-  const labelStyle = {
-    display: "block",
-    fontSize: 12,
-    fontWeight: 600,
-    color: t.text.muted,
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  };
+  const labelStyle = useMemo(
+    () => ({
+      display: "block",
+      fontSize: 12,
+      fontWeight: 600,
+      color: t.text.muted,
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: 0.3,
+    }),
+    [t]
+  );
 
-  const gridColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(250px, 1fr))";
+  const gridColumns = isMobile
+    ? "1fr"
+    : "repeat(auto-fit, minmax(250px, 1fr))";
   const formGap = isMobile ? 12 : 16;
 
-  // ────────────────────────────────────────────────────────────
-  // Rendu
-  // ────────────────────────────────────────────────────────────
+  // ─── Calculs dérivés ────────────────────────────────────────
+  const mismatchError =
+    passwordForm.confirmPassword &&
+    passwordForm.newPassword !== passwordForm.confirmPassword;
+  const strengthError =
+    passwordForm.newPassword &&
+    validatePasswordStrength(passwordForm.newPassword);
+
+  // ─── Rendu ──────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -355,9 +409,10 @@ export function SettingsTab({ user }) {
     >
       {SettingsTabKeyframes}
 
-      {/* ═══════════ Bandeau informatif pour les secondaires ═══════════ */}
+      {/* ═══════════ Bandeau info secondaires ═══════════ */}
       {!isOwner && (
         <div
+          role="note"
           style={{
             display: "flex",
             gap: 12,
@@ -370,10 +425,15 @@ export function SettingsTab({ user }) {
             lineHeight: 1.5,
           }}
         >
-          <Info size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+          <Info
+            size={18}
+            aria-hidden="true"
+            style={{ flexShrink: 0, marginTop: 1 }}
+          />
           <div>
-            Vous pouvez modifier <strong>votre mot de passe</strong>, mais seul le
-            propriétaire de la plateforme peut modifier les paramètres globaux.
+            Vous pouvez modifier <strong>votre mot de passe</strong>, mais seul
+            le propriétaire de la plateforme peut modifier les paramètres
+            globaux.
           </div>
         </div>
       )}
@@ -383,12 +443,25 @@ export function SettingsTab({ user }) {
         <h3 style={cardTitleStyle}>Paramètres généraux</h3>
 
         {isLoadingSettings ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+          <div
+            role="status"
+            aria-busy="true"
+            aria-live="polite"
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              padding: 24,
+            }}
+          >
             <Loader
               size={24}
               className="st-spin"
+              aria-hidden="true"
               style={{ color: t.accent.primary }}
             />
+            <span style={{ position: "absolute", left: -9999 }}>
+              Chargement des paramètres
+            </span>
           </div>
         ) : (
           <form
@@ -421,10 +494,13 @@ export function SettingsTab({ user }) {
                   <input
                     id="settings-appName"
                     value={settingsForm.appName}
-                    onChange={(e) => updateSettingsField("appName", e.target.value)}
+                    onChange={(e) =>
+                      updateSettingsField("appName", e.target.value)
+                    }
                     style={inputStyle}
                     required
                     autoComplete="organization"
+                    enterKeyHint="next"
                   />
                 </div>
                 <div>
@@ -434,6 +510,7 @@ export function SettingsTab({ user }) {
                   <input
                     id="settings-supportEmail"
                     type="email"
+                    inputMode="email"
                     value={settingsForm.supportEmail}
                     onChange={(e) =>
                       updateSettingsField("supportEmail", e.target.value)
@@ -441,6 +518,7 @@ export function SettingsTab({ user }) {
                     style={inputStyle}
                     required
                     autoComplete="email"
+                    enterKeyHint="next"
                   />
                 </div>
                 <div>
@@ -457,6 +535,7 @@ export function SettingsTab({ user }) {
                     }
                     style={inputStyle}
                     autoComplete="tel"
+                    enterKeyHint="next"
                   />
                 </div>
                 <div>
@@ -466,9 +545,12 @@ export function SettingsTab({ user }) {
                   <input
                     id="settings-address"
                     value={settingsForm.address}
-                    onChange={(e) => updateSettingsField("address", e.target.value)}
+                    onChange={(e) =>
+                      updateSettingsField("address", e.target.value)
+                    }
                     style={inputStyle}
                     autoComplete="street-address"
+                    enterKeyHint="next"
                   />
                 </div>
                 <div>
@@ -478,11 +560,15 @@ export function SettingsTab({ user }) {
                   <input
                     id="settings-logoUrl"
                     type="url"
+                    inputMode="url"
                     value={settingsForm.logoUrl}
-                    onChange={(e) => updateSettingsField("logoUrl", e.target.value)}
+                    onChange={(e) =>
+                      updateSettingsField("logoUrl", e.target.value)
+                    }
                     placeholder="https://exemple.com/logo.png"
                     style={inputStyle}
                     autoComplete="url"
+                    enterKeyHint="next"
                   />
                 </div>
                 <div>
@@ -492,8 +578,11 @@ export function SettingsTab({ user }) {
                   <input
                     id="settings-slogan"
                     value={settingsForm.slogan}
-                    onChange={(e) => updateSettingsField("slogan", e.target.value)}
+                    onChange={(e) =>
+                      updateSettingsField("slogan", e.target.value)
+                    }
                     style={inputStyle}
+                    enterKeyHint="done"
                   />
                 </div>
                 <div>
@@ -529,7 +618,11 @@ export function SettingsTab({ user }) {
                   type="submit"
                   variant="primary"
                   loading={savingSettings}
-                  icon={!savingSettings ? <Save size={16} /> : undefined}
+                  icon={
+                    !savingSettings ? (
+                      <Save size={16} aria-hidden="true" />
+                    ) : undefined
+                  }
                   fullWidth={isMobile}
                 >
                   {savingSettings ? "Enregistrement…" : "Enregistrer"}
@@ -567,12 +660,15 @@ export function SettingsTab({ user }) {
             id="pwd-new"
             label="Nouveau mot de passe"
             value={passwordForm.newPassword}
-            onChange={(e) => updatePasswordField("newPassword", e.target.value)}
+            onChange={(e) =>
+              updatePasswordField("newPassword", e.target.value)
+            }
             show={showNewPassword}
             onToggle={() => setShowNewPassword((s) => !s)}
             autoComplete="new-password"
             t={t}
             isMobile={isMobile}
+            describedBy={strengthError ? "pwd-new-error" : undefined}
           />
 
           <PasswordField
@@ -587,37 +683,38 @@ export function SettingsTab({ user }) {
             autoComplete="new-password"
             t={t}
             isMobile={isMobile}
+            describedBy={mismatchError ? "pwd-confirm-error" : undefined}
           />
 
           {/* Erreur : mots de passe différents */}
-          {passwordForm.confirmPassword &&
-            passwordForm.newPassword !== passwordForm.confirmPassword && (
-              <div
-                role="alert"
-                style={{
-                  color: t.status.danger.fg,
-                  fontSize: 12,
-                  marginTop: -6,
-                }}
-              >
-                Les mots de passe ne correspondent pas.
-              </div>
-            )}
+          {mismatchError && (
+            <div
+              id="pwd-confirm-error"
+              role="alert"
+              style={{
+                color: t.status.danger.fg,
+                fontSize: 12,
+                marginTop: -6,
+              }}
+            >
+              Les mots de passe ne correspondent pas.
+            </div>
+          )}
 
           {/* Erreur : mot de passe faible */}
-          {passwordForm.newPassword &&
-            validatePasswordStrength(passwordForm.newPassword) && (
-              <div
-                role="alert"
-                style={{
-                  color: t.status.warning.fg,
-                  fontSize: 12,
-                  marginTop: -6,
-                }}
-              >
-                {validatePasswordStrength(passwordForm.newPassword)}
-              </div>
-            )}
+          {strengthError && (
+            <div
+              id="pwd-new-error"
+              role="alert"
+              style={{
+                color: t.status.warning.fg,
+                fontSize: 12,
+                marginTop: -6,
+              }}
+            >
+              {strengthError}
+            </div>
+          )}
 
           <div
             style={{
@@ -629,10 +726,16 @@ export function SettingsTab({ user }) {
               type="submit"
               variant="danger"
               loading={changingPassword}
-              icon={!changingPassword ? <Key size={16} /> : undefined}
+              icon={
+                !changingPassword ? (
+                  <Key size={16} aria-hidden="true" />
+                ) : undefined
+              }
               fullWidth={isMobile}
             >
-              {changingPassword ? "Modification…" : "Modifier le mot de passe"}
+              {changingPassword
+                ? "Modification…"
+                : "Modifier le mot de passe"}
             </Button>
           </div>
         </form>

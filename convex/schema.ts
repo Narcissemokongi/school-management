@@ -1,3 +1,4 @@
+// convex/schema.ts
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -324,26 +325,31 @@ export default defineSchema({
     .index("by_ecoleId", ["ecoleId"]),
 
   // ========== MESSAGES ==========
+    // ========== MESSAGES ==========
   messages: defineTable({
-    ecoleId: v.id("ecoles"),
+    ecoleId: v.optional(v.id("ecoles")),
     expediteurId: v.id("users"),
     destinataireId: v.optional(v.id("users")),
-    contenu: v.string(),
-    date: v.string(),
-    lu: v.boolean(),
-    anneeId: v.optional(v.id("anneesScolaires")),
-    piecesJointes: v.optional(v.array(v.object({
-      nom: v.string(),
-      type: v.string(),
-      url: v.string(),
-    }))),
     groupeId: v.optional(v.string()),
+    contenu: v.string(),
+    lu: v.optional(v.boolean()),
+    date: v.union(v.number(), v.string()),
+    piecesJointes: v.optional(
+      v.array(
+        v.object({
+          nom: v.string(),
+          type: v.string(),
+          url: v.string(),
+          storageId: v.optional(v.string()),
+        })
+      )
+    ),
   })
-    .index("by_destinataire", ["destinataireId"])
     .index("by_expediteur", ["expediteurId"])
+    .index("by_destinataire", ["destinataireId"])
+    .index("by_groupeId", ["groupeId"])       // ⬅️ renommé
     .index("by_ecoleId", ["ecoleId"])
-    .index("by_groupeId", ["groupeId"]),
-
+    .index("by_date", ["date"]),
   // ========== EMPLOI DU TEMPS ==========
   emploiDuTemps: defineTable({
     classe: v.string(),
@@ -458,9 +464,7 @@ export default defineSchema({
     updatedBy: v.id("users"),
   }).index("by_cle", ["cle"]),
 
-    /**
-   * ✨ Historique des relances envoyées aux écoles.
-   */
+  // ✨ Historique des relances envoyées aux écoles.
   relancesAbonnement: defineTable({
     abonnementId: v.id("abonnements"),
     ecoleId: v.id("ecoles"),
@@ -484,9 +488,6 @@ export default defineSchema({
     .index("by_dateEnvoi", ["dateEnvoi"]),
 
   // ─────────────────────────────────────────────────────────────
-  // ANNONCES GLOBALES
-  // ─────────────────────────────────────────────────────────────
-    // ─────────────────────────────────────────────────────────────
   // ANNONCES GLOBALES
   // ─────────────────────────────────────────────────────────────
   annonces: defineTable({
@@ -517,6 +518,7 @@ export default defineSchema({
           type: v.string(),
           url: v.string(),
           taille: v.optional(v.number()),
+          storageId: v.optional(v.string()),   // ⬅️ AJOUTÉ
         })
       )
     ),
@@ -546,4 +548,18 @@ export default defineSchema({
     .index("by_annonce_user", ["annonceId", "userId"])
     .index("by_user", ["userId"])
     .index("by_annonce", ["annonceId"]),
+
+  // ─────────────────────────────────────────────────────────────
+  // NOTES INTERNES SUR ÉCOLE (privées OWNER)
+  // ─────────────────────────────────────────────────────────────
+  ecoleNotes: defineTable({
+    ecoleId: v.id("ecoles"),
+    contenu: v.string(),
+    auteurId: v.id("users"),
+    auteurNom: v.string(),
+    createdAt: v.string(), // ISO
+    updatedAt: v.string(), // ISO
+  })
+    .index("by_ecoleId", ["ecoleId"])
+    .index("by_auteurId", ["auteurId"]),
 });

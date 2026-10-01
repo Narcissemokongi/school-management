@@ -18,6 +18,14 @@ import { useAppStore } from "@/store/appStore";
 import { MessagingHero } from "./MessagingHero";
 
 // ════════════════════════════════════════════════════════════════════
+// SAFE-AREA helpers
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level
 // ════════════════════════════════════════════════════════════════════
 const ConvListKeyframes = (
@@ -36,6 +44,14 @@ const ConvListKeyframes = (
       animation: conv-pulse 1.4s ease-in-out infinite;
     }
     .conv-fade-in { animation: conv-fade-in 0.25s ease-out; }
+
+    /* ✨ Scrollbar fine pour les listes */
+    .conv-scroll::-webkit-scrollbar { width: 6px; }
+    .conv-scroll::-webkit-scrollbar-thumb {
+      background: rgba(100,116,139,0.3);
+      border-radius: 3px;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .conv-skeleton, .conv-fade-in { animation: none !important; }
     }
@@ -57,11 +73,17 @@ function buildTokens(dark) {
     primaryHover: dark ? "#6366F1" : "#4338CA",
     primarySoft: dark ? "#312E81" : "#EEF2FF",
     ghostHover: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+    ghostActive: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
     skeleton: dark ? "#334155" : "#E2E8F0",
     danger: dark ? "#F87171" : "#EF4444",
     success: dark ? "#34D399" : "#10B981",
     groupBg: dark ? "#4C1D95" : "#EDE9FE",
     groupFg: dark ? "#C4B5FD" : "#6D28D9",
+    // ✨ Fonds opaques pour section headers sticky
+    stickyHeaderBg: dark ? "#0F172A" : "#F8FAFC",
+    stickyHeaderBgEnd: dark
+      ? "rgba(15,23,42,0)"
+      : "rgba(248,250,252,0)",
   };
 }
 
@@ -157,22 +179,36 @@ function Avatar({ name, icon, variant = "user", size = 46, tokens }) {
   );
 }
 
+/**
+ * Bouton icône header — ✨ feedback tap + hover + touchAction
+ */
 function HeaderIconButton({ icon, label, onClick, tokens }) {
   const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
   const size = isMobile ? 44 : 36;
+
+  const bg = pressed
+    ? tokens.ghostActive
+    : hovered
+    ? tokens.ghostHover
+    : "transparent";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
       style={{
-        background: hovered ? tokens.ghostHover : "transparent",
+        background: bg,
         border: "none",
         cursor: "pointer",
         color: tokens.textMuted,
@@ -182,10 +218,14 @@ function HeaderIconButton({ icon, label, onClick, tokens }) {
         width: size,
         height: size,
         borderRadius: 12,
-        transition: "background 0.15s ease",
+        transition: "background 0.12s ease, transform 0.1s ease",
+        transform: pressed ? "scale(0.92)" : "scale(1)",
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: 2,
         flexShrink: 0,
+        padding: 0,
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
       }}
       title={label}
       aria-label={label}
@@ -195,6 +235,9 @@ function HeaderIconButton({ icon, label, onClick, tokens }) {
   );
 }
 
+/**
+ * ✨ ListItem — transformé en vrai `<button>` pour accessibilité native
+ */
 function ListItem({
   onClick,
   isActive = false,
@@ -208,32 +251,38 @@ function ListItem({
 }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
-  const background = isActive
+  const background = pressed
+    ? tokens.ghostActive
+    : isActive
     ? tokens.primarySoft
     : hovered
     ? tokens.surfaceHover
     : "transparent";
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onClick?.();
-    }
-  };
-
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={onClick}
-      onKeyDown={handleKeyDown}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
       style={{
-        padding: "14px 16px",
+        // Reset button defaults
+        appearance: "none",
+        WebkitAppearance: "none",
+        border: "none",
+        textAlign: "left",
+        fontFamily: "inherit",
+        color: "inherit",
+        // Layout
+        width: "100%",
+        padding: isMobile ? "12px 14px" : "14px 16px",
         minHeight: 68,
         cursor: "pointer",
         borderRadius: 10,
@@ -241,11 +290,15 @@ function ListItem({
         display: "flex",
         alignItems: "center",
         gap: 12,
-        transition: "background 0.15s ease",
+        transition:
+          "background 0.12s ease, transform 0.1s ease",
+        transform: pressed ? "scale(0.985)" : "scale(1)",
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: -2,
         minWidth: 0,
         boxSizing: "border-box",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
       }}
       aria-label={ariaLabel}
       aria-current={isActive ? "page" : undefined}
@@ -329,13 +382,14 @@ function ListItem({
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 
 function ItemSkeleton({ tokens }) {
   return (
     <div
+      aria-hidden="true"
       style={{
         padding: "14px 16px",
         minHeight: 68,
@@ -373,16 +427,25 @@ function ItemSkeleton({ tokens }) {
   );
 }
 
+/**
+ * ✨ SectionHeader — sticky sur mobile
+ */
 function SectionHeader({ label, tokens, isMobile }) {
   return (
     <div
       style={{
-        padding: isMobile ? "14px 16px 6px" : "18px 18px 6px",
+        position: isMobile ? "sticky" : "static",
+        top: 0,
+        zIndex: 5,
+        padding: isMobile ? "12px 16px 6px" : "18px 18px 6px",
         fontSize: 11,
         fontWeight: 700,
         color: tokens.textMuted,
         textTransform: "uppercase",
         letterSpacing: 0.6,
+        background: isMobile ? tokens.stickyHeaderBg : "transparent",
+        backdropFilter: isMobile ? "blur(8px)" : "none",
+        WebkitBackdropFilter: isMobile ? "blur(8px)" : "none",
       }}
     >
       {label}
@@ -417,6 +480,7 @@ export function ConversationList({
 
   const [searchTerm, setSearchTerm] = useState("");
   const [mainSearch, setMainSearch] = useState("");
+  const [backPressed, setBackPressed] = useState(false);
 
   const tokens = useMemo(() => buildTokens(dark), [dark]);
 
@@ -519,10 +583,10 @@ export function ConversationList({
   const nothingFound = isSearching && groupsEmpty && convsEmpty;
 
   // ════════════════════════════════════════════════════════════════════
-  // LAYOUT TOKENS
+  // LAYOUT
   // ════════════════════════════════════════════════════════════════════
   const headerPadding = isMobile
-    ? "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px"
+    ? `calc(14px + ${SAFE_TOP}) calc(16px + ${SAFE_LEFT}) 14px calc(16px + ${SAFE_RIGHT})`
     : "14px 18px";
 
   const avatarSize = 46;
@@ -545,7 +609,7 @@ export function ConversationList({
         width: "100%",
         background: tokens.bg,
         minHeight: 0,
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        paddingBottom: SAFE_BOTTOM,
       }}
     >
       {ConvListKeyframes}
@@ -561,6 +625,8 @@ export function ConversationList({
           gap: 8,
           background: tokens.surface,
           flexShrink: 0,
+          zIndex: 10,
+          position: "relative",
         }}
       >
         <div
@@ -577,8 +643,11 @@ export function ConversationList({
             <button
               type="button"
               onClick={handleToggleNewChat}
+              onTouchStart={() => setBackPressed(true)}
+              onTouchEnd={() => setBackPressed(false)}
+              onTouchCancel={() => setBackPressed(false)}
               style={{
-                background: "none",
+                background: backPressed ? tokens.ghostActive : "none",
                 border: "none",
                 cursor: "pointer",
                 color: tokens.text,
@@ -591,6 +660,10 @@ export function ConversationList({
                 marginLeft: -8,
                 borderRadius: 12,
                 flexShrink: 0,
+                transition: "background 0.12s ease, transform 0.1s ease",
+                transform: backPressed ? "scale(0.92)" : "scale(1)",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
               }}
               aria-label="Retour"
               title="Retour"
@@ -667,7 +740,19 @@ export function ConversationList({
       {/* ═══════════ CONTENU ═══════════ */}
       {showNewChat ? (
         /* ══════════ VUE : NOUVELLE CONVERSATION ══════════ */
-        <div style={{ flex: 1, overflowY: "auto", padding: 8, minHeight: 0 }}>
+        <div
+          className="conv-scroll"
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: isMobile
+              ? `8px calc(8px + ${SAFE_LEFT}) 8px calc(8px + ${SAFE_RIGHT})`
+              : 8,
+            minHeight: 0,
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
           {/* Recherche */}
           <div
             style={{
@@ -676,7 +761,7 @@ export function ConversationList({
               background: tokens.surface,
               border: `1px solid ${tokens.border}`,
               borderRadius: 10,
-              padding: isMobile ? "12px 14px" : "9px 12px",
+              padding: isMobile ? "10px 12px" : "9px 12px",
               marginBottom: 8,
               gap: 8,
             }}
@@ -688,14 +773,21 @@ export function ConversationList({
                 outline: "none",
                 background: "transparent",
                 color: tokens.text,
-                fontSize: isMobile ? 16 : 14,
+                fontSize: isMobile ? 16 : 14, // 16px évite zoom iOS
                 width: "100%",
-                padding: 0,
+                padding: isMobile ? "4px 0" : 0,
+                fontFamily: "inherit",
+                WebkitAppearance: "none",
               }}
               placeholder="Rechercher un utilisateur…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               aria-label="Rechercher un utilisateur"
+              inputMode="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
             />
             {searchTerm && (
               <button
@@ -707,8 +799,14 @@ export function ConversationList({
                   cursor: "pointer",
                   color: tokens.textMuted,
                   display: "flex",
-                  padding: 4,
-                  marginRight: -4,
+                  padding: 8,
+                  marginRight: -8,
+                  minWidth: 40,
+                  minHeight: 40,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
                 }}
                 aria-label="Effacer la recherche"
               >
@@ -770,7 +868,9 @@ export function ConversationList({
           {(conversations.length > 0 || availableGroups.length > 0) && (
             <div
               style={{
-                padding: isMobile ? "8px 14px 12px" : "8px 18px 14px",
+                padding: isMobile
+                  ? `8px calc(14px + ${SAFE_LEFT}) 12px calc(14px + ${SAFE_RIGHT})`
+                  : "8px 18px 14px",
                 flexShrink: 0,
               }}
             >
@@ -781,7 +881,7 @@ export function ConversationList({
                   background: tokens.surface,
                   border: `1px solid ${tokens.border}`,
                   borderRadius: 10,
-                  padding: isMobile ? "12px 14px" : "8px 12px",
+                  padding: isMobile ? "10px 12px" : "8px 12px",
                   gap: 8,
                 }}
               >
@@ -794,12 +894,19 @@ export function ConversationList({
                     color: tokens.text,
                     fontSize: isMobile ? 16 : 14,
                     width: "100%",
-                    padding: 0,
+                    padding: isMobile ? "4px 0" : 0,
+                    fontFamily: "inherit",
+                    WebkitAppearance: "none",
                   }}
                   placeholder="Rechercher une conversation…"
                   value={mainSearch}
                   onChange={(e) => setMainSearch(e.target.value)}
                   aria-label="Rechercher une conversation"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
                 />
                 {mainSearch && (
                   <button
@@ -811,8 +918,14 @@ export function ConversationList({
                       cursor: "pointer",
                       color: tokens.textMuted,
                       display: "flex",
-                      padding: 4,
-                      marginRight: -4,
+                      padding: 8,
+                      marginRight: -8,
+                      minWidth: 40,
+                      minHeight: 40,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      WebkitTapHighlightColor: "transparent",
+                      touchAction: "manipulation",
                     }}
                     aria-label="Effacer la recherche"
                   >
@@ -824,7 +937,16 @@ export function ConversationList({
           )}
 
           {/* Liste */}
-          <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+          <div
+            className="conv-scroll"
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              minHeight: 0,
+              overscrollBehavior: "contain",
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
             {isLoading ? (
               <>
                 {[1, 2, 3, 4].map((i) => (
@@ -851,7 +973,13 @@ export function ConversationList({
                       tokens={tokens}
                       isMobile={isMobile}
                     />
-                    <div style={{ padding: "0 8px" }}>
+                    <div
+                      style={{
+                        padding: isMobile
+                          ? `0 calc(8px + ${SAFE_LEFT}) 0 calc(8px + ${SAFE_RIGHT})`
+                          : "0 8px",
+                      }}
+                    >
                       {filteredGroups.map((group) => {
                         const isActive = activeGroupId === group.id;
                         const memberCount = group.memberCount;
@@ -893,7 +1021,13 @@ export function ConversationList({
                       tokens={tokens}
                       isMobile={isMobile}
                     />
-                    <div style={{ padding: "0 8px 8px" }}>
+                    <div
+                      style={{
+                        padding: isMobile
+                          ? `0 calc(8px + ${SAFE_LEFT}) 8px calc(8px + ${SAFE_RIGHT})`
+                          : "0 8px 8px",
+                      }}
+                    >
                       {filteredConversations.map((conv) => {
                         const isActive = selectedUserId === conv.userId;
                         const name = getUserName(conv.userId);
@@ -928,7 +1062,7 @@ export function ConversationList({
                   </div>
                 )}
 
-                {/* ---------- EMPTY STATE GLOBAL (Hero) ---------- */}
+                {/* ---------- EMPTY STATE GLOBAL ---------- */}
                 {convsEmpty && groupsEmpty && !isSearching && (
                   <MessagingHero
                     icon={MessageCircle}

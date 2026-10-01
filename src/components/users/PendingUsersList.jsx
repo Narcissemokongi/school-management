@@ -8,7 +8,7 @@ import { UserCheck, UserX, Loader } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, Modal } from "@/components/ui";
 
-// ✅ KEYFRAMES module-level, préfixés `pu-*`
+// ✅ KEYFRAMES module-level
 const PendingUsersKeyframes = (
   <style>{`
     @keyframes pu-spin {
@@ -22,7 +22,6 @@ const PendingUsersKeyframes = (
   `}</style>
 );
 
-// ✅ Helper d'extraction de message d'erreur sécurisé
 function getErrorMessage(err, fallback = "Une erreur est survenue") {
   if (!err) return fallback;
   if (typeof err === "string") return err;
@@ -41,9 +40,6 @@ export function PendingUsersList({ pendingUsers = [], adminId }) {
   const [showRejectPrompt, setShowRejectPrompt] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  // ────────────────────────────────────────────────────────────
-  // Handlers
-  // ────────────────────────────────────────────────────────────
   const handleApprove = async (userId) => {
     setProcessing(userId);
     try {
@@ -80,7 +76,7 @@ export function PendingUsersList({ pendingUsers = [], adminId }) {
   };
 
   const closeRejectPrompt = () => {
-    if (rejecting) return; // ✅ Pas de fermeture pendant l'action
+    if (rejecting) return;
     setShowRejectPrompt(null);
     setRejectReason("");
   };
@@ -130,9 +126,6 @@ export function PendingUsersList({ pendingUsers = [], adminId }) {
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // Rendu
-  // ────────────────────────────────────────────────────────────
   const isBusy = (id) => processing === id || rejecting === id;
 
   return (
@@ -182,13 +175,12 @@ export function PendingUsersList({ pendingUsers = [], adminId }) {
               </div>
             </div>
 
-            {/* Actions */}
+            {/* ✨ Actions — `fullWidth` au lieu de `style={{ flex }}` */}
             <div
               style={{
                 display: "flex",
                 gap: 8,
                 justifyContent: "flex-end",
-                flexDirection: isMobile ? "row" : "row",
               }}
             >
               <Button
@@ -203,7 +195,7 @@ export function PendingUsersList({ pendingUsers = [], adminId }) {
                 }
                 onClick={() => handleApprove(u._id)}
                 disabled={isBusy(u._id)}
-                style={{ flex: isMobile ? 1 : "none" }}
+                fullWidth={isMobile}
               >
                 {processing === u._id ? "Traitement…" : "Approuver"}
               </Button>
@@ -213,7 +205,7 @@ export function PendingUsersList({ pendingUsers = [], adminId }) {
                 icon={<UserX size={14} />}
                 onClick={() => openRejectPrompt(u._id)}
                 disabled={isBusy(u._id)}
-                style={{ flex: isMobile ? 1 : "none" }}
+                fullWidth={isMobile}
               >
                 Rejeter
               </Button>
@@ -278,7 +270,7 @@ export function PendingUsersList({ pendingUsers = [], adminId }) {
             borderRadius: t.radius.sm,
             background: t.surface.input,
             color: t.text.primary,
-            fontSize: isMobile ? 16 : 14, // 16px pour éviter le zoom iOS
+            fontSize: isMobile ? 16 : 14,
             fontFamily: t.font.family,
             resize: "vertical",
             outline: "none",

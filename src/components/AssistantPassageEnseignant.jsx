@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+// src/components/AssistantPassageEnseignant.jsx
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -13,9 +14,51 @@ import {
   XCircle, Check, MessageSquare, Info,
 } from "lucide-react";
 
-// ============================================================
-// FORMATAGE DE DATE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const SAFE_BOTTOM = {
+  paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const APEKeyframes = (
+  <style>{`
+    @keyframes ape-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes ape-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes ape-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes ape-slide-up-bar { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .ape-spin { animation: ape-spin 1s linear infinite; }
+    .ape-fade-in { animation: ape-fade-in 0.18s ease-out; }
+    .ape-slide-up { animation: ape-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+    .ape-slide-up-bar { animation: ape-slide-up-bar 0.2s ease-out; }
+    @media (prefers-reduced-motion: reduce) {
+      .ape-spin, .ape-fade-in, .ape-slide-up, .ape-slide-up-bar { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════
 function formatDateFR(dateStr) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
@@ -34,9 +77,46 @@ function daysUntil(dateStr) {
   return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// PRESSABLE — feedback tap + focus ring via state React
+// ════════════════════════════════════════════════════════════════════
+function Pressable({
+  onClick, style, children, disabled = false, type = "button",
+  focusColor, ariaLabel, ariaBusy, ariaPressed, ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      aria-busy={ariaBusy}
+      aria-pressed={ariaPressed}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed && !disabled ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.2s, border-color 0.2s",
+        ...(focused && !disabled && focusColor ? FOCUS_RING(focusColor) : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // BANDEAU DATE LIMITE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function DeadlineBanner({ deadline, dark, isMobile }) {
   if (!deadline || !deadline.hasDeadline) return null;
 
@@ -63,6 +143,8 @@ function DeadlineBanner({ deadline, dark, isMobile }) {
 
   return (
     <div
+      role={passed ? "alert" : "status"}
+      aria-live="polite"
       style={{
         display: "flex",
         alignItems: "center",
@@ -75,8 +157,19 @@ function DeadlineBanner({ deadline, dark, isMobile }) {
         flexWrap: "wrap",
       }}
     >
-      <CalendarClock size={18} color={textColor} style={{ flexShrink: 0 }} />
-      <div style={{ flex: 1, minWidth: 0, fontSize: isMobile ? 12 : 12.5, color: textColor, lineHeight: 1.4 }}>
+      <CalendarClock
+        size={18}
+        color={textColor}
+        aria-hidden="true"
+        style={{ flexShrink: 0 }}
+      />
+      <div
+        style={{
+          flex: 1, minWidth: 0,
+          fontSize: isMobile ? 12 : 12.5,
+          color: textColor, lineHeight: 1.4,
+        }}
+      >
         {passed ? (
           <>
             <strong>Date limite dépassée</strong> depuis{" "}
@@ -87,7 +180,7 @@ function DeadlineBanner({ deadline, dark, isMobile }) {
           <>
             <strong>Date limite :</strong> {formatDateFR(deadline.dateLimite)}
             {jours !== null && (
-              <span style={{ marginLeft: 6, fontWeight: 700 }}>
+              <span style={{ marginLeft: 6, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
                 {jours === 0
                   ? "(aujourd'hui)"
                   : jours === 1
@@ -102,12 +195,13 @@ function DeadlineBanner({ deadline, dark, isMobile }) {
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // CARTE STATISTIQUE COMPACTE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function StatCard({ icon, label, value, color, dark, isMobile }) {
   return (
-    <div
+    <article
+      aria-label={`${label} : ${value}`}
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 12,
@@ -119,9 +213,11 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
         gap: 10,
         minWidth: isMobile ? 130 : "auto",
         flex: isMobile ? "0 0 auto" : 1,
+        minHeight: 44,
       }}
     >
       <div
+        aria-hidden="true"
         style={{
           width: 32, height: 32, borderRadius: 8,
           background: `${color}20`,
@@ -135,17 +231,24 @@ function StatCard({ icon, label, value, color, dark, isMobile }) {
         <div style={{ color: dark ? "#94A3B8" : "#64748B", fontSize: 10.5, fontWeight: 500, whiteSpace: "nowrap" }}>
           {label}
         </div>
-        <div style={{ color: dark ? "#F1F5F9" : "#1E293B", fontSize: 18, fontWeight: 700, lineHeight: 1.1 }}>
+        <div
+          style={{
+            color: dark ? "#F1F5F9" : "#1E293B",
+            fontSize: 18, fontWeight: 700,
+            lineHeight: 1.1,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
           {value}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
-// ============================================================
-// BOTTOM SHEET FILTRES
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// BOTTOM SHEET FILTRES / OPTIONS DE SOUMISSION
+// ════════════════════════════════════════════════════════════════════
 function FiltersSheet({
   open, onClose, dark,
   nouvelleAnneeId, setNouvelleAnneeId, anneesDestination,
@@ -155,54 +258,118 @@ function FiltersSheet({
   onReset,
   nbAvecDecision,
 }) {
+  const [focusedField, setFocusedField] = useState(null);
+
+  // ✅ Escape pour fermer
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open, onClose]);
+
   if (!open) return null;
+
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const accent = dark ? "#818CF8" : "#4F46E5";
 
   const labelStyle = {
     display: "block", fontSize: 12, fontWeight: 600,
-    color: dark ? "#94A3B8" : "#64748B",
+    color: textSecondary,
     marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.3,
   };
 
-  const fieldStyle = {
-    width: "100%", padding: "12px 14px", borderRadius: 10,
-    border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
+  const fieldStyle = (name) => ({
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: `1px solid ${focusedField === name ? accent : dark ? "#334155" : "#E2E8F0"}`,
     background: dark ? "#0F172A" : "#F8FAFC",
-    color: dark ? "#F1F5F9" : "#1E293B",
-    fontSize: 15, outline: "none", boxSizing: "border-box",
-    appearance: "none", WebkitAppearance: "none",
-  };
+    color: textPrimary,
+    fontSize: 16,
+    outline: "none",
+    boxSizing: "border-box",
+    appearance: "none",
+    WebkitAppearance: "none",
+    transition: "border-color 0.2s",
+    minHeight: 44,
+    ...TAP_BASE,
+  });
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1100, animation: "ape-fade-in 0.18s ease-out" }} />
+      {APEKeyframes}
       <div
+        onClick={onClose}
+        className="ape-fade-in"
+        aria-hidden="true"
+        style={{
+          position: "fixed", inset: 0,
+          background: "rgba(0,0,0,0.45)",
+          zIndex: 1100,
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ape-fs-title"
+        className="ape-slide-up"
         style={{
           position: "fixed", left: 0, right: 0, bottom: 0,
           background: dark ? "#1E293B" : "#FFFFFF",
-          borderTopLeftRadius: 20, borderTopRightRadius: 20,
-          padding: "12px 16px 24px",
-          zIndex: 1101, maxHeight: "85vh", overflowY: "auto",
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          padding: "12px 16px 0",
+          ...SAFE_BOTTOM,
+          zIndex: 1101,
+          maxHeight: "85vh",
+          overflowY: "auto",
           boxShadow: "0 -8px 30px rgba(0,0,0,0.25)",
-          animation: "ape-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+          ...SCROLL_AREA,
         }}
       >
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: dark ? "#475569" : "#CBD5E1", margin: "0 auto 16px" }} />
+        <div
+          aria-hidden="true"
+          style={{
+            width: 40, height: 4, borderRadius: 2,
+            background: dark ? "#475569" : "#CBD5E1",
+            margin: "0 auto 16px",
+          }}
+        />
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: dark ? "#F1F5F9" : "#1E293B" }}>
+          <h3 id="ape-fs-title" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: textPrimary }}>
             Options de soumission
           </h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: dark ? "#94A3B8" : "#64748B", padding: 4 }}>
-            <X size={22} />
-          </button>
+          <Pressable
+            onClick={onClose}
+            focusColor={accent}
+            ariaLabel="Fermer"
+            style={{
+              background: "none", border: "none", color: textSecondary,
+              padding: 8, minWidth: 44, minHeight: 44,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <X size={22} aria-hidden="true" />
+          </Pressable>
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>
-            <Calendar size={12} style={{ marginRight: 4, verticalAlign: "middle" }} />
+          <label style={labelStyle} htmlFor="ape-fs-annee">
+            <Calendar size={12} aria-hidden="true" style={{ marginRight: 4, verticalAlign: "middle" }} />
             Année de destination
           </label>
-          <select value={nouvelleAnneeId} onChange={(e) => setNouvelleAnneeId(e.target.value)} style={fieldStyle}>
+          <select
+            id="ape-fs-annee"
+            value={nouvelleAnneeId}
+            onChange={(e) => setNouvelleAnneeId(e.target.value)}
+            onFocus={() => setFocusedField("annee")}
+            onBlur={() => setFocusedField(null)}
+            aria-label="Année de destination"
+            style={fieldStyle("annee")}
+          >
             <option value="">-- Choisir une année --</option>
             {anneesDestination.map((annee) => (
               <option key={annee._id} value={annee._id}>{annee.nom}</option>
@@ -212,51 +379,66 @@ function FiltersSheet({
 
         <div style={{ marginBottom: 20 }}>
           <label style={labelStyle}>Afficher</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
+          <div role="radiogroup" aria-label="Filtrer les élèves" style={{ display: "flex", gap: 8 }}>
+            <Pressable
               onClick={() => setFilter("sans_decision")}
+              focusColor={accent}
+              role="radio"
+              aria-checked={filter === "sans_decision"}
               style={{
-                flex: 1, padding: "10px 12px", borderRadius: 10,
-                border: `1px solid ${filter === "sans_decision" ? (dark ? "#818CF8" : "#4F46E5") : (dark ? "#334155" : "#E2E8F0")}`,
+                flex: 1, padding: "12px 12px", borderRadius: 10,
+                border: `1px solid ${filter === "sans_decision" ? accent : (dark ? "#334155" : "#E2E8F0")}`,
                 background: filter === "sans_decision" ? (dark ? "#312E81" : "#EEF2FF") : "transparent",
                 color: filter === "sans_decision" ? (dark ? "#C7D2FE" : "#4F46E5") : (dark ? "#CBD5E1" : "#475569"),
-                fontWeight: 600, fontSize: 13, cursor: "pointer",
+                fontWeight: 600, fontSize: 13,
               }}
             >
               Sans décision ({nbSansDecision})
-            </button>
-            <button
+            </Pressable>
+            <Pressable
               onClick={() => setFilter("avec_decision")}
+              focusColor={accent}
+              role="radio"
+              aria-checked={filter === "avec_decision"}
               style={{
-                flex: 1, padding: "10px 12px", borderRadius: 10,
-                border: `1px solid ${filter === "avec_decision" ? (dark ? "#818CF8" : "#4F46E5") : (dark ? "#334155" : "#E2E8F0")}`,
+                flex: 1, padding: "12px 12px", borderRadius: 10,
+                border: `1px solid ${filter === "avec_decision" ? accent : (dark ? "#334155" : "#E2E8F0")}`,
                 background: filter === "avec_decision" ? (dark ? "#312E81" : "#EEF2FF") : "transparent",
                 color: filter === "avec_decision" ? (dark ? "#C7D2FE" : "#4F46E5") : (dark ? "#CBD5E1" : "#475569"),
-                fontWeight: 600, fontSize: 13, cursor: "pointer",
+                fontWeight: 600, fontSize: 13,
               }}
             >
               Avec décision ({nbAvecDecision})
-            </button>
+            </Pressable>
           </div>
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>Action groupée</label>
-          <select value={classeParDefaut} onChange={(e) => setClasseParDefaut(e.target.value)} style={{ ...fieldStyle, marginBottom: 10 }}>
+          <label style={labelStyle} htmlFor="ape-fs-classe">Action groupée</label>
+          <select
+            id="ape-fs-classe"
+            value={classeParDefaut}
+            onChange={(e) => setClasseParDefaut(e.target.value)}
+            onFocus={() => setFocusedField("classe")}
+            onBlur={() => setFocusedField(null)}
+            aria-label="Classe de destination"
+            style={{ ...fieldStyle("classe"), marginBottom: 10 }}
+          >
             <option value="">-- Classe de destination --</option>
             {classesTriees.map((c) => (
               <option key={c._id} value={c.nom}>{c.nom}</option>
             ))}
           </select>
-          <button
+          <Pressable
             onClick={onMarquerTousPassants}
             disabled={!classeParDefaut || nbSansDecision === 0}
+            focusColor={accent}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               padding: "12px 14px",
               background: !classeParDefaut || nbSansDecision === 0
                 ? (dark ? "#334155" : "#E2E8F0")
-                : (dark ? "#818CF8" : "#4F46E5"),
+                : accent,
               color: !classeParDefaut || nbSansDecision === 0
                 ? (dark ? "#64748B" : "#94A3B8")
                 : "#FFFFFF",
@@ -265,55 +447,50 @@ function FiltersSheet({
               fontSize: 14, fontWeight: 600, width: "100%",
             }}
           >
-            <ListChecks size={16} />
+            <ListChecks size={16} aria-hidden="true" />
             Marquer {nbSansDecision} passants vers {classeParDefaut || "…"}
-          </button>
+          </Pressable>
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button
+          <Pressable
             onClick={() => { onReset(); onClose(); }}
+            focusColor={accent}
             style={{
               flex: 1, padding: "14px 16px", borderRadius: 12,
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               background: "transparent",
               color: dark ? "#CBD5E1" : "#475569",
-              fontWeight: 600, fontSize: 14, cursor: "pointer",
+              fontWeight: 600, fontSize: 14,
               display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
             }}
           >
-            <RotateCcw size={16} />
+            <RotateCcw size={16} aria-hidden="true" />
             Réinitialiser
-          </button>
-          <button
+          </Pressable>
+          <Pressable
             onClick={onClose}
+            focusColor={accent}
             style={{
               flex: 2, padding: "14px 16px", borderRadius: 12, border: "none",
-              background: dark ? "#818CF8" : "#4F46E5",
-              color: "#FFFFFF", fontWeight: 700, fontSize: 14, cursor: "pointer",
+              background: accent,
+              color: "#FFFFFF", fontWeight: 700, fontSize: 14,
             }}
           >
             Voir les élèves
-          </button>
+          </Pressable>
         </div>
       </div>
     </>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // CARTE ÉLÈVE (à traiter / édition)
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function EleveCardToTreat({
-  insc,
-  decision,
-  classesTriees,
-  updateDecision,
-  colors,
-  dark,
-  isMobile,
-  isEditing,
-  onCancelEdit,
+  insc, decision, classesTriees, updateDecision,
+  colors, dark, isMobile, isEditing, onCancelEdit,
 }) {
   const hasDecision = !!decision?.statut;
   const borderColor = isEditing
@@ -323,7 +500,7 @@ function EleveCardToTreat({
     : colors.warning;
 
   return (
-    <div
+    <article
       style={{
         background: colors.cardBg,
         borderRadius: 12,
@@ -344,51 +521,61 @@ function EleveCardToTreat({
         </div>
 
         {isEditing ? (
-          <span style={{
-            background: dark ? "#312E81" : "#EEF2FF",
-            color: dark ? "#C7D2FE" : "#4F46E5",
-            padding: "3px 10px", borderRadius: 12,
-            fontSize: 10.5, fontWeight: 700,
-            display: "inline-flex", alignItems: "center", gap: 4,
-            flexShrink: 0,
-          }}>
-            <Pencil size={11} /> Édition
+          <span
+            style={{
+              background: dark ? "#312E81" : "#EEF2FF",
+              color: dark ? "#C7D2FE" : "#4F46E5",
+              padding: "3px 10px", borderRadius: 12,
+              fontSize: 10.5, fontWeight: 700,
+              display: "inline-flex", alignItems: "center", gap: 4,
+              flexShrink: 0,
+            }}
+          >
+            <Pencil size={11} aria-hidden="true" /> Édition
           </span>
         ) : hasDecision ? (
-          <span style={{
-            background: dark ? "#334155" : "#F1F5F9",
-            color: colors.textSecondary,
-            padding: "3px 10px", borderRadius: 12,
-            fontSize: 10.5, fontWeight: 700, flexShrink: 0,
-          }}>
+          <span
+            style={{
+              background: dark ? "#334155" : "#F1F5F9",
+              color: colors.textSecondary,
+              padding: "3px 10px", borderRadius: 12,
+              fontSize: 10.5, fontWeight: 700, flexShrink: 0,
+            }}
+          >
             Prêt
           </span>
         ) : (
-          <span style={{
-            color: colors.warning,
-            display: "inline-flex", alignItems: "center", gap: 4,
-            fontSize: 11, fontWeight: 600, flexShrink: 0,
-          }}>
-            <AlertTriangle size={12} /> À décider
+          <span
+            style={{
+              color: colors.warning,
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 11, fontWeight: 600, flexShrink: 0,
+            }}
+          >
+            <AlertTriangle size={12} aria-hidden="true" /> À décider
           </span>
         )}
       </div>
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: decision?.statut === "passant" ? "1fr 1fr" : "1fr",
-        gap: 8,
-      }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: decision?.statut === "passant" ? "1fr 1fr" : "1fr",
+          gap: 8,
+        }}
+      >
         <select
           value={decision?.statut || ""}
           onChange={(e) => updateDecision(insc.eleveId, "statut", e.target.value)}
+          aria-label={`Décision pour ${insc.nom} ${insc.postnom}`}
           style={{
             width: "100%",
-            padding: isMobile ? "10px 12px" : "8px 12px",
+            padding: isMobile ? "12px 12px" : "10px 12px",
             border: `1px solid ${colors.cardBorder}`,
             borderRadius: 10,
-            fontSize: isMobile ? 14 : 13,
+            fontSize: isMobile ? 16 : 13,
             background: colors.selectBg, color: colors.selectText, outline: "none",
+            minHeight: 44, ...TAP_BASE,
           }}
         >
           <option value="">-- Décision --</option>
@@ -403,13 +590,15 @@ function EleveCardToTreat({
           <select
             value={decision.classeDestination || ""}
             onChange={(e) => updateDecision(insc.eleveId, "classeDestination", e.target.value)}
+            aria-label="Classe de destination"
             style={{
               width: "100%",
-              padding: isMobile ? "10px 12px" : "8px 12px",
+              padding: isMobile ? "12px 12px" : "10px 12px",
               border: `1px solid ${colors.cardBorder}`,
               borderRadius: 10,
-              fontSize: isMobile ? 14 : 13,
+              fontSize: isMobile ? 16 : 13,
               background: colors.selectBg, color: colors.selectText, outline: "none",
+              minHeight: 44, ...TAP_BASE,
             }}
           >
             <option value="">-- Classe --</option>
@@ -421,35 +610,32 @@ function EleveCardToTreat({
       </div>
 
       {isEditing && (
-        <button
+        <Pressable
           onClick={onCancelEdit}
+          focusColor={colors.accent}
+          ariaLabel="Annuler la modification"
           style={{
             marginTop: 10, width: "100%",
-            padding: "8px 12px", borderRadius: 10,
+            padding: "10px 12px", borderRadius: 10,
             border: `1px solid ${colors.cardBorder}`,
             background: "transparent", color: colors.textSecondary,
-            fontSize: 12, fontWeight: 600, cursor: "pointer",
+            fontSize: 12, fontWeight: 600,
             display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
           }}
         >
-          <X size={12} />
+          <X size={12} aria-hidden="true" />
           Annuler la modification
-        </button>
+        </Pressable>
       )}
-    </div>
+    </article>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // CARTE ÉLÈVE (soumis) — avec suivi de validation
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function EleveCardSubmitted({
-  prop,
-  colors,
-  dark,
-  isMobile,
-  deadlinePassed,
-  onModifier,
+  prop, colors, dark, isMobile, deadlinePassed, onModifier,
 }) {
   const statutValidation = prop.statutValidation || "soumise";
   const isSoumise = statutValidation === "soumise";
@@ -475,7 +661,7 @@ function EleveCardSubmitted({
         bg: dark ? "#78350F40" : "#FEF3C7",
         color: dark ? "#FBBF24" : "#92400E",
         border: dark ? "#78350F" : "#FDE68A",
-        icon: <Clock size={12} />,
+        icon: <Clock size={12} aria-hidden="true" />,
         label: "En attente de validation",
       }
     : isValidee
@@ -483,7 +669,7 @@ function EleveCardSubmitted({
         bg: dark ? "#064E3B40" : "#D1FAE5",
         color: dark ? "#34D399" : "#065F46",
         border: dark ? "#065F46" : "#A7F3D0",
-        icon: <Check size={12} />,
+        icon: <Check size={12} aria-hidden="true" />,
         label: "Validée par le directeur",
       }
     : isModifiee
@@ -491,14 +677,14 @@ function EleveCardSubmitted({
         bg: dark ? "#4C1D9540" : "#EDE9FE",
         color: dark ? "#C4B5FD" : "#6D28D9",
         border: dark ? "#7C3AED" : "#DDD6FE",
-        icon: <Pencil size={12} />,
+        icon: <Pencil size={12} aria-hidden="true" />,
         label: "Modifiée par le directeur",
       }
     : {
         bg: dark ? "#7F1D1D40" : "#FEE2E2",
         color: dark ? "#F87171" : "#B91C1C",
         border: dark ? "#7F1D1D" : "#FECACA",
-        icon: <XCircle size={12} />,
+        icon: <XCircle size={12} aria-hidden="true" />,
         label: "Rejetée par le directeur",
       };
 
@@ -510,7 +696,7 @@ function EleveCardSubmitted({
   const canModify = isSoumise && !deadlinePassed;
 
   return (
-    <div
+    <article
       style={{
         background: colors.cardBg,
         borderRadius: 12,
@@ -528,23 +714,30 @@ function EleveCardSubmitted({
             {prop.code || "Pas de matricule"}
           </div>
         </div>
-        <span style={{
-          background: propBadgeBg,
-          color: propBadgeColor,
-          padding: "3px 10px",
-          borderRadius: 12,
-          fontSize: 10.5,
-          fontWeight: 700,
-          textTransform: "capitalize",
-          flexShrink: 0,
-        }}>
+        <span
+          style={{
+            background: propBadgeBg,
+            color: propBadgeColor,
+            padding: "3px 10px",
+            borderRadius: 12,
+            fontSize: 10.5,
+            fontWeight: 700,
+            textTransform: "capitalize",
+            flexShrink: 0,
+          }}
+        >
           {prop.statutPropose}
         </span>
       </div>
 
       <div style={{ fontSize: 11.5, color: colors.textSecondary, marginBottom: 8 }}>
         {prop.classeDestinationPropose && (
-          <>Proposé vers <strong style={{ color: colors.textPrimary }}>{prop.classeDestinationPropose}</strong></>
+          <>
+            Proposé vers{" "}
+            <strong style={{ color: colors.textPrimary }}>
+              {prop.classeDestinationPropose}
+            </strong>
+          </>
         )}
       </div>
 
@@ -577,7 +770,13 @@ function EleveCardSubmitted({
             fontSize: 11.5,
           }}
         >
-          <div style={{ color: colors.textSecondary, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>
+          <div
+            style={{
+              color: colors.textSecondary, fontWeight: 600,
+              fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3,
+              marginBottom: 4,
+            }}
+          >
             Décision du directeur
           </div>
           <div style={{ color: colors.textPrimary, fontWeight: 700 }}>
@@ -592,18 +791,26 @@ function EleveCardSubmitted({
           style={{
             marginTop: 8,
             padding: "8px 10px",
-            background: isRejetee ? (dark ? "#7F1D1D20" : "#FEF2F2") : (dark ? "#4C1D9520" : "#F5F3FF"),
+            background: isRejetee
+              ? (dark ? "#7F1D1D20" : "#FEF2F2")
+              : (dark ? "#4C1D9520" : "#F5F3FF"),
             border: `1px solid ${isRejetee ? (dark ? "#7F1D1D" : "#FECACA") : (dark ? "#7C3AED" : "#DDD6FE")}`,
             borderRadius: 8,
             fontSize: 11.5,
           }}
         >
-          <div style={{
-            color: isRejetee ? (dark ? "#F87171" : "#B91C1C") : (dark ? "#C4B5FD" : "#6D28D9"),
-            fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4,
-            display: "flex", alignItems: "center", gap: 4,
-          }}>
-            <MessageSquare size={11} />
+          <div
+            style={{
+              color: isRejetee
+                ? (dark ? "#F87171" : "#B91C1C")
+                : (dark ? "#C4B5FD" : "#6D28D9"),
+              fontWeight: 700, fontSize: 10,
+              textTransform: "uppercase", letterSpacing: 0.3,
+              marginBottom: 4,
+              display: "flex", alignItems: "center", gap: 4,
+            }}
+          >
+            <MessageSquare size={11} aria-hidden="true" />
             Motif du directeur
           </div>
           <div style={{ color: colors.textPrimary, fontStyle: "italic", lineHeight: 1.4 }}>
@@ -613,41 +820,45 @@ function EleveCardSubmitted({
       )}
 
       {canModify && (
-        <button
+        <Pressable
           onClick={onModifier}
+          focusColor={colors.accent}
+          ariaLabel="Modifier ma proposition"
           style={{
             marginTop: 10, width: "100%",
-            padding: "8px 12px", borderRadius: 10,
+            padding: "10px 12px", borderRadius: 10,
             border: `1px solid ${colors.accent}40`,
             background: "transparent", color: colors.accent,
-            fontSize: 12, fontWeight: 600, cursor: "pointer",
+            fontSize: 12, fontWeight: 600,
             display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
           }}
         >
-          <Pencil size={12} />
+          <Pencil size={12} aria-hidden="true" />
           Modifier ma proposition
-        </button>
+        </Pressable>
       )}
 
       {isSoumise && deadlinePassed && (
-        <div style={{
-          marginTop: 10, padding: "6px 10px",
-          background: dark ? "#0F172A" : "#F8FAFC",
-          border: `1px solid ${colors.cardBorder}`,
-          borderRadius: 8, fontSize: 11, color: colors.textSecondary,
-          display: "flex", alignItems: "center", gap: 6, fontStyle: "italic",
-        }}>
-          <Info size={11} />
+        <div
+          style={{
+            marginTop: 10, padding: "6px 10px",
+            background: dark ? "#0F172A" : "#F8FAFC",
+            border: `1px solid ${colors.cardBorder}`,
+            borderRadius: 8, fontSize: 11, color: colors.textSecondary,
+            display: "flex", alignItems: "center", gap: 6, fontStyle: "italic",
+          }}
+        >
+          <Info size={11} aria-hidden="true" />
           Date limite dépassée — modification impossible
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
@@ -661,9 +872,10 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
   const [classeParDefaut, setClasseParDefaut] = useState("");
   const [activeTab, setActiveTab] = useState("a_traiter");
   const [showFilters, setShowFilters] = useState(false);
-  const [editingIds, setEditingIds] = useState(new Set());
+  const [editingIds, setEditingIds] = useState(() => new Set());
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  // ── Queries avec références brutes pour détecter le chargement ──
+  // ── Queries ─────────────────────────────────────────────────
   const inscriptionsRaw = useQuery(
     api.inscriptions.listByAnnee,
     ecoleId && anneeActiveId ? { ecoleId, anneeId: anneeActiveId } : "skip"
@@ -679,37 +891,29 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     ecoleId ? { ecoleId, anneeId: anneeActiveId } : "skip"
   );
 
-  // 🔴 FIX : `userId` requis par la nouvelle signature backend
   const propositionsExistantesRaw = useQuery(
     api.propositionsPassage.listByEnseignantAndAnnee,
     ecoleId && anneeActiveId && user?._id
-      ? {
-          ecoleId,
-          anneeId: anneeActiveId,
-          enseignantId: user._id,
-          userId: user._id, // ← AJOUT
-        }
+      ? { ecoleId, anneeId: anneeActiveId, enseignantId: user._id, userId: user._id }
       : "skip"
   );
 
-  // 🔴 FIX : `userId` requis
   const deadline = useQuery(
     api.propositionsPassage.getDeadlineStatus,
     anneeActiveId && user?._id
-      ? { anneeId: anneeActiveId, userId: user._id } // ← AJOUT
+      ? { anneeId: anneeActiveId, userId: user._id }
       : "skip"
   );
 
-  const inscriptions = inscriptionsRaw ?? [];
-  const annees = anneesRaw ?? [];
-  const classesDisponibles = classesDisponiblesRaw ?? [];
-  const propositionsExistantes = propositionsExistantesRaw ?? [];
+  const inscriptions = useMemo(() => inscriptionsRaw ?? [], [inscriptionsRaw]);
+  const annees = useMemo(() => anneesRaw ?? [], [anneesRaw]);
+  const classesDisponibles = useMemo(() => classesDisponiblesRaw ?? [], [classesDisponiblesRaw]);
+  const propositionsExistantes = useMemo(() => propositionsExistantesRaw ?? [], [propositionsExistantesRaw]);
 
   const soumettrePropositions = useMutation(
     api.propositionsPassage.soumettrePropositions
   );
 
-  // Dérivations
   const classeEnseignant = user.classe;
   const deadlinePassed = deadline?.passed || false;
 
@@ -729,19 +933,16 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     return submittedIds;
   }, [propositionsExistantes, editingIds]);
 
-  const elevesATraiter = useMemo(() => {
-    return inscriptionsDeMaClasse.filter(
-      (insc) => !elevesDejaSoumis.has(insc.eleveId)
-    );
-  }, [inscriptionsDeMaClasse, elevesDejaSoumis]);
+  const elevesATraiter = useMemo(
+    () => inscriptionsDeMaClasse.filter((insc) => !elevesDejaSoumis.has(insc.eleveId)),
+    [inscriptionsDeMaClasse, elevesDejaSoumis]
+  );
 
   const elevesSoumis = useMemo(() => {
     return propositionsExistantes
       .filter((prop) => !editingIds.has(prop.eleveId))
       .map((prop) => {
-        const inscription = inscriptionsDeMaClasse.find(
-          (i) => i.eleveId === prop.eleveId
-        );
+        const inscription = inscriptionsDeMaClasse.find((i) => i.eleveId === prop.eleveId);
         return {
           ...prop,
           nom: inscription?.nom || "—",
@@ -777,9 +978,10 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
   }, [elevesSoumis, searchTerm]);
 
   const classesTriees = useMemo(
-    () => [...classesDisponibles].sort((a, b) =>
-      a.nom.localeCompare(b.nom, undefined, { numeric: true })
-    ),
+    () =>
+      [...classesDisponibles].sort((a, b) =>
+        a.nom.localeCompare(b.nom, undefined, { numeric: true })
+      ),
     [classesDisponibles]
   );
 
@@ -788,45 +990,33 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     [annees, anneeActiveId]
   );
 
-  // Stats
   const nbTotal = inscriptionsDeMaClasse.length;
   const nbSoumis = elevesSoumis.length;
   const nbATraiter = nbTotal - nbSoumis - editingIds.size;
-  const nbSansDecision = elevesATraiter.filter(
-    (insc) => !decisions[insc.eleveId]
-  ).length;
-  const nbAvecDecision = elevesATraiter.filter(
-    (insc) => decisions[insc.eleveId]
-  ).length;
-  const nbPassant = Object.values(decisions).filter(
-    (d) => d.statut === "passant"
-  ).length;
-  const nbRedoublant = Object.values(decisions).filter(
-    (d) => d.statut === "redoublant"
-  ).length;
+  const nbSansDecision = elevesATraiter.filter((insc) => !decisions[insc.eleveId]).length;
+  const nbAvecDecision = elevesATraiter.filter((insc) => decisions[insc.eleveId]).length;
+  const nbPassant = Object.values(decisions).filter((d) => d.statut === "passant").length;
+  const nbRedoublant = Object.values(decisions).filter((d) => d.statut === "redoublant").length;
 
-  const elevesASoumettre = elevesATraiter.filter(
-    (insc) => decisions[insc.eleveId]
-  );
+  const elevesASoumettre = elevesATraiter.filter((insc) => decisions[insc.eleveId]);
   const nbASoumettre = elevesASoumettre.length;
 
-  // 🔴 FIX : basé sur les références brutes (les ?? [] masquent undefined)
   const isLoading =
     (ecoleId && anneesRaw === undefined) ||
     (ecoleId && anneeActiveId && inscriptionsRaw === undefined) ||
     (ecoleId && anneeActiveId && classesDisponiblesRaw === undefined) ||
     (ecoleId && anneeActiveId && propositionsExistantesRaw === undefined);
 
-  // Handlers
-  const updateDecision = (eleveId, field, value) => {
+  // ── Handlers ────────────────────────────────────────────────
+  const updateDecision = useCallback((eleveId, field, value) => {
     if (elevesDejaSoumis.has(eleveId)) return;
     setDecisions((prev) => ({
       ...prev,
       [eleveId]: { ...prev[eleveId], [field]: value },
     }));
-  };
+  }, [elevesDejaSoumis]);
 
-  const marquerTousPassants = () => {
+  const marquerTousPassants = useCallback(() => {
     if (!classeParDefaut) {
       toast.error("Veuillez d'abord choisir la classe de destination.");
       return;
@@ -843,9 +1033,9 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     setDecisions(newDecisions);
     toast.success(`Élèves non soumis marqués passants vers ${classeParDefaut}.`);
     setShowFilters(false);
-  };
+  }, [classeParDefaut, decisions, elevesATraiter]);
 
-  const handleSoumettre = async () => {
+  const handleSoumettre = useCallback(async () => {
     if (deadlinePassed) {
       toast.error("La date limite de soumission est dépassée.");
       return;
@@ -895,9 +1085,9 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [deadlinePassed, nouvelleAnneeId, elevesASoumettre, decisions, ecoleId, anneeActiveId, user._id, soumettrePropositions, confirm]);
 
-  const handleModifierSoumission = async (prop) => {
+  const handleModifierSoumission = useCallback(async (prop) => {
     const ok = await confirm(
       "Modifier la proposition",
       `Rouvrir la proposition pour ${prop.nom} ${prop.postnom} ? Vous pourrez modifier la décision et la resoumettre.`
@@ -914,9 +1104,9 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     }));
     setActiveTab("a_traiter");
     toast.success(`${prop.nom} ajouté à la liste à traiter.`);
-  };
+  }, [confirm]);
 
-  const handleCancelEdit = (eleveId) => {
+  const handleCancelEdit = useCallback((eleveId) => {
     setEditingIds((prev) => {
       const next = new Set(prev);
       next.delete(eleveId);
@@ -927,15 +1117,14 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
       delete next[eleveId];
       return next;
     });
-  };
+  }, []);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setSearchTerm("");
     setFilter("sans_decision");
-  };
+  }, []);
 
-  // Couleurs
-  const colors = {
+  const colors = useMemo(() => ({
     textPrimary: dark ? "#F1F5F9" : "#1E293B",
     textSecondary: dark ? "#94A3B8" : "#64748B",
     cardBg: dark ? "#1E293B" : "#FFFFFF",
@@ -952,31 +1141,55 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
     badgeRedoublantText: dark ? "#FBBF24" : "#92400E",
     badgeSoumis: dark ? "#312E81" : "#EEF2FF",
     badgeSoumisText: dark ? "#A5B4FC" : "#4F46E5",
-  };
+  }), [dark]);
 
+  // ── Rendu : no classe ──────────────────────────────────────
   if (!classeEnseignant) {
     return (
-      <div style={{
-        maxWidth: 1000, margin: "0 auto",
-        padding: isMobile ? "40px 16px" : "60px 24px",
-        textAlign: "center", color: colors.textSecondary,
-      }}>
-        <Users size={48} style={{ marginBottom: 12, opacity: 0.5 }} />
-        <p style={{ margin: 0, fontSize: 14 }}>
-          Aucune classe ne vous est assignée.
-        </p>
-      </div>
+      <>
+        {APEKeyframes}
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            maxWidth: 1000, margin: "0 auto",
+            padding: isMobile ? "40px 16px" : "60px 24px",
+            textAlign: "center", color: colors.textSecondary,
+          }}
+        >
+          <Users size={48} aria-hidden="true" style={{ marginBottom: 12, opacity: 0.5 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>
+            Aucune classe ne vous est assignée.
+          </p>
+        </div>
+      </>
     );
   }
 
+  // ── Rendu : loading ────────────────────────────────────────
   if (isLoading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
-        <Loader size={32} className="ape-spin" style={{ color: colors.accent }} />
-      </div>
+      <>
+        {APEKeyframes}
+        <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+          style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}
+        >
+          <Loader
+            size={32}
+            className="ape-spin"
+            style={{ color: colors.accent }}
+            aria-hidden="true"
+          />
+          <span style={{ position: "absolute", left: -9999 }}>Chargement des données</span>
+        </div>
+      </>
     );
   }
 
+  // ── Rendu principal ────────────────────────────────────────
   return (
     <div
       style={{
@@ -985,13 +1198,7 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
         width: "100%", boxSizing: "border-box",
       }}
     >
-      <style>{`
-        @keyframes ape-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .ape-spin { animation: ape-spin 1s linear infinite; }
-        @keyframes ape-slide-up-bar { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        @keyframes ape-fade-in { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes ape-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-      `}</style>
+      {APEKeyframes}
 
       {/* En-tête */}
       <div style={{ marginBottom: isMobile ? 12 : 16 }}>
@@ -1016,8 +1223,8 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
           marginBottom: isMobile ? 12 : 18,
           overflowX: isMobile ? "auto" : "visible",
           paddingBottom: isMobile ? 4 : 0,
-          WebkitOverflowScrolling: "touch",
           scrollbarWidth: "none",
+          ...SCROLL_AREA,
         }}
       >
         <StatCard icon={<Users size={16} />} label="Total" value={nbTotal} color="#4F46E5" dark={dark} isMobile={isMobile} />
@@ -1036,115 +1243,174 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
           borderBottom: `2px solid ${colors.cardBorder}`,
           marginBottom: isMobile ? 12 : 18,
           overflowX: "auto", whiteSpace: "nowrap", scrollbarWidth: "none",
+          ...SCROLL_AREA,
         }}
       >
-        <button
+        <Pressable
           onClick={() => { setActiveTab("a_traiter"); setSearchTerm(""); }}
           role="tab"
           aria-selected={activeTab === "a_traiter"}
+          focusColor={colors.accent}
           style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: isMobile ? "12px 14px" : "12px 18px",
-            minHeight: isMobile ? 44 : 42,
             border: "none", background: "transparent",
             color: activeTab === "a_traiter" ? colors.accent : colors.textSecondary,
             fontWeight: activeTab === "a_traiter" ? 700 : 500,
             borderBottom: activeTab === "a_traiter" ? `3px solid ${colors.accent}` : "3px solid transparent",
-            cursor: "pointer", fontSize: isMobile ? 14 : 15,
+            fontSize: isMobile ? 14 : 15,
             flexShrink: 0, marginBottom: -2,
           }}
         >
           À traiter
-          <span style={{
-            background: activeTab === "a_traiter" ? (dark ? "#312E81" : "#EEF2FF") : (dark ? "#334155" : "#F1F5F9"),
-            color: activeTab === "a_traiter" ? (dark ? "#C7D2FE" : "#4F46E5") : colors.textSecondary,
-            padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 700,
-          }}>
+          <span
+            style={{
+              background: activeTab === "a_traiter" ? (dark ? "#312E81" : "#EEF2FF") : (dark ? "#334155" : "#F1F5F9"),
+              color: activeTab === "a_traiter" ? (dark ? "#C7D2FE" : "#4F46E5") : colors.textSecondary,
+              padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 700,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {nbATraiter}
           </span>
-        </button>
-        <button
+        </Pressable>
+        <Pressable
           onClick={() => { setActiveTab("soumis"); setSearchTerm(""); }}
           role="tab"
           aria-selected={activeTab === "soumis"}
+          focusColor={colors.accent}
           style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: isMobile ? "12px 14px" : "12px 18px",
-            minHeight: isMobile ? 44 : 42,
             border: "none", background: "transparent",
             color: activeTab === "soumis" ? colors.accent : colors.textSecondary,
             fontWeight: activeTab === "soumis" ? 700 : 500,
             borderBottom: activeTab === "soumis" ? `3px solid ${colors.accent}` : "3px solid transparent",
-            cursor: "pointer", fontSize: isMobile ? 14 : 15,
+            fontSize: isMobile ? 14 : 15,
             flexShrink: 0, marginBottom: -2,
           }}
         >
           Soumis
-          <span style={{
-            background: activeTab === "soumis" ? (dark ? "#312E81" : "#EEF2FF") : (dark ? "#334155" : "#F1F5F9"),
-            color: activeTab === "soumis" ? (dark ? "#C7D2FE" : "#4F46E5") : colors.textSecondary,
-            padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 700,
-          }}>
+          <span
+            style={{
+              background: activeTab === "soumis" ? (dark ? "#312E81" : "#EEF2FF") : (dark ? "#334155" : "#F1F5F9"),
+              color: activeTab === "soumis" ? (dark ? "#C7D2FE" : "#4F46E5") : colors.textSecondary,
+              padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 700,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {nbSoumis}
           </span>
-        </button>
+        </Pressable>
       </div>
 
       {/* Barre outils */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "stretch" }}>
         <div style={{ position: "relative", flex: 1 }}>
-          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: colors.textSecondary }} />
+          <Search
+            size={16}
+            aria-hidden="true"
+            style={{
+              position: "absolute", left: 12, top: "50%",
+              transform: "translateY(-50%)",
+              color: colors.textSecondary,
+              pointerEvents: "none",
+            }}
+          />
           <input
+            type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoCorrect="off"
+            spellCheck="false"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             placeholder="Rechercher un élève…"
+            aria-label="Rechercher un élève"
             style={{
-              width: "100%", padding: "12px 12px 12px 38px", borderRadius: 12,
-              border: `1px solid ${colors.cardBorder}`,
+              width: "100%", padding: "12px 12px 12px 38px",
+              borderRadius: 12,
+              border: `1px solid ${searchFocused ? colors.accent : colors.cardBorder}`,
               background: colors.cardBg, color: colors.textPrimary,
               fontSize: 16, outline: "none", boxSizing: "border-box",
+              minHeight: 44, ...TAP_BASE,
+              transition: "border-color 0.2s",
             }}
           />
           {searchTerm && (
-            <button onClick={() => setSearchTerm("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: colors.textSecondary, display: "flex" }}>
-              <X size={16} />
-            </button>
+            <Pressable
+              onClick={() => setSearchTerm("")}
+              focusColor={colors.accent}
+              ariaLabel="Effacer la recherche"
+              style={{
+                position: "absolute", right: 4, top: "50%",
+                transform: "translateY(-50%)",
+                background: "none", border: "none",
+                color: colors.textSecondary,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                minWidth: 44, minHeight: 44,
+              }}
+            >
+              <X size={16} aria-hidden="true" />
+            </Pressable>
           )}
         </div>
 
         {activeTab === "a_traiter" && (
-          <button
+          <Pressable
             onClick={() => setShowFilters(true)}
+            focusColor={colors.accent}
+            ariaLabel="Ouvrir les options de soumission"
             style={{
               position: "relative", padding: "0 14px", borderRadius: 12,
               border: `1px solid ${nouvelleAnneeId ? colors.accent : colors.cardBorder}`,
               background: nouvelleAnneeId ? (dark ? "#312E81" : "#EEF2FF") : colors.cardBg,
               color: nouvelleAnneeId ? (dark ? "#C7D2FE" : "#4F46E5") : colors.textPrimary,
-              cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+              display: "flex", alignItems: "center", gap: 6,
               fontWeight: 600, fontSize: 13,
+              minWidth: 44,
             }}
           >
-            <SlidersHorizontal size={16} />
+            <SlidersHorizontal size={16} aria-hidden="true" />
             {nouvelleAnneeId && (
-              <span style={{ width: 8, height: 8, borderRadius: 4, background: colors.accent }} />
+              <span
+                aria-hidden="true"
+                style={{ width: 8, height: 8, borderRadius: 4, background: colors.accent }}
+              />
             )}
-          </button>
+          </Pressable>
         )}
       </div>
 
       {/* Puce année sélectionnée */}
       {activeTab === "a_traiter" && nouvelleAnneeId && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            padding: "4px 10px",
-            background: dark ? "#312E81" : "#EEF2FF",
-            color: dark ? "#C7D2FE" : "#4F46E5",
-            borderRadius: 20, fontSize: 11, fontWeight: 600,
-          }}>
-            <Calendar size={11} />
+          <span
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              padding: "4px 10px",
+              background: dark ? "#312E81" : "#EEF2FF",
+              color: dark ? "#C7D2FE" : "#4F46E5",
+              borderRadius: 20, fontSize: 11, fontWeight: 600,
+            }}
+          >
+            <Calendar size={11} aria-hidden="true" />
             {annees.find((a) => a._id === nouvelleAnneeId)?.nom || "Année"}
-            <X size={12} style={{ cursor: "pointer" }} onClick={() => setNouvelleAnneeId("")} />
+            <button
+              onClick={() => setNouvelleAnneeId("")}
+              aria-label="Retirer l'année sélectionnée"
+              style={{
+                background: "none", border: "none",
+                color: "inherit", cursor: "pointer",
+                padding: 4, minWidth: 24, minHeight: 24,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                touchAction: "manipulation",
+              }}
+            >
+              <X size={12} aria-hidden="true" />
+            </button>
           </span>
         </div>
       )}
@@ -1152,29 +1418,41 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
       {/* Liste */}
       {activeTab === "a_traiter" ? (
         filteredATraiter.length === 0 ? (
-          <div style={{ textAlign: "center", padding: isMobile ? 32 : 60, color: colors.textSecondary }}>
-            <CheckCircle2 size={isMobile ? 40 : 56} style={{ marginBottom: 12, opacity: 0.5 }} />
+          <div
+            role="status"
+            aria-live="polite"
+            style={{ textAlign: "center", padding: isMobile ? 32 : 60, color: colors.textSecondary }}
+          >
+            <CheckCircle2 size={isMobile ? 40 : 56} aria-hidden="true" style={{ marginBottom: 12, opacity: 0.5 }} />
             <p style={{ margin: 0, fontSize: isMobile ? 13 : 15 }}>
               {nbATraiter === 0
                 ? "Tous les élèves ont été traités et soumis."
                 : "Aucun élève ne correspond aux critères."}
             </p>
             {filter !== "sans_decision" && (
-              <button
+              <Pressable
                 onClick={() => setFilter("sans_decision")}
+                focusColor={colors.accent}
                 style={{
-                  marginTop: 12, padding: "8px 16px", borderRadius: 8,
+                  marginTop: 12, padding: "10px 16px", borderRadius: 8,
                   border: `1px solid ${colors.cardBorder}`,
                   background: "transparent", color: colors.textPrimary,
-                  cursor: "pointer", fontSize: 13, fontWeight: 600,
+                  fontSize: 13, fontWeight: 600,
                 }}
               >
                 Voir les sans-décision
-              </button>
+              </Pressable>
             )}
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))", gap: isMobile ? 8 : 10 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
+              gap: isMobile ? 8 : 10,
+              ...SCROLL_AREA,
+            }}
+          >
             {filteredATraiter.map((insc) => (
               <EleveCardToTreat
                 key={insc._id}
@@ -1193,8 +1471,12 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
         )
       ) : (
         filteredSoumis.length === 0 ? (
-          <div style={{ textAlign: "center", padding: isMobile ? 32 : 60, color: colors.textSecondary }}>
-            <Clock size={isMobile ? 40 : 56} style={{ marginBottom: 12, opacity: 0.5 }} />
+          <div
+            role="status"
+            aria-live="polite"
+            style={{ textAlign: "center", padding: isMobile ? 32 : 60, color: colors.textSecondary }}
+          >
+            <Clock size={isMobile ? 40 : 56} aria-hidden="true" style={{ marginBottom: 12, opacity: 0.5 }} />
             <p style={{ margin: 0, fontSize: isMobile ? 13 : 15 }}>
               {searchTerm
                 ? "Aucun élève soumis ne correspond à la recherche."
@@ -1202,7 +1484,14 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
             </p>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))", gap: isMobile ? 8 : 10 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
+              gap: isMobile ? 8 : 10,
+              ...SCROLL_AREA,
+            }}
+          >
             {filteredSoumis.map((prop) => (
               <EleveCardSubmitted
                 key={prop._id}
@@ -1221,15 +1510,20 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
       {/* Barre flottante soumettre */}
       {activeTab === "a_traiter" && nbASoumettre > 0 && (
         <div
+          className="ape-slide-up-bar"
           style={{
             position: "fixed", bottom: 0, left: 0, right: 0,
             background: colors.cardBg,
             borderTop: `1px solid ${colors.cardBorder}`,
-            padding: isMobile ? "10px 14px calc(10px + env(safe-area-inset-bottom))" : "12px 24px",
-            display: "flex", alignItems: "center", justifyContent: isMobile ? "space-between" : "center",
-            gap: 12, zIndex: 950,
+            padding: isMobile
+              ? "10px 14px calc(10px + env(safe-area-inset-bottom, 0px))"
+              : "12px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isMobile ? "space-between" : "center",
+            gap: 12,
+            zIndex: 950,
             boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
-            animation: "ape-slide-up-bar 0.2s ease-out",
           }}
         >
           {isMobile && (
@@ -1239,15 +1533,29 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
                   ? `Année : ${annees.find((a) => a._id === nouvelleAnneeId)?.nom || "—"}`
                   : "Choisir une année"}
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+              <div
+                style={{
+                  fontSize: 13, fontWeight: 700, color: colors.textPrimary,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 {nbASoumettre} à soumettre
               </div>
             </div>
           )}
 
-          <button
+          <Pressable
             onClick={handleSoumettre}
             disabled={submitting || !nouvelleAnneeId || deadlinePassed}
+            focusColor={colors.accent}
+            ariaBusy={submitting}
+            ariaLabel={
+              deadlinePassed
+                ? "Soumission impossible, date limite dépassée"
+                : !nouvelleAnneeId
+                ? "Choisissez une année de destination"
+                : `Soumettre ${nbASoumettre} proposition(s)`
+            }
             style={{
               padding: isMobile ? "10px 16px" : "10px 24px",
               background: submitting || !nouvelleAnneeId || deadlinePassed
@@ -1263,17 +1571,14 @@ export function AssistantPassageEnseignant({ ecoleId, anneeActiveId, user }) {
               gap: 6, fontSize: 13.5,
               minWidth: isMobile ? "auto" : 200,
             }}
-            title={
-              deadlinePassed
-                ? "Date limite dépassée"
-                : !nouvelleAnneeId
-                ? "Choisissez une année de destination"
-                : `Soumettre ${nbASoumettre} proposition(s)`
-            }
           >
-            {submitting ? <Loader size={16} className="ape-spin" /> : <Send size={16} />}
+            {submitting ? (
+              <Loader size={16} className="ape-spin" role="status" aria-label="Envoi en cours" />
+            ) : (
+              <Send size={16} aria-hidden="true" />
+            )}
             Soumettre ({nbASoumettre})
-          </button>
+          </Pressable>
         </div>
       )}
 

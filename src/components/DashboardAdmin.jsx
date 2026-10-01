@@ -8,15 +8,42 @@ import { PunitionsChart } from "./dashboard/PunitionsChart";
 import { GravitePieChart } from "./dashboard/GravitePieChart";
 import { ClasseBarChart } from "./dashboard/ClasseBarChart";
 import { RecentActivity } from "./dashboard/RecentActivity";
-import { TrendingUp, Zap, Landmark } from "lucide-react";
+import { TrendingUp, Zap, Landmark, Loader } from "lucide-react";
 
+// ============================================================
+// KEYFRAMES MODULE-LEVEL
+// ============================================================
+const DashAdminKeyframes = (
+  <style>{`
+    @keyframes da-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .da-spin { animation: da-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .da-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ============================================================
+// HELPER — max O(n) au lieu de sort O(n log n)
+// ============================================================
+function maxBy(arr, key) {
+  let max = undefined;
+  for (const item of arr) {
+    if (!max || (item[key] || 0) > (max[key] || 0)) max = item;
+  }
+  return max;
+}
+
+// ============================================================
+// COMPOSANT
+// ============================================================
 export function DashboardAdmin({ ecoleId, anneeId, anneeActive, user }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
 
   const userId = user?._id;
 
-  // ===== Queries Convex (userId requis + gardes strictes) =====
+  // ===== Queries Convex =====
   const punitionsRaw = useQuery(
     api.punitions.list,
     ecoleId && anneeId && userId
@@ -48,14 +75,21 @@ export function DashboardAdmin({ ecoleId, anneeId, anneeActive, user }) {
     ecoleId && userId ? { ecoleId, userId } : "skip"
   );
 
-  // ✅ Mémoïsation (refs stables)
   const punitions = useMemo(() => punitionsRaw ?? [], [punitionsRaw]);
   const fautes = useMemo(() => fautesRaw ?? [], [fautesRaw]);
   const eleves = useMemo(() => elevesRaw ?? [], [elevesRaw]);
   const classes = useMemo(() => classesRaw ?? [], [classesRaw]);
   const users = useMemo(() => usersRaw ?? [], [usersRaw]);
 
-  // ===== Statistiques globales =====
+  // ===== Loading =====
+  const isLoading =
+    punitionsRaw === undefined ||
+    fautesRaw === undefined ||
+    elevesRaw === undefined ||
+    classesRaw === undefined ||
+    usersRaw === undefined;
+
+  // ===== Stats =====
   const stats = useMemo(
     () => [
       { label: "Élèves", value: eleves.length, color: "#4F46E5" },
@@ -66,22 +100,14 @@ export function DashboardAdmin({ ecoleId, anneeId, anneeActive, user }) {
     [eleves.length, punitions.length, classes.length, users.length]
   );
 
-  // ===== Derniers éléments créés =====
-  const dernierEleve = useMemo(() => {
-    if (eleves.length === 0) return undefined;
-    return [...eleves].sort(
-      (a, b) => (a._creationTime || 0) - (b._creationTime || 0)
-    )[eleves.length - 1];
-  }, [eleves]);
+  // ===== Derniers éléments créés (O(n) via reduce) =====
+  const dernierEleve = useMemo(() => maxBy(eleves, "_creationTime"), [eleves]);
+  const dernierePunition = useMemo(
+    () => maxBy(punitions, "_creationTime"),
+    [punitions]
+  );
 
-  const dernierePunition = useMemo(() => {
-    if (punitions.length === 0) return undefined;
-    return [...punitions].sort(
-      (a, b) => (a._creationTime || 0) - (b._creationTime || 0)
-    )[punitions.length - 1];
-  }, [punitions]);
-
-  // ===== Styles compacts (mémoïsés) =====
+  // ===== Styles =====
   const cardStyle = useMemo(
     () => ({
       background: dark ? "#1E293B" : "#FFFFFF",
@@ -131,101 +157,131 @@ export function DashboardAdmin({ ecoleId, anneeId, anneeActive, user }) {
   // Rendu
   // ============================================================
   return (
-    <div
-      style={{
-        maxWidth: 1280,
-        margin: "0 auto",
-        padding: isMobile ? "10px 8px" : "28px 24px",
-        width: "100%",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* En-tête compact */}
-      <div style={{ marginBottom: isMobile ? 10 : 24 }}>
-        <h2
-          style={{
-            fontSize: isMobile ? 15 : 24,
-            fontWeight: 700,
-            color: dark ? "#F1F5F9" : "#1E293B",
-            margin: 0,
-            lineHeight: 1.2,
-          }}
-        >
-          Tableau de bord
-          {anneeActive ? (
-            <span
-              style={{
-                fontSize: isMobile ? 11 : 16,
-                fontWeight: 500,
-                color: dark ? "#94A3B8" : "#64748B",
-                marginLeft: isMobile ? 4 : 8,
-              }}
-            >
-              · {anneeActive.nom}
+    <>
+      {DashAdminKeyframes}
+      <div
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: isMobile ? "10px 8px" : "28px 24px",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        {/* En-tête */}
+        <div style={{ marginBottom: isMobile ? 10 : 24 }}>
+          <h2
+            style={{
+              fontSize: isMobile ? 15 : 24,
+              fontWeight: 700,
+              color: dark ? "#F1F5F9" : "#1E293B",
+              margin: 0,
+              lineHeight: 1.2,
+            }}
+          >
+            Tableau de bord
+            {anneeActive ? (
+              <span
+                style={{
+                  fontSize: isMobile ? 11 : 16,
+                  fontWeight: 500,
+                  color: dark ? "#94A3B8" : "#64748B",
+                  marginLeft: isMobile ? 4 : 8,
+                }}
+              >
+                · {anneeActive.nom}
+              </span>
+            ) : null}
+          </h2>
+          <p
+            style={{
+              color: dark ? "#94A3B8" : "#64748B",
+              marginTop: isMobile ? 2 : 4,
+              marginBottom: 0,
+              fontSize: isMobile ? 10.5 : 13,
+            }}
+          >
+            Vue d'ensemble de votre établissement
+          </p>
+        </div>
+
+        {/* ✅ Loader (avant : rendu immédiat avec 0) */}
+        {isLoading ? (
+          <div
+            role="status"
+            aria-busy="true"
+            aria-live="polite"
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              minHeight: 300,
+            }}
+          >
+            <Loader
+              size={32}
+              className="da-spin"
+              style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+              aria-hidden="true"
+            />
+            <span style={{ position: "absolute", left: -9999 }}>
+              Chargement du tableau de bord
             </span>
-          ) : null}
-        </h2>
-        <p
-          style={{
-            color: dark ? "#94A3B8" : "#64748B",
-            marginTop: isMobile ? 2 : 4,
-            marginBottom: 0,
-            fontSize: isMobile ? 10.5 : 13,
-          }}
-        >
-          Vue d'ensemble de votre établissement
-        </p>
+          </div>
+        ) : (
+          <>
+            {/* Cartes statistiques */}
+            <StatsCards stats={stats} isMobile={isMobile} />
+
+            {/* Graphiques principaux */}
+            <div style={gridStyle}>
+              <div style={cardStyle}>
+                <h3 style={headingStyle}>
+                  <TrendingUp size={isMobile ? 14 : 16} aria-hidden="true" />
+                  <span>Punitions par mois</span>
+                </h3>
+                <PunitionsChart punitions={punitions} isMobile={isMobile} />
+              </div>
+
+              <div style={cardStyle}>
+                <h3 style={headingStyle}>
+                  <Zap size={isMobile ? 14 : 16} aria-hidden="true" />
+                  <span>Répartition par gravité</span>
+                </h3>
+                <GravitePieChart
+                  punitions={punitions}
+                  fautes={fautes}
+                  isMobile={isMobile}
+                />
+              </div>
+            </div>
+
+            {/* Graphique secondaire */}
+            <div style={gridStyle}>
+              <div style={cardStyle}>
+                <h3 style={headingStyle}>
+                  <Landmark size={isMobile ? 14 : 16} aria-hidden="true" />
+                  <span>Punitions par classe</span>
+                </h3>
+                <ClasseBarChart
+                  punitions={punitions}
+                  eleves={eleves}
+                  isMobile={isMobile}
+                />
+              </div>
+            </div>
+
+            {/* Activité récente */}
+            <RecentActivity
+              dernierEleve={dernierEleve}
+              dernierePunition={dernierePunition}
+              fautes={fautes}
+              eleves={eleves}
+              isMobile={isMobile}
+            />
+          </>
+        )}
       </div>
-
-      {/* Cartes statistiques */}
-      <StatsCards stats={stats} isMobile={isMobile} />
-
-      {/* Graphiques principaux */}
-      <div style={gridStyle}>
-        <div style={cardStyle}>
-          <h3 style={headingStyle}>
-            <TrendingUp size={isMobile ? 14 : 16} />
-            <span>Punitions par mois</span>
-          </h3>
-          <PunitionsChart punitions={punitions} isMobile={isMobile} />
-        </div>
-
-        <div style={cardStyle}>
-          <h3 style={headingStyle}>
-            <Zap size={isMobile ? 14 : 16} />
-            <span>Répartition par gravité</span>
-          </h3>
-          <GravitePieChart
-            punitions={punitions}
-            fautes={fautes}
-            isMobile={isMobile}
-          />
-        </div>
-      </div>
-
-      {/* Graphique secondaire */}
-      <div style={gridStyle}>
-        <div style={cardStyle}>
-          <h3 style={headingStyle}>
-            <Landmark size={isMobile ? 14 : 16} />
-            <span>Punitions par classe</span>
-          </h3>
-          <ClasseBarChart
-            punitions={punitions}
-            eleves={eleves}
-            isMobile={isMobile}
-          />
-        </div>
-      </div>
-
-      {/* Activité récente */}
-      <RecentActivity
-        dernierEleve={dernierEleve}
-        dernierePunition={dernierePunition}
-        fautes={fautes}
-        eleves={eleves}
-        isMobile={isMobile}
-      />
-    </div>
+    </>
   );
 }

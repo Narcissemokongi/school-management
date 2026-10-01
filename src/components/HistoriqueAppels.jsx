@@ -11,6 +11,17 @@ import {
 } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ✨ Taille minimale tap target mobile
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level
 // ════════════════════════════════════════════════════════════════════
 const HistKeyframes = (
@@ -57,8 +68,8 @@ function buildTokens(dark) {
     primaryHover: dark ? "#6366F1" : "#4338CA",
     primarySoft: dark ? "#312E81" : "#EEF2FF",
     ghostHover: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+    ghostActive: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
     skeleton: dark ? "#334155" : "#E2E8F0",
-    // Statuts
     success: dark ? "#34D399" : "#10B981",
     danger: dark ? "#F87171" : "#EF4444",
     dangerSoft: dark ? "#7F1D1D" : "#FEE2E2",
@@ -78,7 +89,6 @@ function getInitials(nom) {
   ).toUpperCase();
 }
 
-// Palette déterministe par nom
 const AVATAR_PALETTE = [
   "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E",
   "#F59E0B", "#10B981", "#14B8A6", "#3B82F6",
@@ -133,9 +143,9 @@ function formatDuration(seconds) {
 // SOUS-COMPOSANTS
 // ════════════════════════════════════════════════════════════════════
 
-/** Avatar circulaire avec initiale */
 function Avatar({ nom, size = 44, variant = "primary", tokens }) {
-  const bgColor = variant === "missed" ? tokens.dangerSoft : tokens.primarySoft;
+  const bgColor =
+    variant === "missed" ? tokens.dangerSoft : tokens.primarySoft;
   const fgColor = variant === "missed" ? tokens.danger : tokens.primary;
   return (
     <div
@@ -160,7 +170,6 @@ function Avatar({ nom, size = 44, variant = "primary", tokens }) {
   );
 }
 
-/** Badge type d'appel (Groupe/Vidéo/Audio) */
 function CallTypeBadge({ call, dark }) {
   const config = call.isGroup
     ? {
@@ -206,22 +215,47 @@ function CallTypeBadge({ call, dark }) {
   );
 }
 
-/** Bouton icône carré arrondi (même style que Appels.jsx) */
-function IconButton({ icon, label, onClick, tokens, variant = "ghost", disabled = false }) {
+// ════════════════════════════════════════════════════════════════════
+// ✨ ICON BUTTON — refactoré (44px mobile + feedback tap)
+// ════════════════════════════════════════════════════════════════════
+function IconButton({
+  icon,
+  label,
+  onClick,
+  tokens,
+  variant = "ghost",
+  disabled = false,
+  isMobile,
+}) {
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  // ✨ 44px mobile, 34px desktop
+  const size = isMobile ? MOBILE_TAP : 34;
 
   const variants = {
     ghost: {
-      background: hovered && !disabled ? tokens.ghostHover : "transparent",
+      background: pressed
+        ? tokens.ghostActive
+        : hovered && !isMobile && !disabled
+        ? tokens.ghostHover
+        : "transparent",
       color: tokens.textMuted,
       border: `1px solid ${tokens.border}`,
     },
     primary: {
-      background: hovered && !disabled ? tokens.primaryHover : tokens.primary,
+      background: disabled
+        ? tokens.textMuted
+        : pressed
+        ? tokens.primaryHover
+        : hovered && !isMobile
+        ? tokens.primaryHover
+        : tokens.primary,
       color: "#FFFFFF",
       border: "none",
       boxShadow:
-        hovered && !disabled
+        (pressed || (hovered && !isMobile)) && !disabled
           ? "0 2px 8px rgba(79,70,229,0.25)"
           : "none",
     },
@@ -232,26 +266,33 @@ function IconButton({ icon, label, onClick, tokens, variant = "ghost", disabled 
       type="button"
       onClick={onClick}
       disabled={disabled}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={(e) => {
-        e.currentTarget.style.outline = `2px solid ${tokens.primary}`;
-        e.currentTarget.style.outlineOffset = "2px";
-      }}
-      onBlur={(e) => {
-        e.currentTarget.style.outline = "none";
-      }}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onTouchStart={() => !disabled && setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
       style={{
-        width: 34,
-        height: 34,
+        width: size,
+        height: size,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         borderRadius: 10,
         cursor: disabled ? "not-allowed" : "pointer",
-        transition: "background 0.15s ease, transform 0.1s ease",
+        transition:
+          "background 0.12s ease, transform 0.1s ease, box-shadow 0.15s ease",
         padding: 0,
-        outline: "none",
+        outline: focused ? `2px solid ${tokens.primary}` : "none",
+        outlineOffset: 2,
+        // ✨ Feedback tap
+        transform: pressed && !disabled ? "scale(0.9)" : "scale(1)",
+        // ✨ Neutralise tap delay + flash
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        boxSizing: "border-box",
+        opacity: disabled ? 0.5 : 1,
         ...variants[variant],
       }}
       aria-label={label}
@@ -262,10 +303,11 @@ function IconButton({ icon, label, onClick, tokens, variant = "ghost", disabled 
   );
 }
 
-/** Skeleton pour une ligne d'appel */
 function CallSkeleton({ tokens, isMobile }) {
+  const btnSize = isMobile ? MOBILE_TAP : 34;
   return (
     <div
+      aria-hidden="true"
       style={{
         display: "flex",
         alignItems: "center",
@@ -305,8 +347,8 @@ function CallSkeleton({ tokens, isMobile }) {
         <div
           className="hist-skeleton"
           style={{
-            width: 34,
-            height: 34,
+            width: btnSize,
+            height: btnSize,
             borderRadius: 10,
             color: tokens.skeleton,
           }}
@@ -314,8 +356,8 @@ function CallSkeleton({ tokens, isMobile }) {
         <div
           className="hist-skeleton"
           style={{
-            width: 34,
-            height: 34,
+            width: btnSize,
+            height: btnSize,
             borderRadius: 10,
             color: tokens.skeleton,
           }}
@@ -325,7 +367,9 @@ function CallSkeleton({ tokens, isMobile }) {
   );
 }
 
-/** Ligne d'appel dans l'historique */
+// ════════════════════════════════════════════════════════════════════
+// CALL ROW — ✨ feedback tap + hover mobile-safe
+// ════════════════════════════════════════════════════════════════════
 function CallRow({
   call,
   partnerId,
@@ -344,7 +388,6 @@ function CallRow({
   const isMissed = call.status === "missed";
   const isRejected = call.status === "rejected";
 
-  // Icône de statut (petit badge sur l'avatar)
   const statusIcon = isMissed ? (
     <PhoneMissed size={14} color={tokens.danger} strokeWidth={2.5} />
   ) : isRejected ? (
@@ -391,8 +434,8 @@ function CallRow({
   return (
     <div
       className="hist-fade-in"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
       style={{
         background:
           hovered && !isMobile ? tokens.surfaceHover : tokens.surface,
@@ -404,6 +447,7 @@ function CallRow({
         gap: isMobile ? 12 : 14,
         minWidth: 0,
         transition: "background 0.15s ease",
+        boxSizing: "border-box",
       }}
     >
       {/* Avatar + badge statut */}
@@ -428,6 +472,7 @@ function CallRow({
             alignItems: "center",
             justifyContent: "center",
           }}
+          aria-hidden="true"
         >
           {statusIcon}
         </div>
@@ -462,7 +507,6 @@ function CallRow({
           <CallTypeBadge call={call} dark={dark} />
         </div>
 
-        {/* Métadonnées (statut · date · heure · durée) */}
         <div
           style={{
             display: "flex",
@@ -500,22 +544,29 @@ function CallRow({
 
       {/* Actions */}
       {partnerId && (
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: isMobile ? 4 : 6,
+            flexShrink: 0,
+          }}
+        >
           <IconButton
-            icon={<MessageCircle size={16} />}
+            icon={<MessageCircle size={isMobile ? 18 : 16} />}
             label={`Envoyer un message à ${partnerName}`}
             onClick={() =>
               onNavigateToMessaging && onNavigateToMessaging(partnerId)
             }
             tokens={tokens}
             variant="ghost"
+            isMobile={isMobile}
           />
           <IconButton
             icon={
               callingBack ? (
-                <Loader size={16} className="hist-spin" />
+                <Loader size={isMobile ? 18 : 16} className="hist-spin" />
               ) : (
-                <Phone size={16} />
+                <Phone size={isMobile ? 18 : 16} />
               )
             }
             label={`Rappeler ${partnerName}`}
@@ -523,6 +574,7 @@ function CallRow({
             tokens={tokens}
             variant="primary"
             disabled={callingBack}
+            isMobile={isMobile}
           />
         </div>
       )}
@@ -545,9 +597,6 @@ export function HistoriqueAppels({
   const tokens = useMemo(() => buildTokens(dark), [dark]);
   const userId = user?._id;
 
-  // ════════════════════════════════════════════════════════════════════
-  // QUERIES (args stables)
-  // ════════════════════════════════════════════════════════════════════
   const historyArgs = useMemo(
     () => (userId ? { userId } : "skip"),
     [userId]
@@ -571,9 +620,7 @@ export function HistoriqueAppels({
 
   const createCall = useMutation(api.appels.createCall);
 
-  // ════════════════════════════════════════════════════════════════════
-  // INDEX — O(1) lookups
-  // ════════════════════════════════════════════════════════════════════
+  // Index O(1)
   const usersMap = useMemo(() => {
     const map = new Map();
     utilisateurs.forEach((u) => map.set(u._id, u));
@@ -589,9 +636,6 @@ export function HistoriqueAppels({
     [usersMap]
   );
 
-  // ════════════════════════════════════════════════════════════════════
-  // HANDLERS
-  // ════════════════════════════════════════════════════════════════════
   const handleCallBack = useCallback(
     async (contactId) => {
       if (!userId) {
@@ -619,9 +663,6 @@ export function HistoriqueAppels({
     [userId, ecoleId, anneeId, createCall]
   );
 
-  // ════════════════════════════════════════════════════════════════════
-  // DONNÉES FILTRÉES
-  // ════════════════════════════════════════════════════════════════════
   const finishedCalls = useMemo(() => {
     return history
       .filter((call) =>
@@ -634,19 +675,28 @@ export function HistoriqueAppels({
       );
   }, [history]);
 
-  // ════════════════════════════════════════════════════════════════════
+  // ✨ Container padding avec safe-area
+  const containerPadding = isMobile
+    ? `calc(12px + ${SAFE_TOP}) calc(0px + ${SAFE_LEFT}) calc(0px + ${SAFE_BOTTOM}) calc(0px + ${SAFE_RIGHT})`
+    : "0";
+
+  // ════════════════════════════════════════════════════════════════
   // LOADING
-  // ════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
   if (isLoading) {
     return (
       <>
         {HistKeyframes}
         <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
           style={{
             display: "flex",
             flexDirection: "column",
             gap: isMobile ? 8 : 10,
             marginTop: isMobile ? 12 : 16,
+            padding: containerPadding,
           }}
         >
           {[1, 2, 3, 4].map((i) => (
@@ -657,9 +707,9 @@ export function HistoriqueAppels({
     );
   }
 
-  // ════════════════════════════════════════════════════════════════════
-  // EMPTY STATE
-  // ════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
+  // EMPTY
+  // ════════════════════════════════════════════════════════════════
   if (finishedCalls.length === 0) {
     return (
       <>
@@ -675,6 +725,10 @@ export function HistoriqueAppels({
             flexDirection: "column",
             alignItems: "center",
             gap: 12,
+            paddingTop: isMobile ? `calc(40px + ${SAFE_TOP})` : undefined,
+            paddingBottom: isMobile
+              ? `calc(40px + ${SAFE_BOTTOM})`
+              : undefined,
           }}
         >
           <div
@@ -717,9 +771,9 @@ export function HistoriqueAppels({
     );
   }
 
-  // ════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
   // LISTE
-  // ════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
   return (
     <>
       {HistKeyframes}
@@ -728,6 +782,10 @@ export function HistoriqueAppels({
           display: "grid",
           gap: isMobile ? 8 : 10,
           marginTop: isMobile ? 12 : 16,
+          padding: containerPadding,
+          boxSizing: "border-box",
+          // ✨ Mobile : empêche pull-to-refresh intempestif
+          overscrollBehavior: "contain",
         }}
       >
         {finishedCalls.map((call) => {

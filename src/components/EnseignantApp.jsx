@@ -1,5 +1,6 @@
-import { useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+// src/components/EnseignantApp.jsx
+import { useMemo, useCallback, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -19,32 +20,24 @@ import { useAppStore } from "@/store/appStore";
 import {
   BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, ArrowLeft, BarChart3, GraduationCap,
-  Clock, ChevronRight, ClipboardList, // ✅ AJOUT
+  Clock, ChevronRight, ClipboardList,
 } from "lucide-react";
 import { ConsultationExamens } from "./ConsultationExamens";
 
-// ✅ Onglets valides (source de vérité pour valider le param URL)
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES
+// ════════════════════════════════════════════════════════════════════
 const VALID_TABS = [
-  "dashboard",
-  "passage",
-  "cours",
-  "absences",
-  "emploi",
-  "examens",
-  "messagerie",
-  "appels",
-  "profil",
-  "aide",
-  "mentions",
-  "confidentialite",
+  "dashboard", "passage", "cours", "absences", "emploi", "examens",
+  "messagerie", "appels", "profil", "aide", "mentions", "confidentialite",
 ];
 
-// ✅ Onglets qui nécessitent une année active
 const TABS_REQUIRING_YEAR = ["dashboard", "cours", "absences"];
+const TABS_FULL_HEIGHT = ["messagerie", "appels"];
 
-// ============================================================
-// CARTE STATISTIQUE COMPACTE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// CARTE STATISTIQUE
+// ════════════════════════════════════════════════════════════════════
 function StatCard({ icon, value, label, color, dark, isMobile }) {
   return (
     <div
@@ -58,15 +51,15 @@ function StatCard({ icon, value, label, color, dark, isMobile }) {
         border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        minWidth: isMobile ? 130 : "auto",
-        flex: isMobile ? "0 0 auto" : 1,
+        gap: isMobile ? 8 : 10,
+        minWidth: 0,
+        boxSizing: "border-box",
       }}
     >
       <div
         style={{
-          width: 32,
-          height: 32,
+          width: isMobile ? 28 : 32,
+          height: isMobile ? 28 : 32,
           borderRadius: 8,
           background: `${color}20`,
           display: "flex",
@@ -75,16 +68,19 @@ function StatCard({ icon, value, label, color, dark, isMobile }) {
           flexShrink: 0,
           color,
         }}
+        aria-hidden="true"
       >
         {icon}
       </div>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, overflow: "hidden" }}>
         <div
           style={{
             color: dark ? "#94A3B8" : "#64748B",
-            fontSize: 10.5,
+            fontSize: isMobile ? 10 : 10.5,
             fontWeight: 500,
             whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
           {label}
@@ -92,9 +88,10 @@ function StatCard({ icon, value, label, color, dark, isMobile }) {
         <div
           style={{
             color: dark ? "#F1F5F9" : "#1E293B",
-            fontSize: 18,
+            fontSize: isMobile ? 16 : 18,
             fontWeight: 700,
             lineHeight: 1.1,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {value}
@@ -104,27 +101,38 @@ function StatCard({ icon, value, label, color, dark, isMobile }) {
   );
 }
 
-// ============================================================
-// CARTE COURS COMPACTE
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// CARTE COURS
+// ════════════════════════════════════════════════════════════════════
 function CoursCard({ cours, dark, isMobile, onClick, showStats }) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
   const cardBorder = dark ? "#334155" : "#E2E8F0";
   const accent = dark ? "#818CF8" : "#4F46E5";
 
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <div
       onClick={onClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
+      onKeyDown={handleKeyDown}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={{
         background: cardBg,
         borderRadius: 12,
@@ -132,24 +140,29 @@ function CoursCard({ cours, dark, isMobile, onClick, showStats }) {
         boxShadow: dark
           ? "0 1px 2px rgba(0,0,0,0.25)"
           : "0 1px 2px rgba(0,0,0,0.04)",
-        border: `1px solid ${cardBorder}`,
+        border: `1px solid ${focused ? accent : cardBorder}`,
         display: "flex",
         alignItems: "center",
         gap: isMobile ? 10 : 12,
         cursor: "pointer",
-        transition: "border-color 0.15s, transform 0.1s",
+        transition:
+          "border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease",
+        transform: pressed ? "scale(0.98)" : "scale(1)",
         userSelect: "none",
         WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        outline: focused ? `2px solid ${accent}` : "none",
+        outlineOffset: -2,
         minWidth: 0,
+        boxSizing: "border-box",
+        minHeight: isMobile ? 60 : undefined,
       }}
-      onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.99)")}
-      onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      aria-label={`Ouvrir le cours ${cours.nom}`}
     >
       <div
         style={{
-          width: 36,
-          height: 36,
+          width: isMobile ? 34 : 36,
+          height: isMobile ? 34 : 36,
           borderRadius: "50%",
           background: dark ? "#312E81" : "#EEF2FF",
           display: "flex",
@@ -158,6 +171,7 @@ function CoursCard({ cours, dark, isMobile, onClick, showStats }) {
           color: accent,
           flexShrink: 0,
         }}
+        aria-hidden="true"
       >
         <BookOpen size={18} />
       </div>
@@ -193,14 +207,61 @@ function CoursCard({ cours, dark, isMobile, onClick, showStats }) {
         size={18}
         color={dark ? "#475569" : "#CBD5E1"}
         style={{ flexShrink: 0 }}
+        aria-hidden="true"
       />
     </div>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// BOUTON RETOUR (avec state React, plus de manipulation DOM)
+// ════════════════════════════════════════════════════════════════════
+function BackButton({ onClick, isMobile, cardBg, cardBorder, textPrimary }) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: isMobile ? 44 : 36,
+        height: isMobile ? 44 : 36,
+        minWidth: 44,
+        minHeight: 44,
+        borderRadius: 10,
+        background: cardBg,
+        border: `1px solid ${cardBorder}`,
+        cursor: "pointer",
+        color: textPrimary,
+        flexShrink: 0,
+        padding: 0,
+        transform: pressed ? "scale(0.92)" : "scale(1)",
+        transition: "transform 0.1s ease, border-color 0.15s ease",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        outline: focused ? `2px solid ${textPrimary}` : "none",
+        outlineOffset: 2,
+      }}
+      aria-label="Retour"
+    >
+      <ArrowLeft size={isMobile ? 20 : 18} aria-hidden="true" />
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export function EnseignantApp({
   user,
   ecoleId,
@@ -217,15 +278,16 @@ export function EnseignantApp({
   const userId = user?._id;
   const classe = user?.classe;
 
-  // ========== URL ROUTING ==========
-  // ✅ Source de vérité = URL (React Router), pas Zustand
-  const { tab: tabParam } = useParams();
+  // ✅ FIX : useLocation au lieu de useParams
+  const location = useLocation();
   const navigate = useNavigate();
 
-  const tab = useMemo(
-    () => (VALID_TABS.includes(tabParam) ? tabParam : "dashboard"),
-    [tabParam]
-  );
+  // ✅ FIX : extrait le tab depuis le pathname (ex: /enseignant/dashboard → "dashboard")
+  const tab = useMemo(() => {
+    const parts = location.pathname.split("/").filter(Boolean);
+    const candidate = parts[1];
+    return VALID_TABS.includes(candidate) ? candidate : "dashboard";
+  }, [location.pathname]);
 
   const setTab = useCallback(
     (newTab) => {
@@ -236,14 +298,11 @@ export function EnseignantApp({
     [navigate]
   );
 
-  // ✅ selectedCours reste en Zustand (sub-view, pas navigation)
   const selectedCours = useAppStore((state) => state.enseignantSelectedCours);
   const setSelectedCours = useAppStore(
     (state) => state.setEnseignantSelectedCours
   );
 
-  // ✅ messagingContactId reste en Zustand
-  const messagingContactId = useAppStore((state) => state.messagingContactId);
   const setMessagingContactId = useAppStore(
     (state) => state.setMessagingContactId
   );
@@ -251,18 +310,20 @@ export function EnseignantApp({
   const handleNavigateToMessaging = useCallback(
     (contactId) => {
       setMessagingContactId(contactId);
-      setTab("messagerie");
+      if (contactId) {
+        navigate(`/enseignant/messagerie/chat/${contactId}`);
+      } else {
+        navigate("/enseignant/messagerie");
+      }
     },
-    [setMessagingContactId, setTab]
+    [setMessagingContactId, navigate]
   );
 
-  // ✅ Élèves de ma classe — mémoïsé
   const elevesDeMaClasse = useMemo(
     () => (classe ? (eleves ?? []).filter((e) => e.classe === classe) : []),
     [eleves, classe]
   );
 
-  // ✅ userId ajouté aux queries
   const coursDisponiblesRaw = useQuery(
     api.cours.list,
     classe && ecoleId && userId
@@ -280,7 +341,6 @@ export function EnseignantApp({
   );
   const allNotes = useMemo(() => allNotesRaw ?? [], [allNotesRaw]);
 
-  // ✅ coursStats mémoïsé
   const coursStats = useMemo(() => {
     return coursDisponibles.map((cours) => {
       const notesDuCours = allNotes.filter((n) => n.matiere === cours.nom);
@@ -303,7 +363,6 @@ export function EnseignantApp({
     ecoleId && anneeId && userId ? { ecoleId, anneeId, userId } : "skip"
   );
 
-  // ✅ absencesAujourdhui mémoïsé
   const absencesAujourdhui = useMemo(() => {
     if (!absencesRaw || elevesDeMaClasse.length === 0) return [];
     const ids = new Set(elevesDeMaClasse.map((e) => e._id));
@@ -312,7 +371,6 @@ export function EnseignantApp({
     );
   }, [absencesRaw, elevesDeMaClasse, today]);
 
-  // ✅ Menu mémoïsé
   const menu = useMemo(
     () => [
       { id: "dashboard", label: "Tableau de bord", icon: <BarChart3 size={20} /> },
@@ -331,7 +389,7 @@ export function EnseignantApp({
     []
   );
 
-  // ==================== COULEURS ====================
+  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
@@ -339,8 +397,7 @@ export function EnseignantApp({
   const accent = dark ? "#818CF8" : "#4F46E5";
   const warning = "#F59E0B";
 
-  // ==================== SOUS-ÉCRANS ====================
-
+  // ─── No année ───
   const renderNoAnneeMessage = () => (
     <div
       style={{
@@ -362,7 +419,7 @@ export function EnseignantApp({
           margin: "0 auto 16px",
         }}
       >
-        <Calendar size={30} color={warning} />
+        <Calendar size={30} color={warning} aria-hidden="true" />
       </div>
       <h2
         style={{
@@ -386,7 +443,7 @@ export function EnseignantApp({
     </div>
   );
 
-  // ---------- DASHBOARD ----------
+  // ─── Dashboard ───
   const renderDashboard = () => (
     <div
       style={{
@@ -397,7 +454,6 @@ export function EnseignantApp({
         boxSizing: "border-box",
       }}
     >
-      {/* Header compact */}
       <div style={{ marginBottom: isMobile ? 12 : 20 }}>
         <h2
           style={{
@@ -423,19 +479,14 @@ export function EnseignantApp({
         </p>
       </div>
 
-      {/* Stats */}
       <div
         style={{
-          display: isMobile ? "flex" : "grid",
+          display: "grid",
           gridTemplateColumns: isMobile
-            ? undefined
+            ? "repeat(2, minmax(0, 1fr))"
             : "repeat(auto-fit, minmax(150px, 1fr))",
           gap: isMobile ? 8 : 12,
           marginBottom: isMobile ? 14 : 20,
-          overflowX: isMobile ? "auto" : "visible",
-          paddingBottom: isMobile ? 4 : 0,
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
         }}
       >
         <StatCard
@@ -472,7 +523,6 @@ export function EnseignantApp({
         />
       </div>
 
-      {/* Mes cours */}
       <div
         style={{
           display: "flex",
@@ -500,6 +550,7 @@ export function EnseignantApp({
               borderRadius: 10,
               fontSize: 11,
               fontWeight: 700,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {coursStats.length}
@@ -519,6 +570,7 @@ export function EnseignantApp({
           }}
         >
           <div
+            aria-hidden="true"
             style={{
               width: 48,
               height: 48,
@@ -574,7 +626,7 @@ export function EnseignantApp({
     </div>
   );
 
-  // ---------- SÉLECTION DE COURS ----------
+  // ─── Cours selection ───
   const renderCoursSelection = () => (
     <div
       style={{
@@ -621,6 +673,7 @@ export function EnseignantApp({
           }}
         >
           <div
+            aria-hidden="true"
             style={{
               width: 56,
               height: 56,
@@ -673,7 +726,7 @@ export function EnseignantApp({
     </div>
   );
 
-  // ---------- COURS SÉLECTIONNÉ ----------
+  // ─── Cours selectionné ───
   const renderCoursSelected = () => (
     <div
       style={{
@@ -692,25 +745,13 @@ export function EnseignantApp({
           marginBottom: isMobile ? 12 : 20,
         }}
       >
-        <button
+        <BackButton
           onClick={() => setSelectedCours(null)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: cardBg,
-            border: `1px solid ${cardBorder}`,
-            cursor: "pointer",
-            color: textPrimary,
-            flexShrink: 0,
-          }}
-          aria-label="Retour"
-        >
-          <ArrowLeft size={18} />
-        </button>
+          isMobile={isMobile}
+          cardBg={cardBg}
+          cardBorder={cardBorder}
+          textPrimary={textPrimary}
+        />
         <div style={{ minWidth: 0, flex: 1 }}>
           <h2
             style={{
@@ -753,9 +794,8 @@ export function EnseignantApp({
     </div>
   );
 
-  // ---------- RENDU PRINCIPAL ----------
+  // ─── Rendu principal ───
   const renderContent = () => {
-    // ✅ Utilisation de la constante TABS_REQUIRING_YEAR
     if (!anneeId && TABS_REQUIRING_YEAR.includes(tab)) {
       return renderNoAnneeMessage();
     }
@@ -810,13 +850,7 @@ export function EnseignantApp({
         );
 
       case "messagerie":
-        return (
-          <MessagerieApp
-            user={user}
-            ecoleId={ecoleId}
-            initialSelectedUserId={messagingContactId}
-          />
-        );
+        return <MessagerieApp user={user} ecoleId={ecoleId} />;
 
       case "appels":
         return (
@@ -845,6 +879,8 @@ export function EnseignantApp({
     }
   };
 
+  const needsFullHeight = TABS_FULL_HEIGHT.includes(tab);
+
   return (
     <Layout
       menu={menu}
@@ -855,7 +891,23 @@ export function EnseignantApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {renderContent()}
+      <div
+        style={
+          needsFullHeight
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                height: "100%",
+                width: "100%",
+                overflow: "hidden",
+              }
+            : undefined
+        }
+      >
+        {renderContent()}
+      </div>
     </Layout>
   );
 }

@@ -30,6 +30,21 @@ function readSystemPrefersDark() {
   return mq ? mq.matches : false;
 }
 
+// ✅ FIX #8 — helper subscribe cross-navigateur (Safari < 14 inclus)
+function subscribeMediaQuery(mq, handler) {
+  if (!mq) return () => {};
+  if (typeof mq.addEventListener === "function") {
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }
+  // Fallback Safari < 14
+  if (typeof mq.addListener === "function") {
+    mq.addListener(handler);
+    return () => mq.removeListener(handler);
+  }
+  return () => {};
+}
+
 export function ThemeProvider({ children }) {
   // Initialisation cohérente : un seul calcul pour dark + isSystemTheme
   const [initialState] = useState(() => {
@@ -51,8 +66,8 @@ export function ThemeProvider({ children }) {
     if (!mq) return;
 
     const handleChange = (e) => setDark(e.matches);
-    mq.addEventListener("change", handleChange);
-    return () => mq.removeEventListener("change", handleChange);
+    // ✅ FIX #8 — Safari < 14 supporté
+    return subscribeMediaQuery(mq, handleChange);
   }, [isSystemTheme]);
 
   // Applique le thème au document
@@ -69,11 +84,18 @@ export function ThemeProvider({ children }) {
     const root = document.documentElement;
     root.classList.toggle("dark", dark);
     root.style.colorScheme = dark ? "dark" : "light";
-    document.body.style.backgroundColor = dark ? "#0F172A" : "#F8FAFC";
-    document.body.style.color = dark ? "#F1F5F9" : "#1E293B";
+    // ✅ FIX #9 — utiliser des CSS variables sur :root au lieu de body.style
+    // → permet à `theme-transition` (sur html) de transitionner le body aussi
+    root.style.setProperty("--app-bg", dark ? "#0F172A" : "#F8FAFC");
+    root.style.setProperty("--app-fg", dark ? "#F1F5F9" : "#1E293B");
+    // (optionnel) retirer les styles inline résiduels d'anciennes versions
+    document.body.style.backgroundColor = "";
+    document.body.style.color = "";
 
     // ✅ FIX #7 — transition seulement si reduced-motion non demandé
-    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const prefersReducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
     if (prefersReducedMotion) return;
 
     root.classList.add("theme-transition");
@@ -82,7 +104,7 @@ export function ThemeProvider({ children }) {
     }, 300);
 
     return () => clearTimeout(timeout);
-  }, [dark, isSystemTheme]);   // ✅ ajout de isSystemTheme en dep
+  }, [dark, isSystemTheme]);
 
   // ✅ FIX #5 — toggle marque bien le choix explicite
   const toggle = useCallback(() => {
@@ -111,7 +133,7 @@ export function ThemeProvider({ children }) {
     () => ({
       dark,
       toggle,
-      setDark: setExplicitDark,   // ✅ désormais un choix explicite
+      setDark: setExplicitDark,
       isSystemTheme,
       resetToSystemTheme,
     }),

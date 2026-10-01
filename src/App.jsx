@@ -29,6 +29,9 @@ const STORAGE_KEY = "eduDiscipline_user";
  * ✅ Lit et valide l'utilisateur depuis localStorage.
  * Retourne null si absent/corrompu.
  */
+// ✅ FIX SÉCURITÉ : durée de session maximale (8h)
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+
 function readSavedUser() {
   if (typeof window === "undefined") return null;
   try {
@@ -36,6 +39,11 @@ function readSavedUser() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || !parsed._id) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    // ✅ FIX SÉCURITÉ : vérification de l'expiration de session
+    if (parsed._sessionExpires && Date.now() > parsed._sessionExpires) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
@@ -178,7 +186,11 @@ function AppRoutes() {
     (userData) => {
       if (!userData || !userData._id) return;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
+        // ✅ FIX SÉCURITÉ : ajout d'une expiration de session (8h)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          ...userData,
+          _sessionExpires: Date.now() + SESSION_TTL_MS,
+        }));
       } catch {}
       setUser(userData);
 
@@ -205,8 +217,8 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* ⚠️ ROUTE TEMPORAIRE — Design System Showcase (à retirer après validation) */}
-      <Route path="/ui-showcase" element={<UIShowcase />} />
+      {/* ✅ FIX SÉCURITÉ : route de dev UIShowcase supprimée (exposait le design system publiquement) */}
+      {import.meta.env.DEV && <Route path="/ui-showcase" element={<UIShowcase />} />}
 
       {/* ═══════════ AUTH ═══════════ */}
       <Route

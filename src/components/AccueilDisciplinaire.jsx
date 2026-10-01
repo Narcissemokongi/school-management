@@ -1,7 +1,20 @@
+// src/components/AccueilDisciplinaire.jsx
 import { useMemo } from "react";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { ClipboardList, Calendar, Users, TrendingUp } from "lucide-react";
+import {
+  ClipboardList, Calendar, Users, TrendingUp, Activity,
+} from "lucide-react";
+
+// ============================================================
+// HELPER — date locale YYYY-MM-DD (pas UTC)
+// ============================================================
+function getLocalDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export function AccueilDisciplinaire({
   user,
@@ -25,14 +38,14 @@ export function AccueilDisciplinaire({
       };
     }
 
-    // Une seule boucle pour tout calculer
-    const today = new Date().toISOString().split("T")[0];
+    // ✅ FIX — date locale au lieu d'UTC (ISO tronqué)
+    const today = getLocalDateKey();
     const mine = [];
     const todayList = [];
     const eleveIdsSet = new Set();
 
     for (const p of punitions) {
-      // ⚠️ Comparaison par nom (héritage du stockage `disciplinaire: string`)
+      // ⚠️ DETTE TECHNIQUE #8 — migration `disciplinaire: string` → `disciplinaireId`
       if (p.disciplinaire !== userName) continue;
       mine.push(p);
       if (p.date === today) todayList.push(p);
@@ -72,32 +85,37 @@ export function AccueilDisciplinaire({
     ? "0 1px 3px rgba(0,0,0,0.3)"
     : "0 1px 3px rgba(0,0,0,0.05)";
 
-  const stats = [
-    {
-      label: "Punitions enregistrées",
-      value: myPunitions.length,
-      color: dark ? "#818CF8" : "#4F46E5",
-      icon: <ClipboardList size={iconSize} />,
-    },
-    {
-      label: "Aujourd'hui",
-      value: todayPunitions.length,
-      color: dark ? "#34D399" : "#10B981",
-      icon: <Calendar size={iconSize} />,
-    },
-    {
-      label: "Élèves suivis",
-      value: elevesAvecPunition,
-      color: dark ? "#FBBF24" : "#F59E0B",
-      icon: <TrendingUp size={iconSize} />,
-    },
-    {
-      label: "Élèves dans l'école",
-      value: eleves.length,
-      color: dark ? "#A5B4FC" : "#6366F1",
-      icon: <Users size={iconSize} />,
-    },
-  ];
+  // ✅ Stats mémoïsées + icône TrendingUp non dupliquée
+  const stats = useMemo(
+    () => [
+      {
+        label: "Punitions enregistrées",
+        value: myPunitions.length,
+        color: dark ? "#818CF8" : "#4F46E5",
+        icon: <ClipboardList size={iconSize} aria-hidden="true" />,
+      },
+      {
+        label: "Aujourd'hui",
+        value: todayPunitions.length,
+        color: dark ? "#34D399" : "#10B981",
+        icon: <Calendar size={iconSize} aria-hidden="true" />,
+      },
+      {
+        label: "Élèves suivis",
+        value: elevesAvecPunition,
+        color: dark ? "#FBBF24" : "#F59E0B",
+        // ✅ Changé TrendingUp → Activity (évite doublon avec le titre)
+        icon: <Activity size={iconSize} aria-hidden="true" />,
+      },
+      {
+        label: "Élèves dans l'école",
+        value: eleves.length,
+        color: dark ? "#A5B4FC" : "#6366F1",
+        icon: <Users size={iconSize} aria-hidden="true" />,
+      },
+    ],
+    [myPunitions.length, todayPunitions.length, elevesAvecPunition, eleves.length, iconSize, dark]
+  );
 
   // ============================================================
   // Garde : session invalide
@@ -105,6 +123,9 @@ export function AccueilDisciplinaire({
   if (!user) {
     return (
       <div
+        role="status"
+        aria-busy="true"
+        aria-live="polite"
         style={{
           maxWidth: 1280,
           margin: "0 auto",
@@ -113,6 +134,9 @@ export function AccueilDisciplinaire({
           color: textSecondary,
         }}
       >
+        <span style={{ position: "absolute", left: -9999 }}>
+          Chargement de votre session
+        </span>
         Chargement...
       </div>
     );
@@ -143,8 +167,11 @@ export function AccueilDisciplinaire({
             flexWrap: "wrap",
           }}
         >
-          {/* ✅ Emoji retiré, icône lucide à la place */}
-          <TrendingUp size={isMobile ? 24 : 28} color={accent} />
+          <TrendingUp
+            size={isMobile ? 24 : 28}
+            color={accent}
+            aria-hidden="true"
+          />
           <span>Bienvenue, {user.nom}</span>
         </h2>
         <p
@@ -169,8 +196,9 @@ export function AccueilDisciplinaire({
         }}
       >
         {stats.map((s) => (
-          <div
+          <article
             key={s.label}
+            aria-label={`${s.label} : ${s.value}`}
             style={{
               background: cardBg,
               borderRadius: 16,
@@ -181,9 +209,11 @@ export function AccueilDisciplinaire({
               boxShadow: shadow,
               border: `1px solid ${cardBorder}`,
               transition: "transform 0.15s, background-color 0.3s",
+              minHeight: 44,
             }}
           >
             <div
+              aria-hidden="true"
               style={{
                 width: iconContainerSize,
                 height: iconContainerSize,
@@ -204,15 +234,16 @@ export function AccueilDisciplinaire({
                   fontSize: valueSize,
                   fontWeight: 700,
                   color: textPrimary,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {s.value}
+                {s.value.toLocaleString("fr-FR")}
               </div>
               <div style={{ fontSize: labelSize, color: textSecondary }}>
                 {s.label}
               </div>
             </div>
-          </div>
+          </article>
         ))}
       </div>
     </div>

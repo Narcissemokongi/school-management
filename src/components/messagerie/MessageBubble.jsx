@@ -2,33 +2,36 @@
 import { useMemo, useState } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useStyles } from "@/styles/theme";
-import { Check, CheckCheck, Paperclip } from "lucide-react";
+import { Check, CheckCheck } from "lucide-react";
+import { AttachmentPreview } from "./AttachmentPreview";
+
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
 
 // ════════════════════════════════════════════════════════════════════
 // TOKENS
 // ════════════════════════════════════════════════════════════════════
 function buildTokens(dark) {
   return {
-    // Messages envoyés
     sentBg: dark ? "#6366F1" : "#4F46E5",
     sentText: "#FFFFFF",
     sentTimeColor: "rgba(255,255,255,0.75)",
-
-    // Messages reçus
     receivedBg: dark ? "#1E293B" : "#FFFFFF",
     receivedText: dark ? "#F1F5F9" : "#1E293B",
     receivedBorder: dark ? "#334155" : "#E2E8F0",
     receivedTimeColor: dark ? "#94A3B8" : "#64748B",
-
-    // Nom de l'expéditeur (groupes)
     senderColor: dark ? "#A5B4FC" : "#4F46E5",
     senderBg: dark ? "#312E81" : "#EEF2FF",
-
-    // Pièces jointes
     attachmentMineColor: "#FFFFFF",
     attachmentOtherColor: dark ? "#A5B4FC" : "#4F46E5",
-
-    // Ombres
+    attachmentMineActiveBg: "rgba(255,255,255,0.28)",
+    attachmentMineBg: "rgba(255,255,255,0.15)",
+    attachmentOtherActiveBg: dark ? "#4338CA" : "#C7D2FE",
+    brokenBg: dark ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.08)",
+    brokenColor: dark ? "#FCA5A5" : "#DC2626",
     shadow: dark
       ? "0 1px 2px rgba(0,0,0,0.3)"
       : "0 1px 3px rgba(0,0,0,0.08)",
@@ -61,10 +64,8 @@ function getAvatarColor(name) {
   return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
 }
 
-// ✅ Rayons selon position dans le groupe
 function getBubbleRadius(isMine, isFirst, isLast) {
   if (isFirst && isLast) return "16px";
-
   if (isMine) {
     if (isFirst) return "16px 16px 4px 16px";
     if (isLast) return "16px 4px 16px 16px";
@@ -79,7 +80,6 @@ function getBubbleRadius(isMine, isFirst, isLast) {
 // ════════════════════════════════════════════════════════════════════
 // SOUS-COMPOSANTS
 // ════════════════════════════════════════════════════════════════════
-
 function SenderAvatar({ name, size = 28 }) {
   const bg = getAvatarColor(name);
   return (
@@ -107,51 +107,6 @@ function SenderAvatar({ name, size = 28 }) {
   );
 }
 
-function AttachmentLink({ attachment, isMine, tokens, fontSize }) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <a
-      href={attachment.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        marginTop: 6,
-        marginRight: 6,
-        padding: "4px 8px",
-        borderRadius: 8,
-        color: isMine
-          ? tokens.attachmentMineColor
-          : tokens.attachmentOtherColor,
-        background: isMine ? "rgba(255,255,255,0.15)" : tokens.senderBg,
-        textDecoration: "none",
-        fontSize,
-        fontWeight: 500,
-        transition: "background 0.15s ease",
-        maxWidth: "100%",
-        opacity: hovered ? 0.9 : 1,
-      }}
-      title={`Télécharger ${attachment.nom}`}
-    >
-      <Paperclip size={13} style={{ flexShrink: 0 }} />
-      <span
-        style={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {attachment.nom}
-      </span>
-    </a>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
@@ -170,16 +125,13 @@ export function MessageBubble({
   const isMine = msg.expediteurId === user?._id;
   const isRead = msg.lu ?? msg.read ?? false;
 
-  // ✅ Détection mode groupe (getUserName fourni)
   const isGroupChat = Boolean(getUserName);
 
-  // ✅ Nom de l'expéditeur (uniquement en mode groupe)
   const senderName = useMemo(() => {
     if (isMine || !getUserName) return null;
     return getUserName(msg.expediteurId);
   }, [isMine, getUserName, msg.expediteurId]);
 
-  // ✅ Timestamps
   const { timeString, fullDateString } = useMemo(() => {
     const d = new Date(msg.date);
     if (isNaN(d.getTime())) {
@@ -207,29 +159,33 @@ export function MessageBubble({
     isLastInGroup
   );
 
-  // ✅ Espacement vertical
   const marginBottom = isLastInGroup ? 12 : 2;
   const paddingTop = isFirstInGroup ? 8 : 4;
   const paddingBottom = isLastInGroup ? 6 : 4;
 
-  // ✅ Dimensions responsive
-  const maxWidth = isMobile ? "82%" : "68%";
+  const maxWidth = isMobile ? "85%" : "68%";
   const contentFontSize = isMobile ? 14.5 : 14;
   const senderFontSize = 12;
   const timeFontSize = 10.5;
-  const attachmentFontSize = 12.5;
 
-  // ✅ Affichage du nom : uniquement en mode groupe, en début de groupe
   const showSenderName = senderName && isFirstInGroup;
 
-  // ✅ FIX #1 — Avatar uniquement en mode groupe + reçu + dernier du groupe
   const showSenderAvatar =
     !isMine && isGroupChat && senderName && isLastInGroup;
 
-  // ✅ FIX #1 — Placeholder uniquement en mode groupe + reçu
   const showAvatarPlaceholder = !isMine && isGroupChat && !showSenderAvatar;
 
   const avatarSize = isMobile ? 26 : 28;
+
+  const hasAttachments = msg.piecesJointes?.length > 0;
+  const hasText = Boolean(msg.contenu);
+
+  // ✨ Cas spécial : message avec UNIQUEMENT une image → pas de padding
+  const isImageOnly =
+    hasAttachments &&
+    !hasText &&
+    msg.piecesJointes.length === 1 &&
+    isImageAttachment(msg.piecesJointes[0]);
 
   return (
     <div
@@ -239,9 +195,10 @@ export function MessageBubble({
         alignItems: "flex-end",
         gap: 8,
         marginBottom,
+        paddingRight: isMine && isMobile ? SAFE_RIGHT : 0,
+        paddingLeft: !isMine && isMobile ? SAFE_LEFT : 0,
       }}
     >
-      {/* ✅ FIX #1 — Avatar/placeholder uniquement en mode groupe */}
       {showSenderAvatar ? (
         <SenderAvatar name={senderName} size={avatarSize} />
       ) : showAvatarPlaceholder ? (
@@ -251,23 +208,26 @@ export function MessageBubble({
         />
       ) : null}
 
-      {/* Bulle */}
       <div
         style={{
           maxWidth,
-          padding: `${paddingTop}px 12px ${paddingBottom}px 12px`,
+          padding: isImageOnly
+            ? "4px"
+            : `${paddingTop}px 12px ${paddingBottom}px 12px`,
           borderRadius,
           background: isMine ? tokens.sentBg : tokens.receivedBg,
           color: isMine ? tokens.sentText : tokens.receivedText,
           boxShadow: tokens.shadow,
-          border: isMine ? "none" : `1px solid ${tokens.receivedBorder}`,
+          border: isMine
+            ? "none"
+            : `1px solid ${tokens.receivedBorder}`,
           position: "relative",
           wordBreak: "break-word",
+          overflowWrap: "anywhere",
           minWidth: 60,
         }}
       >
-        {/* Nom expéditeur (groupes uniquement) */}
-        {showSenderName && (
+        {showSenderName && !isImageOnly && (
           <div
             style={{
               fontSize: senderFontSize,
@@ -281,13 +241,13 @@ export function MessageBubble({
           </div>
         )}
 
-        {/* Contenu texte */}
         {msg.contenu && (
           <div
             style={{
               fontSize: contentFontSize,
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
+              overflowWrap: "anywhere",
               lineHeight: 1.4,
             }}
           >
@@ -295,28 +255,27 @@ export function MessageBubble({
           </div>
         )}
 
-        {/* Pièces jointes */}
-        {msg.piecesJointes?.length > 0 && (
+        {hasAttachments && (
           <div
             style={{
               display: "flex",
               flexWrap: "wrap",
-              marginTop: msg.contenu ? 0 : 4,
+              marginTop: hasText ? 0 : isImageOnly ? 0 : 4,
+              marginBottom: isMobile ? -3 : 0,
             }}
           >
             {msg.piecesJointes.map((pj, idx) => (
-              <AttachmentLink
-                key={`${pj.url}-${idx}`}
+              <AttachmentPreview
+                key={pj.storageId || pj.url || `${pj.nom}-${idx}`}
                 attachment={pj}
                 isMine={isMine}
                 tokens={tokens}
-                fontSize={attachmentFontSize}
+                isMobile={isMobile}
               />
             ))}
           </div>
         )}
 
-        {/* Heure + statut de lecture (fin de groupe) */}
         {isLastInGroup && (
           <div
             style={{
@@ -329,18 +288,52 @@ export function MessageBubble({
               color: isMine
                 ? tokens.sentTimeColor
                 : tokens.receivedTimeColor,
+              // ✨ Si c'est une image seule, badge flottant
+              ...(isImageOnly && {
+                position: "absolute",
+                bottom: 8,
+                right: 8,
+                background: "rgba(0,0,0,0.5)",
+                backdropFilter: "blur(4px)",
+                WebkitBackdropFilter: "blur(4px)",
+                padding: "3px 8px",
+                borderRadius: 10,
+                color: "#FFFFFF",
+                marginTop: 0,
+              }),
             }}
           >
             <span title={fullDateString}>{timeString}</span>
             {isMine &&
               (isRead ? (
-                <CheckCheck size={14} aria-label="Lu" style={{ flexShrink: 0 }} />
+                <CheckCheck
+                  size={14}
+                  aria-label="Lu"
+                  style={{ flexShrink: 0 }}
+                />
               ) : (
-                <Check size={14} aria-label="Envoyé" style={{ flexShrink: 0 }} />
+                <Check
+                  size={14}
+                  aria-label="Envoyé"
+                  style={{ flexShrink: 0 }}
+                />
               ))}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// HELPER — détecter image (dupliqué depuis AttachmentPreview pour éviter
+// un import circulaire ; purement local)
+// ════════════════════════════════════════════════════════════════════
+function isImageAttachment(pj) {
+  if (!pj) return false;
+  const t = (pj.type || "").toLowerCase();
+  const n = (pj.nom || "").toLowerCase();
+  return (
+    t.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|bmp)$/.test(n)
   );
 }

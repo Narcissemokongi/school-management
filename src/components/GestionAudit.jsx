@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useId } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
@@ -11,22 +11,41 @@ import {
   FileDown,
 } from "lucide-react";
 
+// ============================================================
+// CONSTANTES MODULE-LEVEL (mobile + a11y)
+// ============================================================
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const SAFE_BOTTOM = {
+  paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+};
+
+const FOCUS_RING = (dark) => ({
+  outline: `2px solid ${dark ? "#818CF8" : "#4F46E5"}`,
+  outlineOffset: 2,
+});
+
 // ── Traduction FR des actions + catégorie couleur ────────────────
 const ACTION_META = {
-  // Validations / créations → vert
   validate_proposition:      { label: "Validation proposition",   color: "green",  icon: CheckCircle2 },
   bulk_validate_propositions:{ label: "Validation groupée",       color: "green",  icon: CheckCircle2 },
   approve_parent_link:       { label: "Approbation demande",      color: "green",  icon: CheckCircle2 },
   link_enfants_to_parent:    { label: "Association parent-enfant",color: "green",  icon: Link2 },
-  // Modifications → bleu
   modify_proposition:        { label: "Modification proposition", color: "blue",   icon: Edit3 },
   rewrite_proposition:       { label: "Réécriture décision",      color: "blue",   icon: Edit3 },
-  // Rejets / suppressions → rouge
   reject_proposition:        { label: "Rejet proposition",        color: "red",    icon: XCircle },
   reject_parent_link:        { label: "Rejet demande",            color: "red",    icon: XCircle },
   delete_propositions:       { label: "Suppression propositions", color: "red",    icon: Trash2 },
   unlink_parent:             { label: "Dissociation parent",      color: "red",    icon: XCircle },
-  // Notifications / flags → violet
   notify_teachers_passage:   { label: "Notification enseignants", color: "purple", icon: Bell },
   flag_conseil_discipline:   { label: "Marqué conseil discipline",color: "purple", icon: Flag },
   unflag_conseil_discipline: { label: "Retiré conseil discipline",color: "purple", icon: Flag },
@@ -73,11 +92,7 @@ function exportCSV(logs, usersMap) {
     ]),
   ];
   const csv = rows
-    .map((r) =>
-      r
-        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-        .join(",")
-    )
+    .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n");
 
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -89,42 +104,301 @@ function exportCSV(logs, usersMap) {
   URL.revokeObjectURL(url);
 }
 
+// ============================================================
+// PRESSABLE — feedback tap + focus ring via state React
+// ============================================================
+function Pressable({
+  onClick,
+  style,
+  children,
+  disabled = false,
+  type = "button",
+  dark = false,
+  ariaLabel,
+  ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed && !disabled ? "scale(0.96)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.2s, border-color 0.2s",
+        ...(focused && !disabled ? FOCUS_RING(dark) : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ============================================================
+// KEYFRAMES MODULE-LEVEL
+// ============================================================
+function AuditKeyframes() {
+  return (
+    <style>{`
+      @keyframes audit-slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @keyframes audit-fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        .audit-slideUp, .audit-fadeIn { animation: none !important; }
+      }
+    `}</style>
+  );
+}
+
+// ============================================================
+// BOTTOM SHEET FILTRES (mobile)
+// ============================================================
+function FiltersSheet({
+  open, onClose, dark, isMobile,
+  searchTerm, setSearchTerm,
+  actionFilter, setActionFilter,
+  userFilter, setUserFilter,
+  dateFilter, setDateFilter,
+  availableActions, availableUsers,
+  hasActiveFilters, resetFilters, setCurrentPage,
+}) {
+  const titleId = useId();
+  if (!open) return null;
+
+  const textPrimary = dark ? "#F1F5F9" : "#1E293B";
+  const textSecondary = dark ? "#94A3B8" : "#64748B";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
+  const inputBg = dark ? "#0F172A" : "#F9FAFB";
+  const accent = dark ? "#818CF8" : "#4F46E5";
+
+  const fieldStyle = {
+    width: "100%",
+    padding: "12px 14px",
+    border: `1px solid ${cardBorder}`,
+    borderRadius: 10,
+    background: inputBg,
+    color: textPrimary,
+    fontSize: 16,
+    outline: "none",
+    boxSizing: "border-box",
+    appearance: "none",
+    WebkitAppearance: "none",
+    fontFamily: "inherit",
+    ...TAP_BASE,
+    minHeight: 44,
+  };
+
+  const labelStyle = {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 600,
+    color: textSecondary,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  };
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        aria-hidden="true"
+        style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+          zIndex: 1100, animation: "audit-fadeIn 0.18s ease-out",
+        }}
+      />
+      <div
+        className="audit-slideUp"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        style={{
+          position: "fixed", left: 0, right: 0, bottom: 0,
+          background: cardBg,
+          borderTopLeftRadius: 20, borderTopRightRadius: 20,
+          padding: "12px 16px 0",
+          ...SAFE_BOTTOM,
+          zIndex: 1101, maxHeight: "85vh", overflowY: "auto",
+          boxShadow: "0 -8px 30px rgba(0,0,0,0.25)",
+          animation: "audit-slideUp 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+          ...SCROLL_AREA,
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            width: 40, height: 4, borderRadius: 2,
+            background: dark ? "#475569" : "#CBD5E1",
+            margin: "0 auto 16px",
+          }}
+        />
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <h3 id={titleId} style={{ margin: 0, fontSize: 17, fontWeight: 700, color: textPrimary }}>
+            Filtrer le journal
+          </h3>
+          <Pressable
+            onClick={onClose}
+            dark={dark}
+            ariaLabel="Fermer"
+            style={{
+              background: "none", border: "none", color: textSecondary,
+              padding: 8, minWidth: 44, minHeight: 44,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <X size={22} aria-hidden="true" />
+          </Pressable>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle} htmlFor="audit-sheet-search">Recherche</label>
+          <div style={{ position: "relative" }}>
+            <Search
+              size={16}
+              aria-hidden="true"
+              style={{
+                position: "absolute", left: 12, top: "50%",
+                transform: "translateY(-50%)", color: textSecondary,
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              id="audit-sheet-search"
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              autoCorrect="off"
+              spellCheck="false"
+              placeholder="Rechercher…"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              style={{ ...fieldStyle, paddingLeft: 40 }}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle} htmlFor="audit-sheet-action">Action</label>
+          <select
+            id="audit-sheet-action"
+            value={actionFilter}
+            onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }}
+            style={fieldStyle}
+          >
+            <option value="all">Toutes les actions</option>
+            {availableActions.map((a) => (
+              <option key={a} value={a}>{getActionMeta(a).label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle} htmlFor="audit-sheet-user">Utilisateur</label>
+          <select
+            id="audit-sheet-user"
+            value={userFilter}
+            onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
+            style={fieldStyle}
+          >
+            <option value="all">Tous les utilisateurs</option>
+            {availableUsers.map(({ id, user }) => (
+              <option key={id} value={id}>
+                {user.nom} {user.postnom || ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle} htmlFor="audit-sheet-date">Période</label>
+          <select
+            id="audit-sheet-date"
+            value={dateFilter}
+            onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
+            style={fieldStyle}
+          >
+            <option value="all">Toute la période</option>
+            <option value="today">Aujourd'hui</option>
+            <option value="week">7 derniers jours</option>
+            <option value="month">30 derniers jours</option>
+          </select>
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <Pressable
+            onClick={resetFilters}
+            disabled={!hasActiveFilters}
+            dark={dark}
+            style={{
+              flex: 1, padding: "14px 16px", borderRadius: 12,
+              border: `1px solid ${cardBorder}`,
+              background: "transparent",
+              color: textSecondary,
+              fontWeight: 600, fontSize: 14,
+              opacity: hasActiveFilters ? 1 : 0.5,
+              cursor: hasActiveFilters ? "pointer" : "not-allowed",
+            }}
+          >
+            Réinitialiser
+          </Pressable>
+          <Pressable
+            onClick={onClose}
+            dark={dark}
+            style={{
+              flex: 2, padding: "14px 16px", borderRadius: 12, border: "none",
+              background: accent, color: "#FFFFFF",
+              fontWeight: 700, fontSize: 14,
+            }}
+          >
+            Voir les résultats
+          </Pressable>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============================================================
+// COMPOSANT PRINCIPAL
+// ============================================================
 export function GestionAudit({ ecoleId, userId }) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
 
-  // ── Fix #1 : ne plus masquer undefined ────────────────────────
-  const rawLogs = useQuery(
-    api.audit.list,
-    ecoleId ? { ecoleId, userId } : "skip"
-  );
-  const rawUsers = useQuery(
-    api.users.listByEcole,
-    ecoleId ? { ecoleId } : "skip"
-  );
+  const rawLogs = useQuery(api.audit.list, ecoleId ? { ecoleId, userId } : "skip");
+  const rawUsers = useQuery(api.users.listByEcole, ecoleId ? { ecoleId } : "skip");
   const logs = rawLogs ?? [];
   const users = rawUsers ?? [];
 
-  const loading =
-    rawLogs === undefined ||
-    (ecoleId && rawUsers === undefined);
+  const loading = rawLogs === undefined || (ecoleId && rawUsers === undefined);
 
-  // ── Fix #6 : filtres ──────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [userFilter, setUserFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all"); // all | today | week | month
+  const [dateFilter, setDateFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFiltersSheet, setShowFiltersSheet] = useState(false);
   const pageSize = 20;
 
-  // ── Fix #2 : Map au lieu de find() ────────────────────────────
   const usersMap = useMemo(() => {
     const map = new Map();
     users.forEach((u) => map.set(u._id, u));
     return map;
   }, [users]);
 
-  // ── Fix #4 : liste unique des actions présentes ───────────────
   const availableActions = useMemo(() => {
     const set = new Set(logs.map((l) => l.action));
     return [...set].sort();
@@ -138,7 +412,6 @@ export function GestionAudit({ ecoleId, userId }) {
       .sort((a, b) => (a.user.nom || "").localeCompare(b.user.nom || ""));
   }, [logs, usersMap]);
 
-  // ── Filtrage ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const now = Date.now();
     const startOfDay = new Date();
@@ -162,30 +435,21 @@ export function GestionAudit({ ecoleId, userId }) {
       if (q) {
         const u = usersMap.get(log.userId);
         const haystack = [
-          u?.nom ?? "",
-          u?.postnom ?? "",
+          u?.nom ?? "", u?.postnom ?? "",
           getActionMeta(log.action).label,
-          log.table ?? "",
-          log.details ?? "",
-        ]
-          .join(" ")
-          .toLowerCase();
+          log.table ?? "", log.details ?? "",
+        ].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     });
   }, [logs, searchTerm, actionFilter, userFilter, dateFilter, usersMap]);
 
-  // ── Fix #8 : tri stable par getTime() ─────────────────────────
   const sorted = useMemo(
-    () =>
-      [...filtered].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      ),
+    () => [...filtered].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [filtered]
   );
 
-  // ── Fix #3 : pagination client ─────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const paginated = sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -199,23 +463,35 @@ export function GestionAudit({ ecoleId, userId }) {
   };
 
   const hasActiveFilters =
-    searchTerm ||
-    actionFilter !== "all" ||
-    userFilter !== "all" ||
-    dateFilter !== "all";
+    searchTerm || actionFilter !== "all" || userFilter !== "all" || dateFilter !== "all";
 
-  // ── Fix #1 (bis) : loader correct ─────────────────────────────
+  const activeFiltersCount = [
+    actionFilter !== "all" ? 1 : 0,
+    userFilter !== "all" ? 1 : 0,
+    dateFilter !== "all" ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  // ── Loader ────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}>
-        <Skeleton height={60} />
-        <div style={{ height: 16 }} />
-        <Skeleton height={120} />
-        <div style={{ height: 12 }} />
-        <Skeleton height={120} />
-        <div style={{ height: 12 }} />
-        <Skeleton height={120} />
-      </div>
+      <>
+        <AuditKeyframes />
+        <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+          style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 16px" }}
+        >
+          <span style={{ position: "absolute", left: -9999 }}>Chargement du journal</span>
+          <Skeleton height={60} />
+          <div style={{ height: 16 }} />
+          <Skeleton height={120} />
+          <div style={{ height: 12 }} />
+          <Skeleton height={120} />
+          <div style={{ height: 12 }} />
+          <Skeleton height={120} />
+        </div>
+      </>
     );
   }
 
@@ -245,9 +521,11 @@ export function GestionAudit({ ecoleId, userId }) {
     borderRadius: 8,
     background: inputBg,
     color: textPrimary,
-    fontSize: isMobile ? 14 : 13,
+    ...(isMobile ? { fontSize: 16 } : { fontSize: 13 }),
     cursor: "pointer",
     width: isMobile ? "100%" : "auto",
+    ...TAP_BASE,
+    minHeight: 44,
   };
 
   const btnSecondary = {
@@ -255,29 +533,25 @@ export function GestionAudit({ ecoleId, userId }) {
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    padding: isMobile ? "10px 14px" : "8px 14px",
+    padding: isMobile ? "12px 14px" : "8px 14px",
     border: `1px solid ${cardBorder}`,
     borderRadius: 8,
     background: "transparent",
     color: textPrimary,
-    cursor: "pointer",
     fontWeight: 500,
-    fontSize: isMobile ? 13 : 13,
+    fontSize: 13,
     width: isMobile ? "100%" : "auto",
+    ...TAP_BASE,
+    minHeight: 44,
   };
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: containerPadding }}>
+      <AuditKeyframes />
+
       {/* En-tête */}
       <div style={{ marginBottom: headerMarginBottom }}>
-        <h2
-          style={{
-            fontSize: titleSize,
-            fontWeight: 700,
-            color: textPrimary,
-            margin: 0,
-          }}
-        >
+        <h2 style={{ fontSize: titleSize, fontWeight: 700, color: textPrimary, margin: 0 }}>
           Journal d'audit
         </h2>
         <p style={{ color: textSecondary, marginTop: 4, fontSize: subtitleSize }}>
@@ -287,165 +561,175 @@ export function GestionAudit({ ecoleId, userId }) {
         </p>
       </div>
 
-      {/* Barre de filtres */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          gap: 8,
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ flex: 1, minWidth: isMobile ? "100%" : 200, position: "relative" }}>
-          <Search
-            size={16}
-            style={{
-              position: "absolute",
-              left: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: textSecondary,
-              pointerEvents: "none",
-            }}
-          />
-          <input
-            type="search"
-            placeholder="Rechercher…"
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{
-              width: "100%",
-              padding: isMobile
-                ? "12px 12px 12px 40px"
-                : "9px 12px 9px 40px",
-              border: `1px solid ${cardBorder}`,
-              borderRadius: 8,
-              background: inputBg,
-              color: textPrimary,
-              fontSize: isMobile ? 16 : 14,
-              outline: "none",
-              boxSizing: "border-box",
-            }}
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm("")}
+      {/* Barre de filtres — desktop uniquement */}
+      {!isMobile && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
+            <Search
+              size={16}
+              aria-hidden="true"
               style={{
-                position: "absolute",
-                right: 8,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: textSecondary,
-                padding: 4,
+                position: "absolute", left: 12, top: "50%",
+                transform: "translateY(-50%)", color: textSecondary,
+                pointerEvents: "none",
               }}
-            >
-              <X size={16} />
-            </button>
-          )}
+            />
+            <input
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              autoCorrect="off"
+              spellCheck="false"
+              placeholder="Rechercher…"
+              aria-label="Rechercher dans le journal"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              style={{
+                width: "100%",
+                padding: "9px 12px 9px 40px",
+                border: `1px solid ${cardBorder}`,
+                borderRadius: 8,
+                background: inputBg,
+                color: textPrimary,
+                fontSize: 14,
+                outline: "none",
+                boxSizing: "border-box",
+                minHeight: 44,
+                ...TAP_BASE,
+              }}
+            />
+            {searchTerm && (
+              <Pressable
+                onClick={() => setSearchTerm("")}
+                dark={dark}
+                ariaLabel="Effacer la recherche"
+                style={{
+                  position: "absolute", right: 4, top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none", border: "none",
+                  color: textSecondary,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  minWidth: 44, minHeight: 44,
+                }}
+              >
+                <X size={16} aria-hidden="true" />
+              </Pressable>
+            )}
+          </div>
+
+          <select
+            value={actionFilter}
+            onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }}
+            aria-label="Filtrer par action"
+            style={selectStyle}
+          >
+            <option value="all">Toutes les actions</option>
+            {availableActions.map((a) => (
+              <option key={a} value={a}>{getActionMeta(a).label}</option>
+            ))}
+          </select>
+
+          <select
+            value={userFilter}
+            onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
+            aria-label="Filtrer par utilisateur"
+            style={selectStyle}
+          >
+            <option value="all">Tous les utilisateurs</option>
+            {availableUsers.map(({ id, user }) => (
+              <option key={id} value={id}>
+                {user.nom} {user.postnom || ""}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={dateFilter}
+            onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
+            aria-label="Filtrer par période"
+            style={selectStyle}
+          >
+            <option value="all">Toute la période</option>
+            <option value="today">Aujourd'hui</option>
+            <option value="week">7 derniers jours</option>
+            <option value="month">30 derniers jours</option>
+          </select>
         </div>
+      )}
 
-        <select
-          value={actionFilter}
-          onChange={(e) => {
-            setActionFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-          style={selectStyle}
-        >
-          <option value="all">Toutes les actions</option>
-          {availableActions.map((a) => (
-            <option key={a} value={a}>
-              {getActionMeta(a).label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={userFilter}
-          onChange={(e) => {
-            setUserFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-          style={selectStyle}
-        >
-          <option value="all">Tous les utilisateurs</option>
-          {availableUsers.map(({ id, user }) => (
-            <option key={id} value={id}>
-              {user.nom} {user.postnom || ""}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={dateFilter}
-          onChange={(e) => {
-            setDateFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-          style={selectStyle}
-        >
-          <option value="all">Toute la période</option>
-          <option value="today">Aujourd'hui</option>
-          <option value="week">7 derniers jours</option>
-          <option value="month">30 derniers jours</option>
-        </select>
-      </div>
+      {/* Bouton filtres — mobile uniquement */}
+      {isMobile && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <Pressable
+            onClick={() => setShowFiltersSheet(true)}
+            dark={dark}
+            style={{
+              flex: 1,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "12px 14px",
+              border: `1px solid ${cardBorder}`,
+              borderRadius: 10,
+              background: cardBg,
+              color: textPrimary,
+              fontWeight: 600, fontSize: 14,
+            }}
+          >
+            <Filter size={16} aria-hidden="true" />
+            Filtres
+            {activeFiltersCount > 0 && (
+              <span
+                aria-label={`${activeFiltersCount} filtre(s) actif(s)`}
+                style={{
+                  background: accent, color: "#FFFFFF",
+                  borderRadius: 10, padding: "1px 7px",
+                  fontSize: 11, fontWeight: 700,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {activeFiltersCount}
+              </span>
+            )}
+          </Pressable>
+        </div>
+      )}
 
       {/* Actions secondaires */}
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {hasActiveFilters && (
-          <button onClick={resetFilters} style={btnSecondary}>
-            <X size={14} /> Réinitialiser les filtres
-          </button>
+          <Pressable onClick={resetFilters} dark={dark} style={btnSecondary}>
+            <X size={14} aria-hidden="true" /> Réinitialiser les filtres
+          </Pressable>
         )}
         {sorted.length > 0 && (
-          <button
+          <Pressable
             onClick={() => exportCSV(sorted, usersMap)}
+            dark={dark}
             style={btnSecondary}
           >
-            <FileDown size={14} /> Exporter en CSV ({sorted.length})
-          </button>
+            <FileDown size={14} aria-hidden="true" /> Exporter en CSV ({sorted.length})
+          </Pressable>
         )}
       </div>
 
       {/* Liste des logs */}
       {sorted.length === 0 ? (
         <div
+          role="status"
+          aria-live="polite"
           style={{
-            background: cardBg,
-            borderRadius: 16,
-            padding: emptyStatePadding,
-            textAlign: "center",
-            boxShadow: shadow,
-            border: `1px solid ${cardBorder}`,
+            background: cardBg, borderRadius: 16,
+            padding: emptyStatePadding, textAlign: "center",
+            boxShadow: shadow, border: `1px solid ${cardBorder}`,
             color: textSecondary,
           }}
         >
           <div
+            aria-hidden="true"
             style={{
-              width: 64,
-              height: 64,
-              borderRadius: "50%",
+              width: 64, height: 64, borderRadius: "50%",
               background: dark ? "#0F172A" : "#F1F5F9",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 16px",
-              color: textSecondary,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 16px", color: textSecondary,
             }}
           >
             <Shield size={28} />
@@ -461,7 +745,7 @@ export function GestionAudit({ ecoleId, userId }) {
         </div>
       ) : (
         <>
-          <div style={{ display: "grid", gap: cardGap }}>
+          <div style={{ display: "grid", gap: cardGap, ...SCROLL_AREA }}>
             {paginated.map((log) => {
               const user = usersMap.get(log.userId);
               const meta = getActionMeta(log.action);
@@ -469,13 +753,11 @@ export function GestionAudit({ ecoleId, userId }) {
               const colorToken = COLOR_TOKENS[meta.color] || COLOR_TOKENS.default;
 
               return (
-                <div
+                <article
                   key={log._id}
                   style={{
-                    background: cardBg,
-                    borderRadius: 12,
-                    padding: cardPadding,
-                    boxShadow: shadow,
+                    background: cardBg, borderRadius: 12,
+                    padding: cardPadding, boxShadow: shadow,
                     border: `1px solid ${cardBorder}`,
                   }}
                 >
@@ -490,40 +772,29 @@ export function GestionAudit({ ecoleId, userId }) {
                   >
                     <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flexWrap: "wrap",
-                        minWidth: 0,
-                        flex: 1,
+                        display: "flex", alignItems: "center", gap: 8,
+                        flexWrap: "wrap", minWidth: 0, flex: 1,
                       }}
                     >
                       <span
                         style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 4,
-                          background: colorToken.bg(dark),
-                          color: colorToken.fg(dark),
-                          padding: "3px 10px",
-                          borderRadius: 20,
-                          fontSize: actionBadgeFontSize,
-                          fontWeight: 600,
+                          display: "inline-flex", alignItems: "center", gap: 4,
+                          background: colorToken.bg(dark), color: colorToken.fg(dark),
+                          padding: "3px 10px", borderRadius: 20,
+                          fontSize: actionBadgeFontSize, fontWeight: 600,
                           flexShrink: 0,
                         }}
                       >
-                        <Icon size={12} />
+                        <Icon size={12} aria-hidden="true" />
                         {meta.label}
                       </span>
                       {log.table && (
                         <span
                           style={{
-                            color: textSecondary,
-                            fontSize: actionBadgeFontSize,
+                            color: textSecondary, fontSize: actionBadgeFontSize,
                             padding: "3px 8px",
                             border: `1px solid ${cardBorder}`,
-                            borderRadius: 6,
-                            whiteSpace: "nowrap",
+                            borderRadius: 6, whiteSpace: "nowrap",
                           }}
                         >
                           {log.table}
@@ -534,28 +805,24 @@ export function GestionAudit({ ecoleId, userId }) {
                       style={{
                         color: textSecondary,
                         fontSize: isMobile ? 11 : 12,
-                        whiteSpace: "nowrap",
-                        flexShrink: 0,
+                        whiteSpace: "nowrap", flexShrink: 0,
+                        fontVariantNumeric: "tabular-nums",
                       }}
                     >
                       {new Date(log.date).toLocaleString("fr-FR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
+                        dateStyle: "short", timeStyle: "short",
                       })}
                     </small>
                   </div>
 
                   <div
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginTop: 8,
-                      color: textPrimary,
+                      display: "flex", alignItems: "center", gap: 6,
+                      marginTop: 8, color: textPrimary,
                       fontSize: isMobile ? 14 : 13,
                     }}
                   >
-                    <User size={13} style={{ color: textSecondary, flexShrink: 0 }} />
+                    <User size={13} aria-hidden="true" style={{ color: textSecondary, flexShrink: 0 }} />
                     <strong>
                       {user?.nom ?? "Utilisateur supprimé"}
                       {user?.postnom ? ` ${user.postnom}` : ""}
@@ -565,12 +832,9 @@ export function GestionAudit({ ecoleId, userId }) {
                   {log.details && (
                     <p
                       style={{
-                        marginTop: 8,
-                        marginBottom: 0,
-                        fontSize: detailFontSize,
-                        color: textSecondary,
-                        lineHeight: 1.5,
-                        whiteSpace: "pre-wrap",
+                        marginTop: 8, marginBottom: 0,
+                        fontSize: detailFontSize, color: textSecondary,
+                        lineHeight: 1.5, whiteSpace: "pre-wrap",
                         wordBreak: "break-word",
                       }}
                     >
@@ -583,10 +847,8 @@ export function GestionAudit({ ecoleId, userId }) {
                       style={{
                         fontSize: documentFontSize,
                         color: dark ? "#475569" : "#94A3B8",
-                        marginTop: 6,
-                        fontFamily: "monospace",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
+                        marginTop: 6, fontFamily: "monospace",
+                        overflow: "hidden", textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
                       }}
                       title={log.documentId}
@@ -594,58 +856,86 @@ export function GestionAudit({ ecoleId, userId }) {
                       Réf. : {log.documentId}
                     </div>
                   )}
-                </div>
+                </article>
               );
             })}
           </div>
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div
+            <nav
+              aria-label="Pagination du journal"
               style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 20,
+                display: "flex", justifyContent: "center",
+                alignItems: "center", gap: 8, marginTop: 20,
               }}
             >
-              <button
+              <Pressable
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={safePage === 1}
+                dark={dark}
+                ariaLabel="Page précédente"
                 style={{
                   padding: isMobile ? "10px 12px" : "6px 10px",
                   border: `1px solid ${cardBorder}`,
-                  borderRadius: 6,
-                  background: "transparent",
+                  borderRadius: 6, background: "transparent",
                   cursor: safePage === 1 ? "not-allowed" : "pointer",
                   color: textPrimary,
                   opacity: safePage === 1 ? 0.5 : 1,
+                  display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
-                <ChevronLeft size={16} />
-              </button>
-              <span style={{ fontSize: isMobile ? 14 : 13, color: textSecondary }}>
+                <ChevronLeft size={16} aria-hidden="true" />
+              </Pressable>
+              <span
+                aria-live="polite"
+                style={{ fontSize: isMobile ? 14 : 13, color: textSecondary }}
+              >
                 Page {safePage} / {totalPages}
               </span>
-              <button
+              <Pressable
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={safePage === totalPages}
+                dark={dark}
+                ariaLabel="Page suivante"
                 style={{
                   padding: isMobile ? "10px 12px" : "6px 10px",
                   border: `1px solid ${cardBorder}`,
-                  borderRadius: 6,
-                  background: "transparent",
+                  borderRadius: 6, background: "transparent",
                   cursor: safePage === totalPages ? "not-allowed" : "pointer",
                   color: textPrimary,
                   opacity: safePage === totalPages ? 0.5 : 1,
+                  display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
-                <ChevronRight size={16} />
-              </button>
-            </div>
+                <ChevronRight size={16} aria-hidden="true" />
+              </Pressable>
+            </nav>
           )}
         </>
+      )}
+
+      {/* Bottom Sheet filtres mobile */}
+      {isMobile && (
+        <FiltersSheet
+          open={showFiltersSheet}
+          onClose={() => setShowFiltersSheet(false)}
+          dark={dark}
+          isMobile={isMobile}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          actionFilter={actionFilter}
+          setActionFilter={setActionFilter}
+          userFilter={userFilter}
+          setUserFilter={setUserFilter}
+          dateFilter={dateFilter}
+          setDateFilter={setDateFilter}
+          availableActions={availableActions}
+          availableUsers={availableUsers}
+          hasActiveFilters={hasActiveFilters}
+          resetFilters={resetFilters}
+          setCurrentPage={setCurrentPage}
+        />
       )}
     </div>
   );

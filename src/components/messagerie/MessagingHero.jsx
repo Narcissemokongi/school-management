@@ -1,5 +1,12 @@
 // src/components/messagerie/MessagingHero.jsx
+import { useState, useMemo } from "react";
 import { GraduationCap, Users, MessageCircle } from "lucide-react";
+import { useIsMobile } from "@/hooks/useIsMobile";
+
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 
 // ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level
@@ -26,7 +33,7 @@ const MessagingHeroKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// HELPERS (couleur déterministe par nom)
+// HELPERS
 // ════════════════════════════════════════════════════════════════════
 const AVATAR_PALETTE = [
   "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E",
@@ -52,13 +59,82 @@ function getAvatarColor(name) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// SIZES
+// SIZES — ✨ version desktop
 // ════════════════════════════════════════════════════════════════════
 const SIZES = {
   sm: { avatar: 64,  iconSize: 26, fontSize: 15, descSize: 12.5, gap: 8  },
   md: { avatar: 88,  iconSize: 34, fontSize: 17, descSize: 13.5, gap: 12 },
   lg: { avatar: 112, iconSize: 44, fontSize: 19, descSize: 14,   gap: 16 },
 };
+
+// ✨ Tailles adaptées mobile (un peu plus compactes)
+const SIZES_MOBILE = {
+  sm: { avatar: 56,  iconSize: 24, fontSize: 14.5, descSize: 12.5, gap: 8  },
+  md: { avatar: 76,  iconSize: 30, fontSize: 16,   descSize: 13.5, gap: 10 },
+  lg: { avatar: 88,  iconSize: 36, fontSize: 17.5, descSize: 14,   gap: 12 },
+};
+
+// ════════════════════════════════════════════════════════════════════
+// BOUTON ACTION
+// ════════════════════════════════════════════════════════════════════
+function ActionButton({ label, onClick, Icon, tokens, isMobile }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const transform = pressed
+    ? "scale(0.97)"
+    : hovered && !isMobile
+    ? "translateY(-1px)"
+    : "translateY(0)";
+
+  const boxShadow = pressed
+    ? "0 4px 12px rgba(79,70,229,0.25)"
+    : hovered && !isMobile
+    ? "0 8px 22px rgba(79,70,229,0.4)"
+    : "0 6px 18px rgba(79,70,229,0.3)";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
+      style={{
+        marginTop: 8,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        padding: isMobile ? "13px 22px" : "11px 24px",
+        background: `linear-gradient(135deg, ${tokens.primary}, ${tokens.primaryHover})`,
+        color: "#FFFFFF",
+        border: "none",
+        borderRadius: 12,
+        fontWeight: 600,
+        fontSize: isMobile ? 14.5 : 14,
+        cursor: "pointer",
+        boxShadow,
+        transform,
+        transition:
+          "transform 0.12s ease, box-shadow 0.15s ease, background 0.12s ease",
+        minHeight: 48,
+        outline: focused ? `2px solid ${tokens.primary}` : "none",
+        outlineOffset: 2,
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+      }}
+    >
+      {Icon && <Icon size={isMobile ? 17 : 16} />}
+      {label}
+    </button>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // COMPOSANT
@@ -74,31 +150,38 @@ export function MessagingHero({
   size = "md",          // "sm" | "md" | "lg"
   pulse = true,
   tokens,
-  isMobile,
+  isMobile: isMobileProp,
 }) {
-  const s = SIZES[size] || SIZES.md;
+  // ✨ Fallback interne si parent n'a pas passé isMobile
+  const hookIsMobile = useIsMobile();
+  const isMobile =
+    isMobileProp !== undefined ? isMobileProp : hookIsMobile;
+
+  const s = isMobile
+    ? SIZES_MOBILE[size] || SIZES_MOBILE.md
+    : SIZES[size] || SIZES.md;
 
   const isGroup = avatarVariant === "group" || avatarIcon;
 
-  // Couleur de l'avatar
-  const avatarBg = isGroup
-    ? tokens.groupBg
-    : avatarName
-    ? getAvatarColor(avatarName)
-    : tokens.primarySoft;
+  // Couleur avatar
+  const avatarBg = useMemo(() => {
+    if (isGroup) return tokens.groupBg;
+    if (avatarName) return getAvatarColor(avatarName);
+    return tokens.primarySoft;
+  }, [isGroup, avatarName, tokens.groupBg, tokens.primarySoft]);
 
-  const avatarFg = isGroup
-    ? tokens.groupFg
-    : avatarName
-    ? "#FFFFFF"
-    : tokens.primary;
+  const avatarFg = useMemo(() => {
+    if (isGroup) return tokens.groupFg;
+    if (avatarName) return "#FFFFFF";
+    return tokens.primary;
+  }, [isGroup, avatarName, tokens.groupFg, tokens.primary]);
 
-  // Ombre adaptée au variant
-  const avatarShadow = isGroup
-    ? "0 8px 24px rgba(124,58,237,0.25)"
-    : avatarName
-    ? "0 8px 24px rgba(0,0,0,0.15)"
-    : "0 8px 24px rgba(79,70,229,0.2)";
+  // Ombre adaptée
+  const avatarShadow = useMemo(() => {
+    if (isGroup) return "0 8px 24px rgba(124,58,237,0.25)";
+    if (avatarName) return "0 8px 24px rgba(0,0,0,0.15)";
+    return "0 8px 24px rgba(79,70,229,0.2)";
+  }, [isGroup, avatarName]);
 
   return (
     <>
@@ -106,7 +189,10 @@ export function MessagingHero({
       <div
         className="msg-hero-fade-in"
         style={{
-          padding: isMobile ? "40px 20px" : "56px 24px",
+          padding: isMobile ? "32px 20px" : "56px 24px",
+          paddingBottom: isMobile
+            ? `calc(32px + ${SAFE_BOTTOM})`
+            : "56px",
           textAlign: "center",
           display: "flex",
           flexDirection: "column",
@@ -119,7 +205,12 @@ export function MessagingHero({
         }}
       >
         {/* Avatar avec halo pulse */}
-        <div style={{ position: "relative", display: "inline-block" }}>
+        <div
+          style={{
+            position: "relative",
+            display: "inline-block",
+          }}
+        >
           {pulse && (
             <div
               className="msg-hero-halo"
@@ -130,6 +221,7 @@ export function MessagingHero({
                 background: avatarBg,
                 opacity: 0.4,
                 zIndex: 0,
+                pointerEvents: "none",
               }}
               aria-hidden="true"
             />
@@ -170,17 +262,21 @@ export function MessagingHero({
         </div>
 
         {/* Titre */}
-        <div
-          style={{
-            fontSize: s.fontSize,
-            fontWeight: 700,
-            color: tokens.text,
-            lineHeight: 1.3,
-            maxWidth: 320,
-          }}
-        >
-          {title}
-        </div>
+        {title && (
+          <div
+            style={{
+              fontSize: s.fontSize,
+              fontWeight: 700,
+              color: tokens.text,
+              lineHeight: 1.3,
+              maxWidth: isMobile ? 260 : 320,
+              paddingLeft: isMobile ? 8 : 0,
+              paddingRight: isMobile ? 8 : 0,
+            }}
+          >
+            {title}
+          </div>
+        )}
 
         {/* Description */}
         {description && (
@@ -188,58 +284,25 @@ export function MessagingHero({
             style={{
               fontSize: s.descSize,
               color: tokens.textMuted,
-              maxWidth: 300,
+              maxWidth: isMobile ? 280 : 300,
               lineHeight: 1.5,
+              paddingLeft: isMobile ? 8 : 0,
+              paddingRight: isMobile ? 8 : 0,
             }}
           >
             {description}
           </div>
         )}
 
-        {/* Action optionnelle (bouton gradient style Hero) */}
+        {/* Action */}
         {action?.label && action?.onClick && (
-          <button
-            type="button"
+          <ActionButton
+            label={action.label}
             onClick={action.onClick}
-            style={{
-              marginTop: 8,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: isMobile ? "12px 22px" : "11px 24px",
-              background: `linear-gradient(135deg, ${tokens.primary}, ${tokens.primaryHover})`,
-              color: "#FFFFFF",
-              border: "none",
-              borderRadius: 12,
-              fontWeight: 600,
-              fontSize: 14,
-              cursor: "pointer",
-              boxShadow: "0 6px 18px rgba(79,70,229,0.3)",
-              transition: "transform 0.1s ease, box-shadow 0.15s ease",
-              minHeight: 44,
-              WebkitTapHighlightColor: "transparent",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow =
-                "0 8px 22px rgba(79,70,229,0.4)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow =
-                "0 6px 18px rgba(79,70,229,0.3)";
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.outline = `2px solid ${tokens.primary}`;
-              e.currentTarget.style.outlineOffset = "2px";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.outline = "none";
-            }}
-          >
-            {action.icon && <action.icon size={16} />}
-            {action.label}
-          </button>
+            Icon={action.icon}
+            tokens={tokens}
+            isMobile={isMobile}
+          />
         )}
       </div>
     </>

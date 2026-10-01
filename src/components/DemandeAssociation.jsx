@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import {
@@ -8,6 +8,73 @@ import {
 import toast from "react-hot-toast";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useStyles } from "@/styles/theme";
+
+// ============================================================
+// CONSTANTES MODULE-LEVEL (mobile + a11y)
+// ============================================================
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const SCROLL_AREA = {
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+};
+
+const FOCUS_RING = (dark) => ({
+  outline: `2px solid ${dark ? "#818CF8" : "#4F46E5"}`,
+  outlineOffset: 2,
+});
+
+// ============================================================
+// KEYFRAMES MODULE-LEVEL (rendus UNE fois)
+// ============================================================
+const DemandeKeyframes = (
+  <style>{`
+    @keyframes da-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .da-spin { animation: da-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .da-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
+// ============================================================
+// PRESSABLE — feedback tap + focus ring via state React
+// ============================================================
+function Pressable({
+  onClick, style, children, disabled = false, type = "button",
+  dark = false, ariaLabel, ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed && !disabled ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background-color 0.2s, border-color 0.2s",
+        ...(focused && !disabled ? FOCUS_RING(dark) : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
 
 // ============================================================
 // CARTE DEMANDE
@@ -20,20 +87,20 @@ function DemandeCard({ demande, dark, isMobile, onCancel }) {
     ? {
         bg: dark ? "#78350F" : "#FEF3C7",
         color: dark ? "#FBBF24" : "#92400E",
-        icon: <Clock size={14} />,
+        icon: <Clock size={14} aria-hidden="true" />,
         label: "En attente",
       }
     : isApproved
     ? {
         bg: dark ? "#064E3B" : "#D1FAE5",
         color: dark ? "#34D399" : "#065F46",
-        icon: <CheckCircle2 size={14} />,
+        icon: <CheckCircle2 size={14} aria-hidden="true" />,
         label: "Approuvée",
       }
     : {
         bg: dark ? "#7F1D1D" : "#FEE2E2",
         color: dark ? "#F87171" : "#B91C1C",
-        icon: <XCircle size={14} />,
+        icon: <XCircle size={14} aria-hidden="true" />,
         label: "Rejetée",
       };
 
@@ -46,7 +113,7 @@ function DemandeCard({ demande, dark, isMobile, onCancel }) {
     : "";
 
   return (
-    <div
+    <article
       style={{
         background: dark ? "#1E293B" : "#FFFFFF",
         borderRadius: 12,
@@ -62,6 +129,7 @@ function DemandeCard({ demande, dark, isMobile, onCancel }) {
     >
       {/* Icône statut */}
       <div
+        aria-hidden="true"
         style={{
           width: 36,
           height: 36,
@@ -113,23 +181,30 @@ function DemandeCard({ demande, dark, isMobile, onCancel }) {
           {demande.eleveMatricule && (
             <>
               <span>Matricule : {demande.eleveMatricule}</span>
-              {formattedDate && <span style={{ opacity: 0.5 }}>·</span>}
+              {formattedDate && (
+                <span aria-hidden="true" style={{ opacity: 0.5 }}>·</span>
+              )}
             </>
           )}
-          {formattedDate && <span>{formattedDate}</span>}
+          {formattedDate && (
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              {formattedDate}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Bouton annuler (uniquement pending) */}
+      {/* Bouton annuler */}
       {isPending && (
-        <button
+        <Pressable
           onClick={() => onCancel(demande._id)}
-          title="Annuler la demande"
+          dark={dark}
+          ariaLabel="Annuler la demande"
           style={{
             background: "transparent",
             border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
             borderRadius: 8,
-            padding: isMobile ? "8px 10px" : "6px 10px",
+            padding: isMobile ? "10px 12px" : "8px 12px",
             color: "#EF4444",
             cursor: "pointer",
             fontSize: 12,
@@ -140,11 +215,11 @@ function DemandeCard({ demande, dark, isMobile, onCancel }) {
             flexShrink: 0,
           }}
         >
-          <X size={14} />
+          <X size={14} aria-hidden="true" />
           {!isMobile && "Annuler"}
-        </button>
+        </Pressable>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -152,13 +227,14 @@ function DemandeCard({ demande, dark, isMobile, onCancel }) {
 // COMPOSANT PRINCIPAL
 // ============================================================
 function DemandeAssociation({ user, dark: darkProp, onClose, isMobile: isMobileProp }) {
-  // isMobile peut être passé en prop (depuis ParentApp) ou déduit via le hook
   const hookIsMobile = useIsMobile();
   const isMobile = isMobileProp !== undefined ? isMobileProp : hookIsMobile;
 
-  // dark peut être passé en prop ou déduit via useStyles
   const { dark: darkFromHook } = useStyles();
   const dark = darkProp !== undefined ? darkProp : darkFromHook;
+
+  const matriculeId = useId();
+  const alertId = useId();
 
   const [matricule, setMatricule] = useState("");
   const [sending, setSending] = useState(false);
@@ -253,13 +329,13 @@ function DemandeAssociation({ user, dark: darkProp, onClose, isMobile: isMobileP
           bg: dark ? "#7F1D1D" : "#FEE2E2",
           color: dark ? "#F87171" : "#B91C1C",
           border: dark ? "#991B1B" : "#FECACA",
-          icon: <AlertCircle size={14} />,
+          icon: <AlertCircle size={14} aria-hidden="true" />,
         },
         info: {
           bg: dark ? "#1E3A8A" : "#DBEAFE",
           color: dark ? "#60A5FA" : "#1D4ED8",
           border: dark ? "#1E40AF" : "#BFDBFE",
-          icon: <Info size={14} />,
+          icon: <Info size={14} aria-hidden="true" />,
         },
       }[error.type]
     : success
@@ -267,327 +343,366 @@ function DemandeAssociation({ user, dark: darkProp, onClose, isMobile: isMobileP
         bg: dark ? "#064E3B" : "#D1FAE5",
         color: dark ? "#34D399" : "#065F46",
         border: dark ? "#065F46" : "#A7F3D0",
-        icon: <CheckCircle2 size={14} />,
+        icon: <CheckCircle2 size={14} aria-hidden="true" />,
       }
     : null;
 
   const alertMessage = error ? error.message : success;
+  const alertRole = error?.type === "error" ? "alert" : "status";
 
   return (
-    <div
-      style={{
-        maxWidth: 520,
-        margin: "0 auto",
-        padding: isMobile ? "10px 8px 24px" : "20px 16px",
-        width: "100%",
-        boxSizing: "border-box",
-      }}
-    >
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 1s linear infinite; }
-      `}</style>
-
-      {/* ==================== EN-TÊTE ==================== */}
-      <div style={{ marginBottom: isMobile ? 14 : 20 }}>
-        {/* Bouton retour (si onClose fourni) */}
-        {onClose && (
-          <button
-            onClick={onClose}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              background: "transparent",
-              border: `1px solid ${cardBorder}`,
-              borderRadius: 10,
-              padding: "8px 12px",
-              cursor: "pointer",
-              color: textPrimary,
-              fontSize: 12.5,
-              fontWeight: 600,
-              marginBottom: 12,
-            }}
-          >
-            <ArrowLeft size={14} /> Retour
-          </button>
-        )}
-
-        <h2
-          style={{
-            fontSize: isMobile ? 17 : 22,
-            fontWeight: 700,
-            color: textPrimary,
-            margin: 0,
-            lineHeight: 1.2,
-          }}
-        >
-          Associer un enfant
-        </h2>
-        <p
-          style={{
-            color: textSecondary,
-            marginTop: 2,
-            marginBottom: 0,
-            fontSize: isMobile ? 11.5 : 13,
-          }}
-        >
-          Demandez la liaison avec votre enfant via son matricule
-        </p>
-      </div>
-
-      {/* ==================== FORMULAIRE ==================== */}
-      <form
-        onSubmit={handleSubmit}
+    <>
+      {DemandeKeyframes}
+      <div
         style={{
-          background: cardBg,
-          borderRadius: 16,
-          border: `1px solid ${cardBorder}`,
-          padding: isMobile ? 14 : 18,
-          boxShadow: dark
-            ? "0 1px 3px rgba(0,0,0,0.3)"
-            : "0 1px 3px rgba(0,0,0,0.05)",
-          marginBottom: isMobile ? 16 : 24,
+          maxWidth: 520,
+          margin: "0 auto",
+          padding: isMobile ? "10px 8px 24px" : "20px 16px",
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
-        {/* Icône + explication */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 14,
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: dark ? "#312E81" : "#EEF2FF",
-              color: accent,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <Link2 size={18} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div
+        {/* ==================== EN-TÊTE ==================== */}
+        <div style={{ marginBottom: isMobile ? 14 : 20 }}>
+          {onClose && (
+            <Pressable
+              onClick={onClose}
+              dark={dark}
+              ariaLabel="Retour"
               style={{
-                fontSize: 13.5,
-                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "transparent",
+                border: `1px solid ${cardBorder}`,
+                borderRadius: 10,
+                padding: "10px 14px",
                 color: textPrimary,
+                fontSize: 12.5,
+                fontWeight: 600,
+                marginBottom: 12,
               }}
             >
-              Demander une association
-            </div>
-            <div
-              style={{
-                fontSize: 11.5,
-                color: textSecondary,
-                marginTop: 2,
-              }}
-            >
-              Saisissez le matricule figurant sur le bulletin de votre enfant
-            </div>
-          </div>
-        </div>
-
-        <label
-          style={{
-            display: "block",
-            marginBottom: 6,
-            fontWeight: 600,
-            fontSize: 12,
-            color: dark ? "#CBD5E1" : "#374151",
-            textTransform: "uppercase",
-            letterSpacing: 0.3,
-          }}
-        >
-          Matricule de l'enfant
-        </label>
-        <input
-          type="text"
-          placeholder="Ex : A1B2C3"
-          value={matricule}
-          onChange={(e) => {
-            setMatricule(e.target.value.toUpperCase());
-            if (error) setError(null);
-            if (success) setSuccess("");
-          }}
-          style={{
-            width: "100%",
-            padding: isMobile ? "12px 14px" : "11px 14px",
-            border: `1px solid ${error ? "#EF4444" : cardBorder}`,
-            borderRadius: 10,
-            fontSize: isMobile ? 16 : 14,
-            outline: "none",
-            background: inputBg,
-            color: inputText,
-            marginBottom: 12,
-            boxSizing: "border-box",
-            fontFamily: "inherit",
-            letterSpacing: 1,
-            fontWeight: 500,
-          }}
-          required
-        />
-
-        {/* Alerte */}
-        {alertConfig && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              background: alertConfig.bg,
-              color: alertConfig.color,
-              border: `1px solid ${alertConfig.border}`,
-              padding: isMobile ? "10px 12px" : "10px 14px",
-              borderRadius: 10,
-              fontSize: isMobile ? 13 : 12.5,
-              fontWeight: 500,
-              marginBottom: 12,
-              lineHeight: 1.4,
-            }}
-          >
-            <div style={{ flexShrink: 0 }}>{alertConfig.icon}</div>
-            <span>{alertMessage}</span>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={sending || !matricule.trim()}
-          style={{
-            width: "100%",
-            padding: isMobile ? "12px 16px" : "11px 16px",
-            background:
-              sending || !matricule.trim()
-                ? dark
-                  ? "#334155"
-                  : "#CBD5E1"
-                : accent,
-            color:
-              sending || !matricule.trim()
-                ? dark
-                  ? "#64748B"
-                  : "#94A3B8"
-                : "#FFFFFF",
-            border: "none",
-            borderRadius: 10,
-            fontWeight: 700,
-            cursor:
-              sending || !matricule.trim() ? "not-allowed" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            fontSize: 13.5,
-          }}
-        >
-          {sending ? (
-            <Loader size={16} className="animate-spin" />
-          ) : (
-            <UserPlus size={16} />
+              <ArrowLeft size={14} aria-hidden="true" /> Retour
+            </Pressable>
           )}
-          {sending ? "Envoi…" : "Demander l'association"}
-        </button>
-      </form>
 
-      {/* ==================== MES DEMANDES ==================== */}
-      <div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 10,
-          }}
-        >
-          <h3
+          <h2
             style={{
-              fontSize: isMobile ? 14 : 15,
+              fontSize: isMobile ? 17 : 22,
               fontWeight: 700,
               color: textPrimary,
               margin: 0,
+              lineHeight: 1.2,
             }}
           >
-            Mes demandes
-          </h3>
-          {demandes.length > 0 && (
-            <span
-              style={{
-                background: dark ? "#334155" : "#F1F5F9",
-                color: textSecondary,
-                padding: "1px 8px",
-                borderRadius: 10,
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
-              {demandes.length}
-            </span>
-          )}
+            Associer un enfant
+          </h2>
+          <p
+            style={{
+              color: textSecondary,
+              marginTop: 2,
+              marginBottom: 0,
+              fontSize: isMobile ? 11.5 : 13,
+            }}
+          >
+            Demandez la liaison avec votre enfant via son matricule
+          </p>
         </div>
 
-        {demandes.length === 0 ? (
+        {/* ==================== FORMULAIRE ==================== */}
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            background: cardBg,
+            borderRadius: 16,
+            border: `1px solid ${cardBorder}`,
+            padding: isMobile ? 14 : 18,
+            boxShadow: dark
+              ? "0 1px 3px rgba(0,0,0,0.3)"
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            marginBottom: isMobile ? 16 : 24,
+          }}
+        >
+          {/* Icône + explication */}
           <div
             style={{
-              background: cardBg,
-              borderRadius: 12,
-              border: `1px solid ${cardBorder}`,
-              padding: isMobile ? 24 : 32,
-              textAlign: "center",
-              color: textSecondary,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 14,
             }}
           >
             <div
+              aria-hidden="true"
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: dark ? "#334155" : "#F1F5F9",
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: dark ? "#312E81" : "#EEF2FF",
+                color: accent,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                margin: "0 auto 12px",
+                flexShrink: 0,
               }}
             >
-              <Link2 size={22} />
+              <Link2 size={18} />
             </div>
-            <p
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                  color: textPrimary,
+                }}
+              >
+                Demander une association
+              </div>
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: textSecondary,
+                  marginTop: 2,
+                }}
+              >
+                Saisissez le matricule figurant sur le bulletin de votre enfant
+              </div>
+            </div>
+          </div>
+
+          <label
+            htmlFor={matriculeId}
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontWeight: 600,
+              fontSize: 12,
+              color: dark ? "#CBD5E1" : "#374151",
+              textTransform: "uppercase",
+              letterSpacing: 0.3,
+            }}
+          >
+            Matricule de l'enfant
+          </label>
+          <input
+            id={matriculeId}
+            type="text"
+            inputMode="text"
+            enterKeyHint="send"
+            autoCorrect="off"
+            autoCapitalize="characters"
+            spellCheck="false"
+            placeholder="Ex : A1B2C3"
+            aria-label="Matricule de l'enfant"
+            aria-invalid={!!error}
+            aria-describedby={alertConfig ? alertId : undefined}
+            value={matricule}
+            onChange={(e) => {
+              setMatricule(e.target.value.toUpperCase());
+              if (error) setError(null);
+              if (success) setSuccess("");
+            }}
+            style={{
+              width: "100%",
+              padding: isMobile ? "12px 14px" : "11px 14px",
+              border: `1px solid ${error ? "#EF4444" : cardBorder}`,
+              borderRadius: 10,
+              fontSize: isMobile ? 16 : 14,
+              outline: "none",
+              background: inputBg,
+              color: inputText,
+              marginBottom: 12,
+              boxSizing: "border-box",
+              fontFamily: "inherit",
+              letterSpacing: 1,
+              fontWeight: 500,
+              minHeight: 44,
+              ...TAP_BASE,
+            }}
+            required
+          />
+
+          {/* Alerte */}
+          {alertConfig && (
+            <div
+              id={alertId}
+              role={alertRole}
+              aria-live={alertRole === "status" ? "polite" : undefined}
               style={{
-                margin: 0,
-                fontSize: 13,
-                fontWeight: 600,
-                color: textPrimary,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: alertConfig.bg,
+                color: alertConfig.color,
+                border: `1px solid ${alertConfig.border}`,
+                padding: isMobile ? "10px 12px" : "10px 14px",
+                borderRadius: 10,
+                fontSize: isMobile ? 13 : 12.5,
+                fontWeight: 500,
+                marginBottom: 12,
+                lineHeight: 1.4,
               }}
             >
-              Aucune demande
-            </p>
-            <p style={{ margin: "4px 0 0", fontSize: 12 }}>
-              Vos demandes d'association apparaîtront ici
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {demandes.map((demande) => (
-              <DemandeCard
-                key={demande._id}
-                demande={demande}
-                dark={dark}
-                isMobile={isMobile}
-                onCancel={handleCancel}
+              <div style={{ flexShrink: 0 }}>{alertConfig.icon}</div>
+              <span>{alertMessage}</span>
+            </div>
+          )}
+
+          <Pressable
+            type="submit"
+            disabled={sending || !matricule.trim()}
+            dark={dark}
+            aria-busy={sending}
+            style={{
+              width: "100%",
+              padding: isMobile ? "12px 16px" : "11px 16px",
+              background:
+                sending || !matricule.trim()
+                  ? dark
+                    ? "#334155"
+                    : "#CBD5E1"
+                  : accent,
+              color:
+                sending || !matricule.trim()
+                  ? dark
+                    ? "#64748B"
+                    : "#94A3B8"
+                  : "#FFFFFF",
+              border: "none",
+              borderRadius: 10,
+              fontWeight: 700,
+              cursor:
+                sending || !matricule.trim() ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontSize: 13.5,
+            }}
+          >
+            {sending ? (
+              <Loader
+                size={16}
+                className="da-spin"
+                role="status"
+                aria-label="Envoi en cours"
               />
-            ))}
+            ) : (
+              <UserPlus size={16} aria-hidden="true" />
+            )}
+            {sending ? "Envoi…" : "Demander l'association"}
+          </Pressable>
+        </form>
+
+        {/* ==================== MES DEMANDES ==================== */}
+        <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 10,
+            }}
+          >
+            <h3
+              style={{
+                fontSize: isMobile ? 14 : 15,
+                fontWeight: 700,
+                color: textPrimary,
+                margin: 0,
+              }}
+            >
+              Mes demandes
+            </h3>
+            {demandes.length > 0 && (
+              <span
+                aria-label={`${demandes.length} demande${demandes.length > 1 ? "s" : ""}`}
+                style={{
+                  background: dark ? "#334155" : "#F1F5F9",
+                  color: textSecondary,
+                  padding: "1px 8px",
+                  borderRadius: 10,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {demandes.length}
+              </span>
+            )}
           </div>
-        )}
+
+          {demandes.length === 0 ? (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                background: cardBg,
+                borderRadius: 12,
+                border: `1px solid ${cardBorder}`,
+                padding: isMobile ? 24 : 32,
+                textAlign: "center",
+                color: textSecondary,
+              }}
+            >
+              <div
+                aria-hidden="true"
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: "50%",
+                  background: dark ? "#334155" : "#F1F5F9",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 12px",
+                }}
+              >
+                <Link2 size={22} />
+              </div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: textPrimary,
+                }}
+              >
+                Aucune demande
+              </p>
+              <p style={{ margin: "4px 0 0", fontSize: 12 }}>
+                Vos demandes d'association apparaîtront ici
+              </p>
+            </div>
+          ) : (
+            <ul
+              role="list"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                ...SCROLL_AREA,
+              }}
+            >
+              {demandes.map((demande) => (
+                <li key={demande._id}>
+                  <DemandeCard
+                    demande={demande}
+                    dark={dark}
+                    isMobile={isMobile}
+                    onCancel={handleCancel}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

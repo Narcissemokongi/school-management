@@ -2,7 +2,7 @@
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useId } from "react";
 import {
   Menu, X, LogOut, Sun, Moon, ChevronLeft, FileText, Shield,
 } from "lucide-react";
@@ -26,7 +26,20 @@ const SidebarKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANT — Item de navigation (factorisation)
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+};
+
+const FOCUS_RING = (primary) => ({
+  outline: `2px solid ${primary}`,
+  outlineOffset: -2,
+});
+
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANT — Item de navigation
 // ════════════════════════════════════════════════════════════════════
 function SidebarNavItem({
   icon,
@@ -42,10 +55,11 @@ function SidebarNavItem({
 }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   const background = isActive
     ? tokens.activeBg
-    : hovered
+    : hovered || pressed
     ? tokens.hoverBg
     : "transparent";
 
@@ -57,11 +71,16 @@ function SidebarNavItem({
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerCancel={() => setPressed(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       aria-current={ariaCurrent}
       title={title}
       style={{
+        ...TAP_BASE,
         display: "flex",
         alignItems: "center",
         gap: 12,
@@ -73,14 +92,14 @@ function SidebarNavItem({
         color,
         cursor: "pointer",
         width: "calc(100% - 16px)",
+        minHeight: 44,
         textAlign: "left",
         fontSize: 14,
         fontWeight: isActive ? 600 : 400,
         transition: "background 0.2s ease, color 0.2s ease",
         whiteSpace: "nowrap",
         position: "relative",
-        outline: focused ? `2px solid ${tokens.primary}` : "none",
-        outlineOffset: -2,
+        ...(focused ? FOCUS_RING(tokens.primary) : null),
         boxSizing: "border-box",
       }}
     >
@@ -120,7 +139,9 @@ function SidebarNavItem({
             fontWeight: 600,
             marginLeft: 4,
             flexShrink: 0,
+            fontVariantNumeric: "tabular-nums",
           }}
+          aria-label={`${badge} notification${badge > 1 ? "s" : ""}`}
         >
           {badge}
         </span>
@@ -146,6 +167,91 @@ function SidebarNavItem({
 }
 
 // ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANT — Bouton icône (toggle + légal)
+// ════════════════════════════════════════════════════════════════════
+function IconButton({ onClick, tokens, ariaLabel, title, children, style }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      aria-label={ariaLabel}
+      title={title}
+      style={{
+        ...TAP_BASE,
+        background: "none",
+        border: "none",
+        color: hovered || pressed ? tokens.text : tokens.mutedText,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minWidth: 44,
+        minHeight: 44,
+        transition: "color 0.2s ease",
+        ...(focused ? FOCUS_RING(tokens.primary) : null),
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SOUS-COMPOSANT — Lien légal (texte)
+// ════════════════════════════════════════════════════════════════════
+function LegalLink({ onClick, tokens, children }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        background: "none",
+        border: "none",
+        padding: "10px 0",
+        minHeight: 44,
+        color: hovered || pressed ? tokens.text : tokens.mutedText,
+        cursor: "pointer",
+        textDecoration: "none",
+        transition: "color 0.2s ease",
+        font: "inherit",
+        textAlign: "left",
+        display: "flex",
+        alignItems: "center",
+        ...(focused ? FOCUS_RING(tokens.primary) : null),
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
 export function Sidebar({
@@ -162,17 +268,16 @@ export function Sidebar({
   onToggleCollapse,
 }) {
   const isMobile = useIsMobile();
+  const navLabelId = useId();
 
   const ecoleId = user?.ecoleId;
 
-  // ✅ Args stables
   const ecoleArgs = useMemo(
     () => (ecoleId ? { ecoleId } : "skip"),
     [ecoleId]
   );
   const ecole = useQuery(api.ecoles.get, ecoleArgs);
 
-  // ✅ Tokens centralisés
   const tokens = useMemo(
     () => ({
       bg: dark ? "#0F172A" : "#FFFFFF",
@@ -188,7 +293,6 @@ export function Sidebar({
     [dark]
   );
 
-  // ✅ Handlers stable
   const handleTabClick = useCallback(
     (id) => {
       onTabChange?.(id);
@@ -220,7 +324,6 @@ export function Sidebar({
     [handleTabClick]
   );
 
-  // ✅ Filtre mémoïsé
   const visibleMenu = useMemo(
     () =>
       menu.filter(
@@ -255,10 +358,7 @@ export function Sidebar({
           onClick={onClose}
           style={{
             position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            inset: 0,
             background: "rgba(0,0,0,0.4)",
             backdropFilter: "blur(2px)",
             WebkitBackdropFilter: "blur(2px)",
@@ -269,7 +369,11 @@ export function Sidebar({
       )}
 
       {/* ═══════════ Sidebar ═══════════ */}
-      <div
+      <aside
+        role={isMobile ? "dialog" : undefined}
+        aria-modal={isMobile && isOpen ? "true" : undefined}
+        aria-label={isMobile ? "Menu de navigation" : undefined}
+        aria-hidden={isMobile && !isOpen ? "true" : undefined}
         style={{
           width: sidebarWidth,
           maxWidth: isMobile ? 320 : undefined,
@@ -287,6 +391,8 @@ export function Sidebar({
           flexDirection: "column",
           zIndex: 120,
           overflowY: "auto",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
           boxShadow: isMobile
             ? "0 0 40px rgba(0,0,0,0.3)"
             : dark
@@ -301,40 +407,26 @@ export function Sidebar({
         }}
       >
         {/* Bouton de basculement / fermeture */}
-        <button
-          type="button"
+        <IconButton
           onClick={handleCollapseToggle}
-          aria-label={toggleLabel}
+          tokens={tokens}
+          ariaLabel={toggleLabel}
           title={toggleLabel}
           style={{
-            background: "none",
-            border: "none",
-            color: tokens.mutedText,
-            cursor: "pointer",
-            padding: "12px 16px",
             alignSelf: "flex-end",
-            transition: "color 0.2s ease",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            padding: "12px 16px",
             marginBottom: 4,
             flexShrink: 0,
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = tokens.text;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = tokens.mutedText;
-          }}
         >
           {isMobile ? (
-            <X size={24} />
+            <X size={24} aria-hidden="true" />
           ) : collapsed ? (
-            <Menu size={22} />
+            <Menu size={22} aria-hidden="true" />
           ) : (
-            <ChevronLeft size={22} />
+            <ChevronLeft size={22} aria-hidden="true" />
           )}
-        </button>
+        </IconButton>
 
         {/* Titre / Logo */}
         <div
@@ -359,7 +451,7 @@ export function Sidebar({
           {ecole?.logo ? (
             <img
               src={ecole.logo}
-              alt="Logo"
+              alt=""
               style={{
                 height: 32,
                 width: 32,
@@ -371,6 +463,7 @@ export function Sidebar({
             />
           ) : (
             <div
+              aria-hidden="true"
               style={{
                 width: 32,
                 height: 32,
@@ -402,11 +495,14 @@ export function Sidebar({
 
         {/* Menu principal */}
         <nav
+          aria-label="Menu principal"
           style={{
             flex: 1,
             overflowY: "auto",
             paddingBottom: 8,
             minHeight: 0,
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
           }}
         >
           {visibleMenu.map((item) => (
@@ -437,7 +533,7 @@ export function Sidebar({
         >
           {/* Thème */}
           <SidebarNavItem
-            icon={dark ? <Sun size={20} /> : <Moon size={20} />}
+            icon={dark ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
             label={dark ? "Mode clair" : "Mode sombre"}
             onClick={handleToggleTheme}
             collapsed={collapsed}
@@ -448,7 +544,7 @@ export function Sidebar({
 
           {/* Déconnexion */}
           <SidebarNavItem
-            icon={<LogOut size={20} />}
+            icon={<LogOut size={20} aria-hidden="true" />}
             label="Déconnexion"
             onClick={handleLogout}
             collapsed={collapsed}
@@ -461,100 +557,52 @@ export function Sidebar({
           {!isCollapsedDesktop ? (
             <div
               style={{
-                padding: "8px 20px",
+                padding: "8px 20px 12px",
                 fontSize: 12,
                 display: "flex",
                 flexDirection: "column",
-                gap: 4,
+                gap: 0,
                 alignItems: "flex-start",
               }}
             >
-              <button
-                type="button"
+              <LegalLink
                 onClick={handleLegalClick("mentions")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  color: tokens.mutedText,
-                  cursor: "pointer",
-                  textDecoration: "none",
-                  transition: "color 0.2s ease",
-                  font: "inherit",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = tokens.text;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = tokens.mutedText;
-                }}
+                tokens={tokens}
               >
                 Mentions légales
-              </button>
-              <button
-                type="button"
+              </LegalLink>
+              <LegalLink
                 onClick={handleLegalClick("confidentialite")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  color: tokens.mutedText,
-                  cursor: "pointer",
-                  textDecoration: "none",
-                  transition: "color 0.2s ease",
-                  font: "inherit",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = tokens.text;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = tokens.mutedText;
-                }}
+                tokens={tokens}
               >
                 Politique de confidentialité
-              </button>
+              </LegalLink>
             </div>
           ) : (
             <div
               style={{
                 display: "flex",
                 justifyContent: "center",
-                gap: 16,
-                padding: "12px 0",
+                gap: 8,
+                padding: "8px 0",
               }}
             >
-              <button
-                type="button"
+              <IconButton
                 onClick={() => handleTabClick("mentions")}
+                tokens={tokens}
+                ariaLabel="Mentions légales"
                 title="Mentions légales"
-                aria-label="Mentions légales"
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: tokens.mutedText,
-                  cursor: "pointer",
-                  padding: 4,
-                  display: "flex",
-                }}
               >
-                <FileText size={18} />
-              </button>
-              <button
-                type="button"
+                <FileText size={18} aria-hidden="true" />
+              </IconButton>
+              <IconButton
                 onClick={() => handleTabClick("confidentialite")}
+                tokens={tokens}
+                ariaLabel="Politique de confidentialité"
                 title="Confidentialité"
-                aria-label="Politique de confidentialité"
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: tokens.mutedText,
-                  cursor: "pointer",
-                  padding: 4,
-                  display: "flex",
-                }}
               >
-                <Shield size={18} />
-              </button>
+                <Shield size={18} aria-hidden="true" />
+              </IconButton>
             </div>
           )}
 
@@ -619,7 +667,7 @@ export function Sidebar({
             </div>
           )}
         </div>
-      </div>
+      </aside>
     </>
   );
 }

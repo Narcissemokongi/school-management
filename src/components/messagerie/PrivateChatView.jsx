@@ -1,5 +1,5 @@
 // src/components/messagerie/PrivateChatView.jsx
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useCallback, useEffect } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useStyles } from "@/styles/theme";
 import {
@@ -26,7 +26,6 @@ const PrivateChatKeyframes = (
       from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    /* ✅ FIX — mb-fade-in pour les bulles MessageBubble */
     @keyframes mb-fade-in {
       from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -34,11 +33,33 @@ const PrivateChatKeyframes = (
     .pcv-spin { animation: pcv-spin 0.9s linear infinite; }
     .pcv-fade-in { animation: pcv-fade-in 0.25s ease-out; }
     .mb-fade-in { animation: mb-fade-in 0.2s ease-out; }
+
+    .pcv-messages::-webkit-scrollbar { width: 6px; height: 6px; }
+    .pcv-messages::-webkit-scrollbar-thumb {
+      background: rgba(100,116,139,0.3);
+      border-radius: 3px;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .pcv-spin, .pcv-fade-in, .mb-fade-in { animation: none !important; }
     }
   `}</style>
 );
+
+// ════════════════════════════════════════════════════════════════════
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ════════════════════════════════════════════════════════════════════
+// ✨ Détection prefers-reduced-motion (une seule fois)
+// ════════════════════════════════════════════════════════════════════
+function getPrefersReducedMotion() {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 // ════════════════════════════════════════════════════════════════════
 // TOKENS
@@ -56,11 +77,19 @@ function buildTokens(dark) {
     primaryHover: dark ? "#6366F1" : "#4338CA",
     primarySoft: dark ? "#312E81" : "#EEF2FF",
     ghostHover: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+    ghostActive: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
     skeleton: dark ? "#334155" : "#E2E8F0",
     danger: dark ? "#F87171" : "#EF4444",
     success: dark ? "#34D399" : "#10B981",
     groupBg: dark ? "#4C1D95" : "#EDE9FE",
     groupFg: dark ? "#C4B5FD" : "#6D28D9",
+    shadowScrollBtn: dark
+      ? "0 4px 12px rgba(0,0,0,0.5)"
+      : "0 4px 12px rgba(0,0,0,0.12)",
+    separatorBg: dark ? "rgba(15,23,42,0.92)" : "rgba(248,250,252,0.92)",
+    messagesBgTransparent: dark
+      ? "linear-gradient(to bottom, #0B1220 0%, rgba(11,18,32,0.85) 60%, transparent 100%)"
+      : "linear-gradient(to bottom, #F1F5F9 0%, rgba(241,245,249,0.85) 60%, transparent 100%)",
   };
 }
 
@@ -138,15 +167,18 @@ function HeaderIconButton({
   const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   const size = isMobile ? 44 : 36;
 
   const bg = disabled
     ? "transparent"
     : variant === "primary"
-    ? hovered
+    ? pressed
       ? tokens.primaryHover
       : tokens.primary
+    : pressed
+    ? tokens.ghostActive
     : hovered
     ? tokens.ghostHover
     : "transparent";
@@ -162,10 +194,13 @@ function HeaderIconButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
       style={{
         background: bg,
         border: "none",
@@ -177,12 +212,15 @@ function HeaderIconButton({
         width: size,
         height: size,
         borderRadius: 12,
-        transition: "background 0.15s ease",
+        transition: "background 0.12s ease, transform 0.1s ease",
+        transform: pressed ? "scale(0.94)" : "scale(1)",
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: 2,
         flexShrink: 0,
         opacity: disabled ? 0.5 : 1,
         padding: 0,
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
       }}
       title={label}
       aria-label={label}
@@ -217,13 +255,18 @@ function HeaderAvatar({ name, size = 42 }) {
   );
 }
 
-function DateSeparator({ label, tokens }) {
+function DateSeparator({ label, tokens, isMobile }) {
   return (
     <div
       style={{
         display: "flex",
         justifyContent: "center",
-        margin: "16px 0 14px",
+        position: "sticky",
+        top: 0,
+        zIndex: 5,
+        padding: isMobile ? "8px 0" : "10px 0",
+        pointerEvents: "none",
+        background: tokens.messagesBgTransparent,
       }}
     >
       <span
@@ -235,6 +278,8 @@ function DateSeparator({ label, tokens }) {
           fontSize: 11,
           fontWeight: 600,
           border: `1px solid ${tokens.border}`,
+          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+          pointerEvents: "auto",
         }}
       >
         {label}
@@ -243,6 +288,7 @@ function DateSeparator({ label, tokens }) {
   );
 }
 
+// ✨ aria-hidden ajouté
 function MessagesLoading({ tokens }) {
   return (
     <div
@@ -251,6 +297,7 @@ function MessagesLoading({ tokens }) {
         justifyContent: "center",
         padding: 40,
       }}
+      aria-hidden="true"
     >
       <Loader
         size={28}
@@ -286,12 +333,47 @@ export function PrivateChatView({
 }) {
   const { dark } = useStyles();
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [backPressed, setBackPressed] = useState(false);
+  const [scrollBtnPressed, setScrollBtnPressed] = useState(false);
+
   const scrollRef = useRef(null);
 
   const tokens = useMemo(() => buildTokens(dark), [dark]);
 
+  // ✨ Détection reduced-motion (une seule fois au mount)
+  const prefersReducedMotion = useMemo(
+    () => getPrefersReducedMotion(),
+    []
+  );
+
   const canCallAudio = Boolean(handleCallUser) && Boolean(selectedUserId);
   const canCallVideo = Boolean(onVideoCall) && Boolean(selectedUserId);
+
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ NOUVEAU — SCROLL INITIAL (une seule fois au premier chargement)
+  // Résout le bug : ouverture d'une conversation → atterrit en haut
+  // ════════════════════════════════════════════════════════════════════
+  const hasScrolledInitialRef = useRef(false);
+
+  useEffect(() => {
+    if (hasScrolledInitialRef.current) return;
+    if (!messagesConversation || messagesConversation.length === 0) return;
+
+    hasScrolledInitialRef.current = true;
+
+    // Double requestAnimationFrame pour garantir que le DOM est peint
+    const raf1 = requestAnimationFrame(() => {
+      const raf2 = requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: "auto", // ✨ instantané au premier scroll
+          block: "end",
+        });
+      });
+      return () => cancelAnimationFrame(raf2);
+    });
+
+    return () => cancelAnimationFrame(raf1);
+  }, [messagesConversation, messagesEndRef]);
 
   // ════════════════════════════════════════════════════════════════════
   // SUBTITLE
@@ -305,10 +387,10 @@ export function PrivateChatView({
   }, [selectedUserObject]);
 
   // ════════════════════════════════════════════════════════════════════
-  // LAYOUT TOKENS
+  // LAYOUT
   // ════════════════════════════════════════════════════════════════════
   const headerPadding = isMobile
-    ? "calc(10px + env(safe-area-inset-top, 0px)) 12px 10px"
+    ? `calc(10px + ${SAFE_TOP}) 12px 10px`
     : "12px 16px";
 
   const avatarSize = isMobile ? 40 : 42;
@@ -316,19 +398,25 @@ export function PrivateChatView({
   // ════════════════════════════════════════════════════════════════════
   // HANDLERS
   // ════════════════════════════════════════════════════════════════════
-  const handleScroll = (e) => {
+  const handleScroll = useCallback((e) => {
     const el = e.currentTarget;
     const isNearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-    setShowScrollBtn(!isNearBottom);
-  };
+      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    setShowScrollBtn((prev) =>
+      prev === !isNearBottom ? prev : !isNearBottom
+    );
+  }, []);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  // ✨ prefers-reduced-motion respecté
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "end",
+    });
+  }, [messagesEndRef, prefersReducedMotion]);
 
   // ════════════════════════════════════════════════════════════════════
-  // CONSTRUCTION DE LA LISTE (mémoïsée)
+  // CONSTRUCTION LISTE
   // ════════════════════════════════════════════════════════════════════
   const messagesWithSeparators = useMemo(() => {
     const result = [];
@@ -372,9 +460,6 @@ export function PrivateChatView({
     return result;
   }, [messagesConversation]);
 
-  // ════════════════════════════════════════════════════════════════════
-  // RENDU
-  // ════════════════════════════════════════════════════════════════════
   return (
     <div
       style={{
@@ -400,14 +485,19 @@ export function PrivateChatView({
           gap: 8,
           background: tokens.surface,
           flexShrink: 0,
+          zIndex: 20,
+          position: "relative",
         }}
       >
         {isMobile && (
           <button
             type="button"
             onClick={goBack}
+            onTouchStart={() => setBackPressed(true)}
+            onTouchEnd={() => setBackPressed(false)}
+            onTouchCancel={() => setBackPressed(false)}
             style={{
-              background: "none",
+              background: backPressed ? tokens.ghostActive : "none",
               border: "none",
               cursor: "pointer",
               color: tokens.text,
@@ -420,6 +510,10 @@ export function PrivateChatView({
               marginLeft: -8,
               borderRadius: 12,
               flexShrink: 0,
+              transition: "background 0.12s ease, transform 0.1s ease",
+              transform: backPressed ? "scale(0.92)" : "scale(1)",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
             }}
             aria-label="Retour"
             title="Retour"
@@ -483,13 +577,22 @@ export function PrivateChatView({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
+        className="pcv-messages"
+        // ✨ role="log" : zone de log pour lecteurs d'écran
+        // aria-live="polite" : annonce les nouveaux messages sans interrompre
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
         style={{
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          padding: isMobile ? "12px 12px 4px" : "16px 16px 8px",
+          padding: isMobile ? "4px 12px 8px" : "8px 16px 12px",
           background: tokens.messagesBg,
           position: "relative",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+          scrollPaddingTop: 8,
         }}
       >
         {messagesConversation === undefined ? (
@@ -515,6 +618,7 @@ export function PrivateChatView({
                     key={item.key}
                     label={item.label}
                     tokens={tokens}
+                    isMobile={isMobile}
                   />
                 );
               }
@@ -538,30 +642,40 @@ export function PrivateChatView({
         <button
           type="button"
           onClick={scrollToBottom}
+          onTouchStart={() => setScrollBtnPressed(true)}
+          onTouchEnd={() => setScrollBtnPressed(false)}
+          onTouchCancel={() => setScrollBtnPressed(false)}
           style={{
             position: "absolute",
-            bottom: isMobile ? 76 : 72,
-            right: 16,
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            bottom: isMobile
+              ? `calc(88px + ${SAFE_BOTTOM})`
+              : 72,
+            right: isMobile
+              ? `calc(16px + ${SAFE_RIGHT})`
+              : 16,
+            width: isMobile ? 48 : 44,
+            height: isMobile ? 48 : 44,
+            borderRadius: isMobile ? 24 : 22,
             background: tokens.surface,
             border: `1px solid ${tokens.border}`,
-            boxShadow: dark
-              ? "0 4px 12px rgba(0,0,0,0.4)"
-              : "0 4px 12px rgba(0,0,0,0.1)",
+            boxShadow: tokens.shadowScrollBtn,
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: tokens.primary,
-            zIndex: 10,
+            zIndex: 15,
             padding: 0,
+            transition:
+              "transform 0.1s ease, background 0.12s ease, opacity 0.15s ease",
+            transform: scrollBtnPressed ? "scale(0.9)" : "scale(1)",
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
           }}
           title="Descendre"
           aria-label="Descendre en bas de la conversation"
         >
-          <ChevronDown size={20} />
+          <ChevronDown size={isMobile ? 22 : 20} />
         </button>
       )}
 
@@ -569,7 +683,9 @@ export function PrivateChatView({
       <div
         style={{
           flexShrink: 0,
-          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          paddingBottom: SAFE_BOTTOM,
+          zIndex: 20,
+          position: "relative",
         }}
       >
         <ChatInput

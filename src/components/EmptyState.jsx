@@ -1,11 +1,22 @@
 // src/components/EmptyState.jsx
 import { FileText, Loader } from "lucide-react";
 import { useStyles } from "@/styles/theme";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES module-level (injectés UNE SEULE FOIS par React)
+// SAFE-AREA
+// ════════════════════════════════════════════════════════════════════
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+// ✨ Taille minimale tap target mobile
+const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES module-level
 // ════════════════════════════════════════════════════════════════════
 const EmptyStateKeyframes = (
   <style>{`
@@ -26,6 +37,104 @@ const EmptyStateKeyframes = (
     }
   `}</style>
 );
+
+// ════════════════════════════════════════════════════════════════════
+// ✨ ACTION BUTTON — refactoré avec state React
+// ════════════════════════════════════════════════════════════════════
+function ActionButton({
+  label,
+  onClick,
+  variant = "primary",
+  dark,
+  effectiveCompact,
+  isMobile,
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const isPrimary = variant === "primary";
+
+  // Couleurs
+  const bg = isPrimary
+    ? pressed
+      ? dark
+        ? "#6366F1"
+        : "#4338CA"
+      : hovered && !isMobile
+      ? dark
+        ? "#6366F1"
+        : "#4338CA"
+      : dark
+      ? "#818CF8"
+      : "#4F46E5"
+    : pressed || (hovered && !isMobile)
+    ? dark
+      ? "#263142"
+      : "#F1F5F9"
+    : dark
+    ? "#1E293B"
+    : "#FFFFFF";
+
+  const fg = isPrimary ? "white" : dark ? "#F1F5F9" : "#1E293B";
+  const border = isPrimary
+    ? "none"
+    : `1px solid ${dark ? "#334155" : "#E2E8F0"}`;
+
+  const handleTouchStart = () => setPressed(true);
+  const handleTouchEnd = () => setPressed(false);
+  const handleTouchCancel = () => setPressed(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
+      style={{
+        padding: effectiveCompact ? "10px 16px" : "12px 20px",
+        background: bg,
+        color: fg,
+        border,
+        borderRadius: 8,
+        cursor: "pointer",
+        fontWeight: 500,
+        fontSize: effectiveCompact ? 13 : 14,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        transition:
+          "background 0.12s ease, transform 0.1s ease, border-color 0.15s ease",
+        outline: focused
+          ? `2px solid ${dark ? "#818CF8" : "#4F46E5"}`
+          : "none",
+        outlineOffset: 2,
+        whiteSpace: "nowrap",
+        // ✨ Feedback tap
+        transform: pressed
+          ? "scale(0.97)"
+          : hovered && !isMobile
+          ? "translateY(-1px)"
+          : "translateY(0)",
+        // ✨ Mobile : min height WCAG
+        minHeight: isMobile ? MOBILE_TAP : undefined,
+        // ✨ Neutralise tap delay + flash
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        fontFamily: "inherit",
+        boxSizing: "border-box",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
 export function EmptyState({
   icon: Icon = FileText,
@@ -52,7 +161,7 @@ export function EmptyState({
 
   const [reduceMotion, setReduceMotion] = useState(false);
 
-  // ✅ FIX #6 — respect prefers-reduced-motion (fallback Safari < 14)
+  // ✅ Respect prefers-reduced-motion (fallback Safari < 14)
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
 
@@ -75,7 +184,6 @@ export function EmptyState({
   const iconSize = effectiveCompact ? 28 : 36;
   const circleSize = effectiveCompact ? 60 : 80;
 
-  // ✅ FIX #3 — inline=true → background + border + shadow tous neutralisés
   const backgroundColor = inline
     ? "transparent"
     : dark
@@ -93,7 +201,11 @@ export function EmptyState({
   const secondaryColor = dark ? "#64748B" : "#94A3B8";
 
   const alignItems =
-    align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
+    align === "left"
+      ? "flex-start"
+      : align === "right"
+      ? "flex-end"
+      : "center";
 
   const textAlignValue = align;
   const actionsJustify =
@@ -103,17 +215,23 @@ export function EmptyState({
       ? "flex-end"
       : "center";
 
+  // ✨ Padding avec safe-area
+  const basePadding = effectiveCompact
+    ? "24px 16px"
+    : "40px 24px";
+  const padding = isMobile
+    ? `calc(24px + ${SAFE_TOP}) calc(16px + ${SAFE_RIGHT}) calc(24px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_LEFT})`
+    : basePadding;
+
   return (
     <>
       {EmptyStateKeyframes}
       <div
-        // ✅ FIX #5 — `role="region"` au lieu de `status` : plus adapté
-        // à un contenu statique. On garde `aria-label` pour le contexte.
         role="region"
         aria-label={typeof title === "string" ? title : "État vide"}
         style={{
           textAlign: textAlignValue,
-          padding: effectiveCompact ? "24px 16px" : "40px 24px",
+          padding,
           background: backgroundColor,
           borderRadius: inline ? 0 : 16,
           boxShadow: inline
@@ -121,7 +239,6 @@ export function EmptyState({
             : dark
             ? "none"
             : "0 1px 3px rgba(0,0,0,0.05)",
-          // ✅ FIX #3 — pas de border si inline (évite 2px parasites)
           border: inline ? "none" : `1px solid ${borderColor}`,
           transition: "background-color 0.3s, border-color 0.3s",
           animation: shouldAnimate
@@ -131,7 +248,6 @@ export function EmptyState({
           display: "flex",
           flexDirection: "column",
           alignItems,
-          // ✅ FIX #8 — `minWidth: 0` pour permettre la compression enfant
           minWidth: 0,
           maxWidth: "100%",
           boxSizing: "border-box",
@@ -194,14 +310,13 @@ export function EmptyState({
           </div>
         )}
 
-        {/* Titre — ✅ FIX #7 : title natif si long */}
+        {/* Titre */}
         <h3
           style={{
             fontSize: effectiveCompact ? 16 : 18,
             fontWeight: 600,
             color: titleColor,
             margin: "0 0 8px",
-            // ✅ FIX #4 — plus de maxWidth fixe, on respecte le parent
             maxWidth: "100%",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -211,7 +326,7 @@ export function EmptyState({
           {title}
         </h3>
 
-        {/* Message — ✅ FIX #4 : maxWidth basé sur conteneur au lieu de 360px fixe */}
+        {/* Message */}
         <p
           style={{
             fontSize: effectiveCompact ? 13 : 14,
@@ -250,103 +365,30 @@ export function EmptyState({
               justifyContent: actionsJustify,
               flexWrap: "wrap",
               marginTop: 20,
-              // ✅ FIX #8 — width: 100% uniquement si align != center
-              // Sinon, laisse le parent gérer
               width: align === "center" ? "auto" : "100%",
               maxWidth: "100%",
-              // ✅ FIX — `minWidth: 0` pour permettre la compression
               minWidth: 0,
             }}
           >
             {actionLabel && onAction && (
-              <button
-                type="button"
+              <ActionButton
+                label={actionLabel}
                 onClick={onAction}
-                style={{
-                  padding: effectiveCompact ? "8px 16px" : "10px 20px",
-                  background: dark ? "#818CF8" : "#4F46E5",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  fontWeight: 500,
-                  fontSize: effectiveCompact ? 13 : 14,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  transition: "background 0.2s, transform 0.1s",
-                  outline: "none",
-                  whiteSpace: "nowrap",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = dark
-                    ? "#6366F1"
-                    : "#4338CA";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = dark
-                    ? "#818CF8"
-                    : "#4F46E5";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.outline = `2px solid ${
-                    dark ? "#818CF8" : "#4F46E5"
-                  }`;
-                  e.currentTarget.style.outlineOffset = "2px";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.outline = "none";
-                }}
-              >
-                {actionLabel}
-              </button>
+                variant="primary"
+                dark={dark}
+                effectiveCompact={effectiveCompact}
+                isMobile={isMobile}
+              />
             )}
             {secondaryActionLabel && onSecondaryAction && (
-              <button
-                type="button"
+              <ActionButton
+                label={secondaryActionLabel}
                 onClick={onSecondaryAction}
-                style={{
-                  padding: effectiveCompact ? "8px 16px" : "10px 20px",
-                  background: dark ? "#1E293B" : "#FFFFFF",
-                  color: dark ? "#F1F5F9" : "#1E293B",
-                  border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  fontWeight: 500,
-                  fontSize: effectiveCompact ? 13 : 14,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  transition: "background 0.2s, transform 0.1s",
-                  outline: "none",
-                  whiteSpace: "nowrap",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = dark
-                    ? "#263142"
-                    : "#F1F5F9";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = dark
-                    ? "#1E293B"
-                    : "#FFFFFF";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.outline = `2px solid ${
-                    dark ? "#818CF8" : "#4F46E5"
-                  }`;
-                  e.currentTarget.style.outlineOffset = "2px";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.outline = "none";
-                }}
-              >
-                {secondaryActionLabel}
-              </button>
+                variant="secondary"
+                dark={dark}
+                effectiveCompact={effectiveCompact}
+                isMobile={isMobile}
+              />
             )}
           </div>
         )}

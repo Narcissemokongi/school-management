@@ -250,12 +250,12 @@ export const getByUserId = query({
 });
 
 /**
- * `get` — inchangé.
+ * ✅ FIX ÉLÈVE : l'élève peut consulter ses propres données.
  */
 export const get = query({
   args: {
     id: v.id("eleves"),
-    userId: v.optional(v.id("users")), // ✅ FIX SÉCURITÉ : ajout auth (était sans aucune vérif)
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     if (args.userId) {
@@ -265,13 +265,23 @@ export const get = query({
       const eleve = await ctx.db.get(args.id);
       if (!eleve) return null;
 
-      // Un parent peut voir ses propres enfants, le staff son école, superAdmin tout
       if (!isSuperAdmin(caller)) {
-        const isParent = (eleve as any).parentId === args.userId;
+        const eleveData = eleve as any;
+
+        // ✅ FIX — L'élève voit ses propres données
+        const isSelfEleve =
+          caller.role === "eleve" &&
+          eleveData.userId === args.userId;
+
+        // Parent legacy
+        const isParent = eleveData.parentId === args.userId;
+
+        // Staff école
         const isStaff =
-          caller.ecoleId === (eleve as any).ecoleId &&
+          caller.ecoleId === eleveData.ecoleId &&
           ["admin", "directeur", "disciplinaire", "enseignant", "comptable"].includes(caller.role);
-        if (!isParent && !isStaff) {
+
+        if (!isSelfEleve && !isParent && !isStaff) {
           throw new Error("Accès refusé : vous ne pouvez pas consulter cet élève.");
         }
       }
@@ -280,7 +290,6 @@ export const get = query({
     // Sans userId : retourner uniquement des données non-sensibles
     const eleve = await ctx.db.get(args.id);
     if (!eleve) return null;
-    // ✅ Retourner uniquement nom/code (pour les lookups par matricule publics)
     return { _id: eleve._id, nom: eleve.nom, postnom: eleve.postnom, code: eleve.code };
   },
 });
@@ -298,7 +307,6 @@ export const listByClasse = query({
   handler: async (ctx, args) => {
     const { ecoleId, anneeId, classe, userId } = args;
 
-    // 🟡 FIX : cloisonnement si userId fourni
     if (userId) {
       const caller = await ctx.db.get(userId as Id<"users">);
       if (!caller) throw new Error("Utilisateur introuvable");
@@ -322,10 +330,6 @@ export const listByClasse = query({
 
 // ========== MUTATIONS ==========
 
-/**
- * 🟡 FIX : `userId` devient REQUIS + audit.
- * 🟢 FIX : génère un code de matricule si non fourni.
- */
 export const add = mutation({
   args: {
     nom: v.string(),
@@ -351,7 +355,6 @@ export const add = mutation({
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
 
-    // 🟢 FIX : générer un matricule unique si non fourni
     let code = args.code?.trim();
     if (!code) {
       let attempts = 0;
@@ -391,7 +394,6 @@ export const add = mutation({
       codeUtilise: false,
     });
 
-    // 🟡 Audit
     await ctx.db.insert("audit", {
       userId: args.userId,
       action: "create_eleve",
@@ -406,9 +408,6 @@ export const add = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `actionUserId` devient REQUIS + audit.
- */
 export const update = mutation({
   args: {
     id: v.id("eleves"),
@@ -438,14 +437,12 @@ export const update = mutation({
     if (!eleve) throw new Error("Élève introuvable");
     await requireEcoleAdmin(ctx, actionUserId, eleve.ecoleId);
 
-    // 🟢 FIX : évite un patch vide
     if (Object.keys(fields).length === 0) {
       return { success: true, noChange: true };
     }
 
     await ctx.db.patch(id, fields);
 
-    // 🟡 Audit
     await ctx.db.insert("audit", {
       userId: actionUserId,
       action: "update_eleve",
@@ -460,9 +457,6 @@ export const update = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `actionUserId` REQUIS + audit.
- */
 export const associerParent = mutation({
   args: {
     eleveId: v.id("eleves"),
@@ -476,7 +470,6 @@ export const associerParent = mutation({
 
     await ctx.db.patch(args.eleveId, { parentId: args.parentId });
 
-    // 🟡 Audit
     await ctx.db.insert("audit", {
       userId: args.actionUserId,
       action: args.parentId ? "associer_parent" : "dissocier_parent",
@@ -493,9 +486,6 @@ export const associerParent = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `actionUserId` REQUIS + audit.
- */
 export const associerCompteEleve = mutation({
   args: {
     eleveId: v.id("eleves"),
@@ -509,7 +499,6 @@ export const associerCompteEleve = mutation({
 
     await ctx.db.patch(args.eleveId, { userId: args.userId });
 
-    // 🟡 Audit
     await ctx.db.insert("audit", {
       userId: args.actionUserId,
       action: args.userId ? "associer_compte_eleve" : "dissocier_compte_eleve",
@@ -526,9 +515,6 @@ export const associerCompteEleve = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `actionUserId` REQUIS + limite tentatives matricule + audit + comptage.
- */
 export const importEleves = mutation({
   args: {
     eleves: v.array(
@@ -549,7 +535,6 @@ export const importEleves = mutation({
     if (args.eleves.length === 0) {
       throw new Error("Aucun élève à importer.");
     }
-    // ✅ FIX SÉCURITÉ E9 : limite anti-DoS (max 500 élèves par import)
     if (args.eleves.length > 500) {
       throw new Error("Maximum 500 élèves par import. Découpez votre fichier en plusieurs parties.");
     }
@@ -557,7 +542,6 @@ export const importEleves = mutation({
     let inserted = 0;
 
     for (const el of args.eleves) {
-      // 🟢 FIX : limite de tentatives pour éviter une boucle infinie
       let code = "";
       let attempts = 0;
       while (attempts < 10) {
@@ -596,7 +580,6 @@ export const importEleves = mutation({
       inserted++;
     }
 
-    // 🟡 Audit
     await ctx.db.insert("audit", {
       userId: args.actionUserId,
       action: "import_eleves",
@@ -611,9 +594,6 @@ export const importEleves = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `actionUserId` REQUIS + audit.
- */
 export const updateDecision = mutation({
   args: {
     inscriptionId: v.id("inscriptions"),
@@ -627,7 +607,6 @@ export const updateDecision = mutation({
 
     await ctx.db.patch(args.inscriptionId, { decisionConseil: args.decision });
 
-    // 🟡 Audit
     await ctx.db.insert("audit", {
       userId: args.actionUserId,
       action: "update_decision",
@@ -642,10 +621,6 @@ export const updateDecision = mutation({
   },
 });
 
-/**
- * 🟡 FIX : `actionUserId` REQUIS + audit + suppression batch par table.
- * 🟢 FIX : limite `.take(500)` par table pour éviter timeout.
- */
 export const remove = mutation({
   args: {
     id: v.id("eleves"),
@@ -656,7 +631,6 @@ export const remove = mutation({
     if (!eleve) throw new Error("Élève introuvable");
     await requireEcoleAdmin(ctx, args.actionUserId, eleve.ecoleId);
 
-    // Suppression des inscriptions
     const inscriptions = await ctx.db
       .query("inscriptions")
       .withIndex("by_eleveId", (q) => q.eq("eleveId", args.id))
@@ -665,7 +639,6 @@ export const remove = mutation({
       await ctx.db.delete(ins._id);
     }
 
-    // Suppression des données liées (batch 500 par table)
     const tables = ["notes", "absences", "frais", "punitions"];
     let totalDeleted = 0;
     for (const table of tables) {
@@ -679,10 +652,8 @@ export const remove = mutation({
       }
     }
 
-    // Suppression de l'élève
     await ctx.db.delete(args.id);
 
-    // 🟡 Audit
     await ctx.db.insert("audit", {
       userId: args.actionUserId,
       action: "delete_eleve",

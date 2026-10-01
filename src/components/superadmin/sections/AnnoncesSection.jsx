@@ -6,13 +6,14 @@ import { useTokens } from "@/theme/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Button, IconButton } from "@/components/ui";
+import { Button, IconButton, BottomSheet, Fab } from "@/components/ui";
 import {
   Megaphone, Plus, Pencil, Trash2, Eye, EyeOff, Loader,
   Info, AlertTriangle, Wrench, CheckCircle2,
   Pin, Copy,
   BarChart3, File, Rocket, Repeat, Paperclip,
-  Lock, // ✨ NOUVEAU — icône cadenas pour boutons désactivés
+  Lock,
+  Filter, // ✨ NOUVEAU
 } from "lucide-react";
 import { AnnonceModal } from "../annonces/AnnonceModal";
 import { StatsLectureModal } from "../annonces/StatsLectureModal";
@@ -153,8 +154,8 @@ function Chip({ color, Icon, label }) {
 // ════════════════════════════════════════════════
 export function AnnoncesSection({
   userId,
-  canWrite = true,   // ✨ NOUVEAU — défaut true (rétrocompat)
-  canDelete = true,  // ✨ NOUVEAU — défaut true (rétrocompat)
+  canWrite = true,
+  canDelete = true,
 }) {
   const t = useTokens();
   const isMobile = useIsMobile();
@@ -165,6 +166,9 @@ export function AnnoncesSection({
   const [filtreType, setFiltreType] = useState(null);
   const [filtreBrouillon, setFiltreBrouillon] = useState(false);
   const [statsModal, setStatsModal] = useState(null);
+
+  // ✨ NOUVEAU — Bottom Sheet filtres mobile
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const listArgs = useMemo(
     () => ({
@@ -244,7 +248,23 @@ export function AnnoncesSection({
     setModalOpen(true);
   };
 
+  // ✨ NOUVEAU — Créer un brouillon directement
+  const handleCreateBrouillon = () => {
+    setEditing({
+      brouillon: true,
+      _duplicate: true, // force le mode création
+    });
+    setModalOpen(true);
+  };
+
   const handleOpenStats = (a) => setStatsModal(a);
+
+  const hasActiveFilter = filtreType !== null || filtreBrouillon;
+
+  const resetFilters = () => {
+    setFiltreType(null);
+    setFiltreBrouillon(false);
+  };
 
   // ─── Loading ─────────────────────────────────
   if (annoncesRaw === undefined || statsRaw === undefined) {
@@ -315,7 +335,8 @@ export function AnnoncesSection({
             Communiquez avec les admins d'école via des bannières persistantes
           </p>
         </div>
-        {canWrite && (
+        {/* ✨ Bouton visible uniquement sur desktop */}
+        {canWrite && !isMobile && (
           <Button icon={<Plus size={16} />} onClick={handleCreate}>
             Nouvelle annonce
           </Button>
@@ -371,55 +392,108 @@ export function AnnoncesSection({
         />
       </div>
 
-      {/* ═══ Filtres ═══ */}
-      <div style={{ display: "flex", gap: t.space.sm, flexWrap: "wrap" }}>
-        {[null, "info", "warning", "maintenance", "success"].map((ty) => (
+      {/* ✨ Bouton Filtres mobile */}
+      {isMobile && (
+        <button
+          type="button"
+          onClick={() => setShowMobileFilters(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            padding: "10px 14px",
+            border: `1px solid ${t.border.default}`,
+            borderRadius: t.radius.sm,
+            background: hasActiveFilter
+              ? `${t.accent.primary}15`
+              : t.surface.elevated,
+            color: hasActiveFilter ? t.accent.primary : t.text.secondary,
+            cursor: "pointer",
+            fontSize: t.font.size.sm,
+            fontWeight: 600,
+            fontFamily: t.font.family,
+            width: "100%",
+          }}
+        >
+          <Filter size={14} />
+          Filtres
+          {hasActiveFilter && (
+            <span
+              style={{
+                background: t.accent.primary,
+                color: "#FFFFFF",
+                borderRadius: t.radius.full,
+                minWidth: 18,
+                height: 18,
+                padding: "0 5px",
+                fontSize: 10,
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              !
+            </span>
+          )}
+        </button>
+      )}
+
+      {/* ═══ Filtres (desktop uniquement) ═══ */}
+      {!isMobile && (
+        <div style={{ display: "flex", gap: t.space.sm, flexWrap: "wrap" }}>
+          {[null, "info", "warning", "maintenance", "success"].map((ty) => (
+            <button
+              key={ty ?? "all"}
+              type="button"
+              onClick={() => setFiltreType(ty)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: t.radius.sm,
+                border: `1px solid ${
+                  filtreType === ty ? t.accent.primary : t.border.default
+                }`,
+                background:
+                  filtreType === ty ? `${t.accent.primary}15` : "transparent",
+                color:
+                  filtreType === ty ? t.accent.primary : t.text.secondary,
+                cursor: "pointer",
+                fontSize: t.font.size.xs,
+                fontWeight: 600,
+                fontFamily: t.font.family,
+              }}
+            >
+              {ty ? TYPE_CONFIG[ty].label : "Tous"}
+            </button>
+          ))}
+
           <button
-            key={ty ?? "all"}
             type="button"
-            onClick={() => setFiltreType(ty)}
+            onClick={() => setFiltreBrouillon((v) => !v)}
             style={{
               padding: "6px 12px",
               borderRadius: t.radius.sm,
               border: `1px solid ${
-                filtreType === ty ? t.accent.primary : t.border.default
+                filtreBrouillon ? "#F59E0B" : t.border.default
               }`,
-              background:
-                filtreType === ty ? `${t.accent.primary}15` : "transparent",
-              color: filtreType === ty ? t.accent.primary : t.text.secondary,
+              background: filtreBrouillon ? "#F59E0B15" : "transparent",
+              color: filtreBrouillon ? "#F59E0B" : t.text.secondary,
               cursor: "pointer",
               fontSize: t.font.size.xs,
               fontWeight: 600,
               fontFamily: t.font.family,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              marginLeft: "auto",
             }}
           >
-            {ty ? TYPE_CONFIG[ty].label : "Tous"}
+            <File size={12} />
+            Brouillons ({stats.brouillons ?? 0})
           </button>
-        ))}
-
-        <button
-          type="button"
-          onClick={() => setFiltreBrouillon((v) => !v)}
-          style={{
-            padding: "6px 12px",
-            borderRadius: t.radius.sm,
-            border: `1px solid ${filtreBrouillon ? "#F59E0B" : t.border.default}`,
-            background: filtreBrouillon ? "#F59E0B15" : "transparent",
-            color: filtreBrouillon ? "#F59E0B" : t.text.secondary,
-            cursor: "pointer",
-            fontSize: t.font.size.xs,
-            fontWeight: 600,
-            fontFamily: t.font.family,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            marginLeft: isMobile ? 0 : "auto",
-          }}
-        >
-          <File size={12} />
-          Brouillons ({stats.brouillons ?? 0})
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* ═══ Liste ═══ */}
       {annonces.length === 0 ? (
@@ -514,7 +588,11 @@ export function AnnoncesSection({
                     )}
 
                     {isEpinglee && !isBrouillon && (
-                      <Chip color={t.accent.primary} Icon={Pin} label="Épinglée" />
+                      <Chip
+                        color={t.accent.primary}
+                        Icon={Pin}
+                        label="Épinglée"
+                      />
                     )}
 
                     <h3
@@ -604,7 +682,6 @@ export function AnnoncesSection({
                     flexWrap: "wrap",
                   }}
                 >
-                  {/* ✨ Stats lecture — toujours visible (lecture seule) */}
                   <IconButton
                     icon={<BarChart3 size={16} />}
                     label="Stats de lecture"
@@ -613,7 +690,6 @@ export function AnnoncesSection({
                     onClick={() => handleOpenStats(a)}
                   />
 
-                  {/* ✨ V2 — Publier brouillon (canWrite requis) */}
                   {canWrite && isBrouillon && (
                     <IconButton
                       icon={<Rocket size={16} />}
@@ -624,7 +700,6 @@ export function AnnoncesSection({
                     />
                   )}
 
-                  {/* ✨ Épingler (canWrite requis) */}
                   {canWrite && !isBrouillon && (
                     <IconButton
                       icon={
@@ -641,7 +716,6 @@ export function AnnoncesSection({
                     />
                   )}
 
-                  {/* ✨ Dupliquer (canWrite requis) */}
                   {canWrite && (
                     <IconButton
                       icon={<Copy size={16} />}
@@ -652,7 +726,6 @@ export function AnnoncesSection({
                     />
                   )}
 
-                  {/* Activer / Désactiver (canWrite requis) */}
                   {canWrite && !isBrouillon && (
                     <IconButton
                       icon={a.actif ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -663,7 +736,6 @@ export function AnnoncesSection({
                     />
                   )}
 
-                  {/* ✨ Modifier (canWrite requis) */}
                   {canWrite && (
                     <IconButton
                       icon={<Pencil size={16} />}
@@ -674,7 +746,6 @@ export function AnnoncesSection({
                     />
                   )}
 
-                  {/* ✨ Supprimer (canDelete requis) */}
                   {canDelete && (
                     <IconButton
                       icon={<Trash2 size={16} />}
@@ -710,6 +781,227 @@ export function AnnoncesSection({
           onClose={() => setStatsModal(null)}
         />
       )}
+
+      {/* ✨ NOUVEAU — FAB mobile (extensible : Annonce + Brouillon) */}
+      {isMobile && canWrite && (
+        <Fab
+          icon={<Plus size={22} />}
+          label="Nouvelle annonce"
+          actions={[
+            {
+              label: "Annonce",
+              icon: <Megaphone size={14} />,
+              color: t.accent.primary,
+              onClick: handleCreate,
+            },
+            {
+              label: "Brouillon",
+              icon: <File size={14} />,
+              color: "#F59E0B",
+              onClick: handleCreateBrouillon,
+            },
+          ]}
+          bottom={24}
+        />
+      )}
+
+      {/* ✨ NOUVEAU — Bottom Sheet Filtres mobile */}
+      <BottomSheet
+        open={showMobileFilters}
+        onClose={() => setShowMobileFilters(false)}
+        title="Filtres"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Filtre type */}
+          <div>
+            <div
+              style={{
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                color: t.text.primary,
+                marginBottom: 10,
+              }}
+            >
+              Type d'annonce
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[null, "info", "warning", "maintenance", "success"].map((ty) => {
+                const active = filtreType === ty;
+                const conf = ty ? TYPE_CONFIG[ty] : null;
+                return (
+                  <button
+                    key={ty ?? "all"}
+                    type="button"
+                    onClick={() => setFiltreType(ty)}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: t.radius.full,
+                      border: `1px solid ${
+                        active
+                          ? conf?.color ?? t.accent.primary
+                          : t.border.default
+                      }`,
+                      background: active
+                        ? `${conf?.color ?? t.accent.primary}15`
+                        : "transparent",
+                      color: active
+                        ? conf?.color ?? t.accent.primary
+                        : t.text.secondary,
+                      cursor: "pointer",
+                      fontSize: t.font.size.sm,
+                      fontWeight: 600,
+                      fontFamily: t.font.family,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    {conf?.Icon && <conf.Icon size={12} />}
+                    {ty ? conf.label : "Tous"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Toggle brouillons */}
+          <div>
+            <div
+              style={{
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                color: t.text.primary,
+                marginBottom: 10,
+              }}
+            >
+              Brouillons
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltreBrouillon((v) => !v)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                width: "100%",
+                padding: "12px 16px",
+                border: `1px solid ${
+                  filtreBrouillon ? "#F59E0B" : t.border.default
+                }`,
+                borderRadius: t.radius.sm,
+                background: filtreBrouillon ? "#F59E0B15" : "transparent",
+                cursor: "pointer",
+                fontFamily: t.font.family,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  color: filtreBrouillon ? "#F59E0B" : t.text.secondary,
+                  fontSize: t.font.size.sm,
+                  fontWeight: 600,
+                }}
+              >
+                <File size={16} />
+                Voir uniquement les brouillons
+                <span
+                  style={{
+                    fontSize: t.font.size.xs,
+                    color: t.text.muted,
+                    fontWeight: 500,
+                  }}
+                >
+                  ({stats.brouillons ?? 0})
+                </span>
+              </div>
+              <div
+                style={{
+                  width: 44,
+                  height: 24,
+                  borderRadius: 12,
+                  background: filtreBrouillon ? "#F59E0B" : t.border.default,
+                  position: "relative",
+                  transition: "background 0.2s",
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 2,
+                    left: filtreBrouillon ? 22 : 2,
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: "#FFFFFF",
+                    transition: "left 0.2s",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                  }}
+                />
+              </div>
+            </button>
+          </div>
+
+          {/* Info résultats */}
+          <div
+            style={{
+              padding: t.space.sm,
+              background: `${t.accent.primary}08`,
+              border: `1px solid ${t.accent.primary}20`,
+              borderRadius: t.radius.sm,
+              fontSize: t.font.size.xs,
+              color: t.text.secondary,
+              textAlign: "center",
+            }}
+          >
+            {annonces.length} annonce(s) affichée(s)
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 10 }}>
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                style={{
+                  flex: 1,
+                  padding: 14,
+                  background: "transparent",
+                  color: "#EF4444",
+                  border: `1px solid ${t.border.default}`,
+                  borderRadius: t.radius.sm,
+                  cursor: "pointer",
+                  fontSize: t.font.size.sm,
+                  fontWeight: 600,
+                  fontFamily: t.font.family,
+                }}
+              >
+                Réinitialiser
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(false)}
+              style={{
+                flex: 1,
+                padding: 14,
+                background: t.accent.primary,
+                color: "#FFFFFF",
+                border: "none",
+                borderRadius: t.radius.sm,
+                cursor: "pointer",
+                fontSize: t.font.size.sm,
+                fontWeight: 700,
+                fontFamily: t.font.family,
+              }}
+            >
+              Appliquer
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
 
       <ConfirmDialog {...dialogProps} />
     </div>

@@ -1,3 +1,4 @@
+// src/components/ErrorBoundary.jsx
 import { Component, useState, useEffect, useCallback } from "react";
 import { useTheme } from "./ThemeProvider";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -6,9 +7,23 @@ import {
   ChevronDown, ChevronUp,
 } from "lucide-react";
 
-// ============================================================
-// KEYFRAMES (module-level, préfixés eb-*)
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// CONSTANTES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
+const TAP_BASE = {
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
+  minHeight: 44,
+};
+
+const FOCUS_RING = (color) => ({
+  outline: `2px solid ${color}`,
+  outlineOffset: 2,
+});
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES MODULE-LEVEL
+// ════════════════════════════════════════════════════════════════════
 const ErrorBoundaryKeyframes = (
   <style>{`
     @keyframes eb-fadeIn {
@@ -20,23 +35,17 @@ const ErrorBoundaryKeyframes = (
       70%  { box-shadow: 0 0 0 15px rgba(239,68,68,0); }
       100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
     }
-    .eb-fade-in {
-      animation: eb-fadeIn 0.5s ease-out;
-    }
-    .eb-pulse {
-      animation: eb-pulse 2s infinite;
-    }
+    .eb-fade-in { animation: eb-fadeIn 0.5s ease-out; }
+    .eb-pulse { animation: eb-pulse 2s infinite; }
     @media (prefers-reduced-motion: reduce) {
-      .eb-fade-in, .eb-pulse {
-        animation: none !important;
-      }
+      .eb-fade-in, .eb-pulse { animation: none !important; }
     }
   `}</style>
 );
 
-// ============================================================
-// HOOK : prefers-reduced-motion (correct, avec fallback Safari)
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// HOOK : prefers-reduced-motion
+// ════════════════════════════════════════════════════════════════════
 function usePrefersReducedMotion() {
   const [reduceMotion, setReduceMotion] = useState(() => {
     if (typeof window === "undefined" || !window.matchMedia) return false;
@@ -49,7 +58,6 @@ function usePrefersReducedMotion() {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const handler = (e) => setReduceMotion(e.matches);
 
-    // ✅ Fallback addListener pour vieux Safari
     if (media.addEventListener) {
       media.addEventListener("change", handler);
       return () => media.removeEventListener("change", handler);
@@ -62,9 +70,90 @@ function usePrefersReducedMotion() {
   return reduceMotion;
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
+// PRESSABLE — feedback tap + focus ring via state React
+// ════════════════════════════════════════════════════════════════════
+function Pressable({
+  onClick, style, children, disabled = false, type = "button",
+  focusColor, ariaLabel, hoverStyle, ...rest
+}) {
+  const [pressed, setPressed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setPressed(false); setHovered(false); }}
+      onPointerCancel={() => setPressed(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed
+          ? "scale(0.97)"
+          : hovered && !disabled
+          ? "translateY(-2px)"
+          : "translateY(0) scale(1)",
+        transition: "transform 0.1s ease, background 0.2s",
+        ...(focused && !disabled && focusColor ? FOCUS_RING(focusColor) : null),
+        ...(hovered && !disabled && hoverStyle ? hoverStyle : null),
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// LIEN ACCUEIL — état React pour hover/focus
+// ════════════════════════════════════════════════════════════════════
+function HomeLink({ style, hoverStyle, focusColor, children }) {
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <a
+      href="/"
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => { setPressed(false); setHovered(false); }}
+      onPointerCancel={() => setPressed(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...TAP_BASE,
+        transform: pressed
+          ? "scale(0.97)"
+          : hovered
+          ? "translateY(-2px)"
+          : "translateY(0) scale(1)",
+        transition: "transform 0.1s ease, background 0.2s",
+        ...(focused && focusColor ? FOCUS_RING(focusColor) : null),
+        ...(hovered && hoverStyle ? hoverStyle : null),
+        ...style,
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // AFFICHAGE DE L'ERREUR
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 function ErrorDisplay({
   error,
   onRetry,
@@ -96,7 +185,7 @@ function ErrorDisplay({
   const iconSize = isMobile ? 36 : 44;
   const titleFontSize = isMobile ? 22 : 28;
   const messageFontSize = isMobile ? 14 : 15;
-  const errorBoxFontSize = isMobile ? 11 : 12;
+  const errorBoxFontSize = isMobile ? 12 : 12;
   const errorBoxMaxWidth = isMobile ? "95%" : 500;
   const actionButtonPadding = isMobile ? "12px 16px" : "12px 24px";
   const actionButtonFontSize = 15;
@@ -104,270 +193,269 @@ function ErrorDisplay({
   const actionsGap = isMobile ? 8 : 12;
   const actionsButtonWidth = isMobile ? "100%" : "auto";
 
+  const primaryBg = dark ? "#818CF8" : "#4F46E5";
+  const primaryBgHover = dark ? "#6366F1" : "#4338CA";
+  const secondaryBg = dark ? "#1E293B" : "#FFFFFF";
+  const secondaryBgHover = dark ? "#263142" : "#F1F5F9";
+  const secondaryBorder = dark ? "#334155" : "#E2E8F0";
+
   return (
-    <div
-      role="alert"
-      aria-live="assertive"
-      className={reduceMotion ? "" : "eb-fade-in"}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-        padding: containerPadding,
-        textAlign: "center",
-        background: dark ? "#0F172A" : "#F8FAFC",
-        color: dark ? "#F1F5F9" : "#1E293B",
-        transition: "background-color 0.3s, color 0.3s",
-      }}
-    >
-      {/* Icône avec pulse (désactivé si reduced-motion) */}
+    <>
+      {ErrorBoundaryKeyframes}
       <div
-        className={reduceMotion ? "" : "eb-pulse"}
+        role="alert"
+        aria-live="assertive"
+        className={reduceMotion ? "" : "eb-fade-in"}
         style={{
-          width: iconContainerSize,
-          height: iconContainerSize,
-          borderRadius: "50%",
-          background: dark ? "#1E293B" : "#FEE2E2",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          marginBottom: isMobile ? 16 : 24,
-          boxShadow: dark
-            ? "0 4px 12px rgba(0,0,0,0.3)"
-            : "0 4px 12px rgba(0,0,0,0.1)",
-        }}
-      >
-        <AlertTriangle size={iconSize} color="#EF4444" />
-      </div>
-
-      <h1
-        style={{
-          fontSize: titleFontSize,
-          fontWeight: 700,
-          margin: "0 0 8px",
+          minHeight: "100vh",
+          padding: containerPadding,
+          textAlign: "center",
+          background: dark ? "#0F172A" : "#F8FAFC",
           color: dark ? "#F1F5F9" : "#1E293B",
+          transition: "background-color 0.3s, color 0.3s",
         }}
       >
-        Oups, une erreur est survenue
-      </h1>
-      <p
-        style={{
-          fontSize: messageFontSize,
-          color: dark ? "#94A3B8" : "#64748B",
-          marginBottom: isMobile ? 20 : 32,
-          maxWidth: 460,
-          lineHeight: 1.6,
-        }}
-      >
-        Quelque chose s'est mal passé. Vous pouvez essayer de recharger la page
-        ou revenir à l'accueil.
-      </p>
-
-      {/* Détails techniques (dev uniquement) */}
-      {isDev && error && (
+        {/* Icône avec pulse */}
         <div
+          aria-hidden="true"
+          className={reduceMotion ? "" : "eb-pulse"}
           style={{
-            background: dark ? "#1E293B" : "#FEF2F2",
-            color: dark ? "#FCA5A5" : "#B91C1C",
-            padding: isMobile ? "10px 12px" : "12px 16px",
-            borderRadius: 8,
-            fontSize: errorBoxFontSize,
-            fontFamily: "monospace",
-            maxWidth: errorBoxMaxWidth,
-            marginBottom: isMobile ? 16 : 24,
-            textAlign: "left",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            position: "relative",
-            border: `1px solid ${dark ? "#334155" : "#FECACA"}`,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>Détails techniques</span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => setShowDetails(!showDetails)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: dark ? "#94A3B8" : "#6B7280",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 11,
-                }}
-                aria-expanded={showDetails}
-                aria-controls="error-details"
-              >
-                {showDetails ? (
-                  <ChevronUp size={14} />
-                ) : (
-                  <ChevronDown size={14} />
-                )}
-                {showDetails ? "Masquer" : "Afficher"}
-              </button>
-              <button
-                onClick={handleCopyError}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: dark ? "#94A3B8" : "#6B7280",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 11,
-                }}
-                aria-label="Copier les détails de l'erreur"
-              >
-                {copied ? (
-                  <Check size={14} color="#10B981" />
-                ) : (
-                  <Copy size={14} />
-                )}
-                {copied ? "Copié" : "Copier"}
-              </button>
-            </div>
-          </div>
-          <div
-            id="error-details"
-            style={{
-              marginTop: 8,
-              maxHeight: 200,
-              overflowY: "auto",
-              display: showDetails ? "block" : "none",
-            }}
-          >
-            {error.toString()}
-          </div>
-        </div>
-      )}
-
-      {/* Boutons d'action */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: actionsFlexDirection,
-          gap: actionsGap,
-          flexWrap: "wrap",
-          justifyContent: "center",
-          width: isMobile ? "100%" : "auto",
-        }}
-      >
-        <button
-          onClick={onRetry}
-          style={{
-            display: "inline-flex",
+            width: iconContainerSize,
+            height: iconContainerSize,
+            borderRadius: "50%",
+            background: dark ? "#1E293B" : "#FEE2E2",
+            display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: 8,
-            padding: actionButtonPadding,
-            background: dark ? "#818CF8" : "#4F46E5",
-            color: "#FFFFFF",
-            border: "none",
-            borderRadius: 12,
-            fontSize: actionButtonFontSize,
-            fontWeight: 600,
-            cursor: "pointer",
+            marginBottom: isMobile ? 16 : 24,
             boxShadow: dark
               ? "0 4px 12px rgba(0,0,0,0.3)"
-              : "0 4px 12px rgba(79,70,229,0.2)",
-            transition: "background 0.2s, transform 0.1s",
-            width: actionsButtonWidth,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = dark ? "#6366F1" : "#4338CA";
-            e.currentTarget.style.transform = "translateY(-2px)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = dark ? "#818CF8" : "#4F46E5";
-            e.currentTarget.style.transform = "translateY(0)";
+              : "0 4px 12px rgba(0,0,0,0.1)",
           }}
         >
-          <RefreshCw size={20} /> Réessayer
-        </button>
+          <AlertTriangle size={iconSize} color="#EF4444" aria-hidden="true" />
+        </div>
 
-        <button
-          onClick={onReload}
+        <h1
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            padding: actionButtonPadding,
-            background: dark ? "#1E293B" : "#FFFFFF",
+            fontSize: titleFontSize,
+            fontWeight: 700,
+            margin: "0 0 8px",
             color: dark ? "#F1F5F9" : "#1E293B",
-            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-            borderRadius: 12,
-            fontSize: actionButtonFontSize,
-            fontWeight: 500,
-            cursor: "pointer",
-            transition: "background 0.2s, transform 0.1s",
-            width: actionsButtonWidth,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = dark ? "#263142" : "#F1F5F9";
-            e.currentTarget.style.transform = "translateY(-2px)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = dark ? "#1E293B" : "#FFFFFF";
-            e.currentTarget.style.transform = "translateY(0)";
           }}
         >
-          <RefreshCw size={20} /> Recharger
-        </button>
+          Oups, une erreur est survenue
+        </h1>
+        <p
+          style={{
+            fontSize: messageFontSize,
+            color: dark ? "#94A3B8" : "#64748B",
+            marginBottom: isMobile ? 20 : 32,
+            maxWidth: 460,
+            lineHeight: 1.6,
+          }}
+        >
+          Quelque chose s'est mal passé. Vous pouvez essayer de recharger la page
+          ou revenir à l'accueil.
+        </p>
 
-        <a
-          href="/"
+        {/* Détails techniques */}
+        {isDev && error && (
+          <div
+            style={{
+              background: dark ? "#1E293B" : "#FEF2F2",
+              color: dark ? "#FCA5A5" : "#B91C1C",
+              padding: isMobile ? "10px 12px" : "12px 16px",
+              borderRadius: 8,
+              fontSize: errorBoxFontSize,
+              fontFamily: "monospace",
+              maxWidth: errorBoxMaxWidth,
+              marginBottom: isMobile ? 16 : 24,
+              textAlign: "left",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              position: "relative",
+              border: `1px solid ${dark ? "#334155" : "#FECACA"}`,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ fontWeight: 600 }}>Détails techniques</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                <Pressable
+                  onClick={() => setShowDetails(!showDetails)}
+                  focusColor="#EF4444"
+                  ariaLabel={showDetails ? "Masquer les détails" : "Afficher les détails"}
+                  aria-expanded={showDetails}
+                  aria-controls="error-details"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: dark ? "#94A3B8" : "#6B7280",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 12,
+                    padding: "8px 10px",
+                    minHeight: 44,
+                    minWidth: 44,
+                    borderRadius: 6,
+                  }}
+                >
+                  {showDetails ? (
+                    <ChevronUp size={14} aria-hidden="true" />
+                  ) : (
+                    <ChevronDown size={14} aria-hidden="true" />
+                  )}
+                  {showDetails ? "Masquer" : "Afficher"}
+                </Pressable>
+                <Pressable
+                  onClick={handleCopyError}
+                  focusColor="#EF4444"
+                  ariaLabel="Copier les détails de l'erreur"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: dark ? "#94A3B8" : "#6B7280",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 12,
+                    padding: "8px 10px",
+                    minHeight: 44,
+                    minWidth: 44,
+                    borderRadius: 6,
+                  }}
+                >
+                  {copied ? (
+                    <Check size={14} color="#10B981" aria-hidden="true" />
+                  ) : (
+                    <Copy size={14} aria-hidden="true" />
+                  )}
+                  {copied ? "Copié" : "Copier"}
+                </Pressable>
+              </div>
+            </div>
+            <div
+              id="error-details"
+              style={{
+                marginTop: 8,
+                maxHeight: 200,
+                overflowY: "auto",
+                display: showDetails ? "block" : "none",
+                overscrollBehavior: "contain",
+                WebkitOverflowScrolling: "touch",
+              }}
+            >
+              {error.toString()}
+            </div>
+          </div>
+        )}
+
+        {/* Boutons d'action */}
+        <div
           style={{
-            display: "inline-flex",
-            alignItems: "center",
+            display: "flex",
+            flexDirection: actionsFlexDirection,
+            gap: actionsGap,
+            flexWrap: "wrap",
             justifyContent: "center",
-            gap: 8,
-            padding: actionButtonPadding,
-            background: dark ? "#1E293B" : "#FFFFFF",
-            color: dark ? "#F1F5F9" : "#1E293B",
-            border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
-            borderRadius: 12,
-            fontSize: actionButtonFontSize,
-            fontWeight: 500,
-            textDecoration: "none",
-            cursor: "pointer",
-            transition: "background 0.2s, transform 0.1s",
-            width: actionsButtonWidth,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = dark ? "#263142" : "#F1F5F9";
-            e.currentTarget.style.transform = "translateY(-2px)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = dark ? "#1E293B" : "#FFFFFF";
-            e.currentTarget.style.transform = "translateY(0)";
+            width: isMobile ? "100%" : "auto",
           }}
         >
-          <Home size={20} /> Accueil
-        </a>
+          <Pressable
+            onClick={onRetry}
+            focusColor={primaryBg}
+            hoverStyle={{ background: primaryBgHover }}
+            ariaLabel="Réessayer"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: actionButtonPadding,
+              background: primaryBg,
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: 12,
+              fontSize: actionButtonFontSize,
+              fontWeight: 600,
+              cursor: "pointer",
+              boxShadow: dark
+                ? "0 4px 12px rgba(0,0,0,0.3)"
+                : "0 4px 12px rgba(79,70,229,0.2)",
+              width: actionsButtonWidth,
+            }}
+          >
+            <RefreshCw size={20} aria-hidden="true" /> Réessayer
+          </Pressable>
+
+          <Pressable
+            onClick={onReload}
+            focusColor={primaryBg}
+            hoverStyle={{ background: secondaryBgHover }}
+            ariaLabel="Recharger la page"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: actionButtonPadding,
+              background: secondaryBg,
+              color: dark ? "#F1F5F9" : "#1E293B",
+              border: `1px solid ${secondaryBorder}`,
+              borderRadius: 12,
+              fontSize: actionButtonFontSize,
+              fontWeight: 500,
+              cursor: "pointer",
+              width: actionsButtonWidth,
+            }}
+          >
+            <RefreshCw size={20} aria-hidden="true" /> Recharger
+          </Pressable>
+
+          <HomeLink
+            focusColor={primaryBg}
+            hoverStyle={{ background: secondaryBgHover }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: actionButtonPadding,
+              background: secondaryBg,
+              color: dark ? "#F1F5F9" : "#1E293B",
+              border: `1px solid ${secondaryBorder}`,
+              borderRadius: 12,
+              fontSize: actionButtonFontSize,
+              fontWeight: 500,
+              textDecoration: "none",
+              cursor: "pointer",
+              width: actionsButtonWidth,
+            }}
+          >
+            <Home size={20} aria-hidden="true" /> Accueil
+          </HomeLink>
+        </div>
       </div>
-
-      {ErrorBoundaryKeyframes}
-    </div>
+    </>
   );
 }
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 // ERROR BOUNDARY (class component)
-// ============================================================
+// ════════════════════════════════════════════════════════════════════
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -379,7 +467,6 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // ✅ Silencieux en prod, log détaillé en dev
     if (import.meta.env.DEV) {
       console.error("[ErrorBoundary] caught:", error, errorInfo);
     }

@@ -34,7 +34,6 @@ import { AssistantPassage } from "./AssistantPassage";
 // CONSTANTES MODULE-LEVEL
 // ════════════════════════════════════════════════════════════════════
 
-// ✅ Extrait en constante module (évite allocation + recalcul à chaque render)
 const TABS_WITH_ANNEE_SELECTOR = new Set([
   "accueil",
   "passage",
@@ -47,7 +46,6 @@ const TABS_WITH_ANNEE_SELECTOR = new Set([
   "comptes",
 ]);
 
-// ✅ Onglets valides (source de vérité pour la validation URL)
 const VALID_ADMIN_TABS = [
   "accueil",
   "passage",
@@ -70,10 +68,12 @@ const VALID_ADMIN_TABS = [
 
 const DEFAULT_ADMIN_TAB = "accueil";
 
+// ✨ Onglets avec hauteur plein écran
+const TABS_FULL_HEIGHT = ["messagerie", "appels"];
+
 // ════════════════════════════════════════════════════════════════════
 // COMPOSANT
 // ════════════════════════════════════════════════════════════════════
-
 export function AdminApp({
   user,
   ecoleId,
@@ -105,7 +105,7 @@ export function AdminApp({
   const userId = user?._id;
 
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX PERF #1 — Tab lu depuis l'URL (source unique de vérité)
+  // Tab lu depuis l'URL
   // ════════════════════════════════════════════════════════════════════
   const tabFromUrl = useMemo(() => {
     const match = location.pathname.match(/^\/admin\/([^\/]+)/);
@@ -116,14 +116,13 @@ export function AdminApp({
   const tab = tabFromUrl || DEFAULT_ADMIN_TAB;
 
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX PERF #2 — navigateRef stable (évite re-création de setTab)
+  // navigateRef stable
   // ════════════════════════════════════════════════════════════════════
   const navigateRef = useRef(navigate);
   useEffect(() => {
     navigateRef.current = navigate;
   }, [navigate]);
 
-  // ✅ setTab avec référence 100% stable — jamais recréé
   const setTab = useCallback((newTab) => {
     if (VALID_ADMIN_TABS.includes(newTab)) {
       navigateRef.current(`/admin/${newTab}`);
@@ -131,8 +130,7 @@ export function AdminApp({
   }, []);
 
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX PERF #3 — Redirection UNE SEULE FOIS (guard par ref)
-  // Évite la boucle navigate → re-render → navigate → ...
+  // Redirection UNE SEULE FOIS
   // ════════════════════════════════════════════════════════════════════
   const hasRedirectedRef = useRef(false);
   useEffect(() => {
@@ -143,7 +141,7 @@ export function AdminApp({
   }, [tabFromUrl]);
 
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX PERF #4 — Args de query stables (évite re-fetch Convex)
+  // Args de query stables
   // ════════════════════════════════════════════════════════════════════
   const pendingUsersArgs = useMemo(
     () => (ecoleId && userId ? { ecoleId, userId } : "skip"),
@@ -157,15 +155,7 @@ export function AdminApp({
   );
 
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX — Navigation messagerie 100% URL
-  //
-  // AVANT : Zustand `messagingContactId` + setTab("messagerie")
-  //         → URL = /admin/messagerie (liste seulement)
-  //         → impossible de deep-linker vers une conversation
-  //
-  // APRÈS : navigation directe vers /admin/messagerie/chat/:userId
-  //         → URL change, bouton retour navigateur fonctionne
-  //         → MessagerieApp parse l'URL toute seule
+  // Navigation messagerie 100% URL
   // ════════════════════════════════════════════════════════════════════
   const handleNavigateToMessaging = useCallback(
     (contactId) => {
@@ -385,7 +375,6 @@ export function AdminApp({
       case "liaisons-parents":
         return <ParentLinkRequests user={user} />;
 
-      // ✅ FIX — Plus de prop `initialSelectedUserId`, tout passe par l'URL
       case "messagerie":
         return <MessagerieApp user={user} ecoleId={ecoleId} />;
 
@@ -429,6 +418,9 @@ export function AdminApp({
   // ✅ Évite le `.includes()` sur array recréé
   const showAnneeSelector = TABS_WITH_ANNEE_SELECTOR.has(tab);
 
+  // ✨ Onglets avec hauteur plein écran
+  const needsFullHeight = TABS_FULL_HEIGHT.includes(tab);
+
   // ════════════════════════════════════════════════════════════════════
   // RENDU PRINCIPAL
   // ════════════════════════════════════════════════════════════════════
@@ -442,27 +434,45 @@ export function AdminApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
-      {showAnneeSelector && (
-        <div
-          style={{
-            maxWidth: 1280,
-            margin: "0 auto",
-            marginBottom: isMobile ? 12 : 16,
-            width: "100%",
-            display: "flex",
-            justifyContent: isMobile ? "stretch" : "flex-end",
-            alignItems: "center",
-          }}
-        >
-          <AnneeSelector
-            ecoleId={ecoleId}
-            anneeId={anneeId}
-            onAnneeChange={onAnneeChange}
-            userId={userId}
-          />
-        </div>
-      )}
-      {renderContent()}
+      {/* ✨ Wrapper full-height conditionnel */}
+      <div
+        style={
+          needsFullHeight
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+                height: "100%",
+                width: "100%",
+                overflow: "hidden",
+              }
+            : undefined
+        }
+      >
+        {/* Sélecteur d'année : masqué sur les onglets full-height */}
+        {showAnneeSelector && !needsFullHeight && (
+          <div
+            style={{
+              maxWidth: 1280,
+              margin: "0 auto",
+              marginBottom: isMobile ? 12 : 16,
+              width: "100%",
+              display: "flex",
+              justifyContent: isMobile ? "stretch" : "flex-end",
+              alignItems: "center",
+            }}
+          >
+            <AnneeSelector
+              ecoleId={ecoleId}
+              anneeId={anneeId}
+              onAnneeChange={onAnneeChange}
+              userId={userId}
+            />
+          </div>
+        )}
+        {renderContent()}
+      </div>
     </Layout>
   );
 }
