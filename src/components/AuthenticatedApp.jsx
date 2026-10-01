@@ -7,7 +7,7 @@ import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { useStyles } from "@/styles/theme";
 import { NotifBanner } from "./NotifBanner";
-import { SuperAdminDashboardV2 as SuperAdminDashboard } from "../components/SuperAdmin/SuperAdminDashboardV2";
+import { SuperAdminDashboardV2 as SuperAdminDashboard } from "../components/superadmin/SuperAdminDashboardV2";
 import { DisciplinaireApp } from "./DisciplinaireApp";
 import { DirecteurApp } from "./DirecteurApp";
 import { AdminApp } from "./AdminApp";
