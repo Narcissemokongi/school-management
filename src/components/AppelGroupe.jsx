@@ -37,6 +37,9 @@ export function AppelGroupe({
   const [isOnHold, setIsOnHold] = useState(false);
   // ✨ Feedback tap sur les boutons de contrôle
   const [pressedBtn, setPressedBtn] = useState(null);
+  // ✨ iOS Safari — écran pré-appel obligatoire (user gesture pour getUserMedia)
+  const [hasJoined, setHasJoined] = useState(false);
+  const [permissionError, setPermissionError] = useState(null);
 
   const leaveGroupMutation = useMutation(api.appels.leaveGroupCall);
   const generateToken = useAction(api.agora.generateToken);
@@ -118,7 +121,10 @@ export function AppelGroupe({
     [generateToken]
   );
 
-  useEffect(() => {
+  // ═══════════════════════════════════════════════════════════════
+  // START CALL — déclenché par l'utilisateur (requis iOS Safari)
+  // ═══════════════════════════════════════════════════════════════
+  const startCall = useCallback(async () => {
     if (!APP_ID || !channelName) {
       toast.error("Configuration Agora manquante");
       handleEndCall();
@@ -126,131 +132,152 @@ export function AppelGroupe({
     }
 
     destroyedRef.current = false;
-    let agoraClient;
+    setPermissionError(null);
 
-    const init = async () => {
-      let token;
-      let agoraUid;
-      try {
-        setConnectionState("CONNECTING");
-        const result = await generateTokenCallback(channelName, userId);
-        token = result.token;
-        agoraUid = result.uid;
-      } catch (err) {
-        setConnectionState("ERROR");
-        toast.error(err.message);
-        handleEndCall();
-        return;
-      }
-      if (destroyedRef.current) return;
+    let token;
+    let agoraUid;
+    try {
+      setConnectionState("CONNECTING");
+      const result = await generateTokenCallback(channelName, userId);
+      token = result.token;
+      agoraUid = result.uid;
+    } catch (err) {
+      setConnectionState("ERROR");
+      toast.error(err.message);
+      handleEndCall();
+      return;
+    }
+    if (destroyedRef.current) return;
 
-      agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-      clientRef.current = agoraClient;
+    const agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    clientRef.current = agoraClient;
 
-      agoraClient.on("connection-state-change", (curState) => {
-        if (curState === "CONNECTED") setConnectionState("CONNECTED");
-        else if (curState === "DISCONNECTED" || curState === "DISCONNECTING")
-          setConnectionState("DISCONNECTED");
-      });
+    agoraClient.on("connection-state-change", (curState) => {
+      if (curState === "CONNECTED") setConnectionState("CONNECTED");
+      else if (curState === "DISCONNECTED" || curState === "DISCONNECTING")
+        setConnectionState("DISCONNECTED");
+    });
 
-      agoraClient.on("network-quality", (stats) => {
-        const down = stats.downlinkNetworkQuality ?? 0;
-        const up = stats.uplinkNetworkQuality ?? 0;
-        const worst = Math.max(down, up);
-        setNetworkQuality(worst <= 2 ? "good" : worst === 3 ? "fair" : "poor");
-      });
+    agoraClient.on("network-quality", (stats) => {
+      const down = stats.downlinkNetworkQuality ?? 0;
+      const up = stats.uplinkNetworkQuality ?? 0;
+      const worst = Math.max(down, up);
+      setNetworkQuality(worst <= 2 ? "good" : worst === 3 ? "fair" : "poor");
+    });
 
-      try {
-        console.log("[AppelGroupe] joining with uid:", agoraUid);
-        await agoraClient.join(APP_ID, channelName, token, agoraUid);
-        if (destroyedRef.current) {
-          try {
-            agoraClient.leave();
-          } catch (e) {}
-          return;
-        }
-      } catch (err) {
-        setConnectionState("ERROR");
-        toast.error("Erreur de connexion à l'appel : " + err.message);
-        handleEndCall();
-        return;
-      }
-
-      try {
-        const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-        if (destroyedRef.current) {
-          tracks.forEach((t) => t.close());
-          return;
-        }
-        localTracksRef.current = tracks;
-
-        if (callType === "audio") {
-          tracks[1].setEnabled(false);
-          setIsVideoOff(true);
-          await agoraClient.publish([tracks[0]]);
-        } else {
-          await agoraClient.publish([tracks[0], tracks[1]]);
-        }
-
-        if (callType === "video" && localVideoRef.current && tracks[1]) {
-          tracks[1].play(localVideoRef.current);
-        }
-
-        setIsFrontCamera(true);
-      } catch (err) {
-        toast.error("Erreur micro/caméra : " + err.message);
-        handleEndCall();
-        return;
-      }
-
-      agoraClient.on("user-published", async (user, mediaType) => {
-        if (destroyedRef.current) return;
+    try {
+      console.log("[AppelGroupe] joining with uid:", agoraUid);
+      await agoraClient.join(APP_ID, channelName, token, agoraUid);
+      if (destroyedRef.current) {
         try {
-          await agoraClient.subscribe(user, mediaType);
-          setRemoteUsers((prev) => {
-            if (!prev.find((u) => u.uid === user.uid)) {
-              return [...prev, user];
-            }
-            return prev;
-          });
-        } catch (err) {
-          console.warn("subscribe error", err);
-        }
+          agoraClient.leave();
+        } catch (e) {}
+        return;
+      }
+    } catch (err) {
+      setConnectionState("ERROR");
+      toast.error("Erreur de connexion à l'appel : " + err.message);
+      handleEndCall();
+      return;
+    }
+
+    // ═══ getUserMedia — DOIT être dans le user gesture (iOS) ═══
+    try {
+      const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+      if (destroyedRef.current) {
+        tracks.forEach((t) => t.close());
+        return;
+      }
+      localTracksRef.current = tracks;
+
+      if (callType === "audio") {
+        tracks[1].setEnabled(false);
+        setIsVideoOff(true);
+        await agoraClient.publish([tracks[0]]);
+      } else {
+        await agoraClient.publish([tracks[0], tracks[1]]);
+      }
+
+      if (callType === "video" && localVideoRef.current && tracks[1]) {
+        tracks[1].play(localVideoRef.current);
+      }
+
+      setIsFrontCamera(true);
+      setHasJoined(true);
+    } catch (err) {
+      console.error("[AppelGroupe] getUserMedia failed:", err);
+      const code = err?.code || err?.name;
+      let userMsg = "Impossible d'accéder à la caméra/micro.";
+
+      if (code === "PERMISSION_DENIED" || err?.name === "NotAllowedError") {
+        userMsg =
+          "Autorisation refusée. Vérifie que Safari a l'accès à la caméra/micro dans Réglages iOS → Safari.";
+      } else if (err?.name === "NotFoundError") {
+        userMsg = "Aucune caméra/microphone détecté sur cet appareil.";
+      } else if (err?.name === "NotReadableError") {
+        userMsg =
+          "Caméra/micro déjà utilisés par une autre app. Ferme les autres apps et réessaie.";
+      } else if (err?.name === "OverconstrainedError") {
+        userMsg = "Configuration vidéo non supportée par cet appareil.";
+      }
+
+      setPermissionError(userMsg);
+      setConnectionState("ERROR");
+      toast.error(userMsg);
+      handleEndCall();
+      return;
+    }
+
+    agoraClient.on("user-published", async (user, mediaType) => {
+      if (destroyedRef.current) return;
+      try {
+        await agoraClient.subscribe(user, mediaType);
+        setRemoteUsers((prev) =>
+          prev.find((u) => u.uid === user.uid) ? prev : [...prev, user]
+        );
+      } catch (err) {
+        console.warn("subscribe error", err);
+      }
+    });
+
+    agoraClient.on("user-unpublished", (user) => {
+      setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
+    });
+
+    const retrySubscribe = (attempt = 0) => {
+      if (destroyedRef.current || !agoraClient) return;
+      const existing = agoraClient.remoteUsers ?? [];
+      existing.forEach((user) => {
+        agoraClient.subscribe(user, "video").catch(() => {});
+        agoraClient.subscribe(user, "audio").catch(() => {});
+        setRemoteUsers((prev) =>
+          prev.find((u) => u.uid === user.uid) ? prev : [...prev, user]
+        );
       });
-
-      agoraClient.on("user-unpublished", (user) => {
-        setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
-      });
-
-      const retrySubscribe = (attempt = 0) => {
-        if (destroyedRef.current || !agoraClient) return;
-        const existing = agoraClient.remoteUsers ?? [];
-        existing.forEach((user) => {
-          agoraClient.subscribe(user, "video").catch(() => {});
-          agoraClient.subscribe(user, "audio").catch(() => {});
-          setRemoteUsers((prev) => {
-            if (!prev.find((u) => u.uid === user.uid)) return [...prev, user];
-            return prev;
-          });
-        });
-        if (attempt < 2) {
-          setTimeout(() => retrySubscribe(attempt + 1), 800);
-        }
-      };
-      setTimeout(() => retrySubscribe(0), 800);
-
-      timerRef.current = setInterval(() => {
-        setCallDuration((prev) => prev + 1);
-      }, 1000);
+      if (attempt < 2) {
+        setTimeout(() => retrySubscribe(attempt + 1), 800);
+      }
     };
+    setTimeout(() => retrySubscribe(0), 800);
 
-    init();
+    timerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+  }, [
+    channelName,
+    userId,
+    callType,
+    generateTokenCallback,
+    handleEndCall,
+  ]);
 
+  // Cleanup au démontage uniquement (pas au mount)
+  useEffect(() => {
     return () => {
       destroyedRef.current = true;
       cleanupLocal();
     };
-  }, [channelName, userId, generateTokenCallback, handleEndCall, cleanupLocal, callType]);
+  }, [cleanupLocal]);
 
   useEffect(() => {
     if (callDuration >= MAX_CALL_DURATION_MINUTES * 60) {
@@ -474,8 +501,21 @@ export function AppelGroupe({
               textAlign: "center",
             }}
           >
-            Échec de la connexion
+            {permissionError ? "Accès caméra/micro refusé" : "Échec de la connexion"}
           </h2>
+          {permissionError && (
+            <p
+              style={{
+                marginTop: 12,
+                color: "#94A3B8",
+                fontSize: 14,
+                textAlign: "center",
+                maxWidth: 380,
+              }}
+            >
+              {permissionError}
+            </p>
+          )}
           <button
             type="button"
             onClick={handleEndCall}
@@ -506,13 +546,116 @@ export function AppelGroupe({
         </div>
       )}
 
+      {/* ═══ Écran pré-appel (iOS Safari — user gesture) ═══ */}
+      {!hasJoined &&
+        connectionState !== "CONNECTING" &&
+        connectionState !== "ERROR" && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(15,23,42,0.98)",
+              zIndex: 15,
+              gap: 20,
+              padding: 24,
+              boxSizing: "border-box",
+              paddingTop: "calc(24px + env(safe-area-inset-top, 0px))",
+              paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+            }}
+          >
+            <div
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: "50%",
+                background: "#1E293B",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "3px solid #818CF8",
+              }}
+            >
+              <Users size={48} color="#94A3B8" />
+            </div>
+            <h2 style={{ margin: 0, fontSize: 22, textAlign: "center" }}>
+              {groupName || "Appel de groupe"}
+            </h2>
+            <p
+              style={{
+                margin: 0,
+                color: "#94A3B8",
+                fontSize: 14,
+                textAlign: "center",
+                maxWidth: 340,
+              }}
+            >
+              Appuie sur le bouton pour autoriser la caméra et le micro
+            </p>
+            {participants.length > 0 && (
+              <p style={{ margin: 0, color: "#64748B", fontSize: 13 }}>
+                {participants.length} participant
+                {participants.length > 1 ? "s" : ""} attendu
+                {participants.length > 1 ? "s" : ""}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={startCall}
+              style={{
+                marginTop: 12,
+                padding: "14px 32px",
+                background: "#10B981",
+                border: "none",
+                borderRadius: 999,
+                color: "white",
+                fontWeight: 700,
+                fontSize: 16,
+                cursor: "pointer",
+                minHeight: 52,
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <PhoneOff size={20} style={{ transform: "rotate(135deg)" }} />
+              Rejoindre le groupe
+            </button>
+            <button
+              type="button"
+              onClick={handleEndCall}
+              style={{
+                marginTop: 4,
+                padding: "10px 20px",
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 999,
+                color: "#94A3B8",
+                fontSize: 14,
+                cursor: "pointer",
+                minHeight: 44,
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                fontFamily: "inherit",
+              }}
+            >
+              Annuler
+            </button>
+          </div>
+        )}
+
       {/* ═══ Bandeau supérieur ═══ */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          // ✨ Safe-area top + left/right
           padding: isMobile
             ? `calc(8px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) 8px calc(12px + env(safe-area-inset-left, 0px))`
             : "12px 16px",
@@ -606,7 +749,6 @@ export function AppelGroupe({
           WebkitOverflowScrolling: "touch",
         }}
       >
-        {/* Message d'attente */}
         {isWaitingForOthers && connectionState === "CONNECTED" && (
           <div
             style={{
@@ -709,7 +851,6 @@ export function AppelGroupe({
           minWidth: 0,
         }}
       >
-        {/* Compteur (desktop uniquement) */}
         {!isMobile && (
           <div
             style={{
@@ -733,7 +874,6 @@ export function AppelGroupe({
           </div>
         )}
 
-        {/* Mute */}
         <button
           type="button"
           onClick={toggleMute}
@@ -750,7 +890,6 @@ export function AppelGroupe({
           {isMuted ? <MicOff size={iconSize} /> : <Mic size={iconSize} />}
         </button>
 
-        {/* Video */}
         <button
           type="button"
           onClick={toggleVideo}
@@ -771,7 +910,6 @@ export function AppelGroupe({
           )}
         </button>
 
-        {/* Switch camera (desktop uniquement) */}
         {!isMobile && (
           <button
             type="button"
@@ -791,7 +929,6 @@ export function AppelGroupe({
           </button>
         )}
 
-        {/* Speaker (desktop uniquement) */}
         {!isMobile && (
           <button
             type="button"
@@ -819,7 +956,6 @@ export function AppelGroupe({
           </button>
         )}
 
-        {/* Hold */}
         <button
           type="button"
           onClick={toggleHold}
@@ -837,7 +973,6 @@ export function AppelGroupe({
           {isOnHold ? <Play size={iconSize} /> : <Pause size={iconSize} />}
         </button>
 
-        {/* Screen share (desktop uniquement) */}
         {!isMobile && (
           <button
             type="button"
@@ -862,7 +997,6 @@ export function AppelGroupe({
           </button>
         )}
 
-        {/* End call / Quitter */}
         <button
           type="button"
           onClick={handleEndCall}
@@ -977,9 +1111,7 @@ function controlButtonStyle(variant, size = 52, pressed = false) {
     WebkitBackdropFilter: "blur(4px)",
     flexShrink: 0,
     padding: 0,
-    // ✨ Feedback tap
     transform: pressed ? "scale(0.92)" : "scale(1)",
-    // ✨ Neutralise délai 300ms + flash bleu
     WebkitTapHighlightColor: "transparent",
     touchAction: "manipulation",
     outline: "none",

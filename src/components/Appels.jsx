@@ -1,5 +1,5 @@
 // src/components/Appels.jsx
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import {
@@ -59,6 +59,9 @@ const ROLE_LABELS = {
 // ✨ Taille minimale tap target mobile
 const MOBILE_TAP = 44;
 
+// ✨ Durée du debounce pour la recherche (ms)
+const SEARCH_DEBOUNCE_MS = 200;
+
 // ════════════════════════════════════════════════════════════════════
 // HELPERS
 // ════════════════════════════════════════════════════════════════════
@@ -76,6 +79,18 @@ function getAvatarColor(nom) {
     hash = nom.charCodeAt(i) + ((hash << 5) - hash);
   }
   return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+
+// ════════════════════════════════════════════════════════════════════
+// HOOK — Debounce de valeur (perf recherche)
+// ════════════════════════════════════════════════════════════════════
+function useDebouncedValue(value, delay = SEARCH_DEBOUNCE_MS) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -171,14 +186,13 @@ function Avatar({ nom, size = 44 }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ICON BUTTON LOCAL — ✨ refactoré avec feedback tap + 44px mobile
+// ICON BUTTON LOCAL — feedback tap + 44px mobile
 // ════════════════════════════════════════════════════════════════════
 function IconButton({ icon, label, onClick, tokens, variant = "ghost", disabled = false, isMobile }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [pressed, setPressed] = useState(false);
 
-  // ✨ 44px mobile, 38px desktop
   const size = isMobile ? MOBILE_TAP : 38;
 
   const variants = {
@@ -232,9 +246,7 @@ function IconButton({ icon, label, onClick, tokens, variant = "ghost", disabled 
         padding: 0,
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: 2,
-        // ✨ Feedback tap
         transform: pressed && !disabled ? "scale(0.9)" : "scale(1)",
-        // ✨ Neutralise tap delay + flash
         WebkitTapHighlightColor: "transparent",
         touchAction: "manipulation",
         boxSizing: "border-box",
@@ -277,7 +289,6 @@ function ContactRow({
         border: `1px solid ${tokens.border}`,
         transition: "background 0.15s ease, border-color 0.15s ease",
         opacity: isBusy ? 0.6 : 1,
-        // ✨ Empêche le débordement
         minWidth: 0,
         boxSizing: "border-box",
       }}
@@ -462,7 +473,7 @@ function EmptyState({ icon, title, description, tokens, isMobile }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// PARTICIPANT ROW — ✨ feedback tap + tap target
+// PARTICIPANT ROW — feedback tap + tap target
 // ════════════════════════════════════════════════════════════════════
 function ParticipantRow({ contact, dark, selected, onToggle, tokens, isMobile }) {
   const [hovered, setHovered] = useState(false);
@@ -496,12 +507,9 @@ function ParticipantRow({ contact, dark, selected, onToggle, tokens, isMobile })
         border: selected
           ? `1px solid ${tokens.primary}`
           : `1px solid transparent`,
-        // ✨ Feedback tap
         transform: pressed ? "scale(0.985)" : "scale(1)",
-        // ✨ Min height tap target
         minHeight: isMobile ? MOBILE_TAP : undefined,
         boxSizing: "border-box",
-        // ✨ Neutralise flash
         WebkitTapHighlightColor: "transparent",
         touchAction: "manipulation",
       }}
@@ -619,6 +627,14 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
   // ✨ Feedback tap sur boutons custom
   const [pressedBtn, setPressedBtn] = useState(null);
 
+  // ✨ Garde anti-double-clic (au-delà du state)
+  const callingLockRef = useRef(false);
+  const groupLockRef = useRef(false);
+
+  // ✨ Debounce recherche (perf liste longue)
+  const debouncedSearch = useDebouncedValue(searchTerm);
+  const debouncedParticipantSearch = useDebouncedValue(participantSearch);
+
   // ✨ QUERIES
   const contactsArgs = useMemo(
     () => (ecoleId && userId ? { ecoleId, userId } : "skip"),
@@ -655,22 +671,22 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
             CONTACT_WHITELIST_FOR_STUDENTS.includes(c?.role)
           )
         : contacts;
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
+    if (q) {
       filtered = filtered.filter((c) =>
         (c?.nom ?? "").toLowerCase().includes(q)
       );
     }
     return filtered;
-  }, [contacts, user?.role, searchTerm]);
+  }, [contacts, user?.role, debouncedSearch]);
 
   const visibleParticipants = useMemo(() => {
-    if (!participantSearch.trim()) return visibleContacts;
-    const q = participantSearch.toLowerCase();
+    const q = debouncedParticipantSearch.trim().toLowerCase();
+    if (!q) return visibleContacts;
     return visibleContacts.filter((c) =>
       (c?.nom ?? "").toLowerCase().includes(q)
     );
-  }, [visibleContacts, participantSearch]);
+  }, [visibleContacts, debouncedParticipantSearch]);
 
   const groups = useMemo(() => {
     if (!canCreateGroupCall) return [];
@@ -699,6 +715,10 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
         toast.error("Session invalide.");
         return;
       }
+      // ✨ Garde anti-double-clic (lock ref, plus robuste que state)
+      if (callingLockRef.current) return;
+      callingLockRef.current = true;
+
       setCallingId(contact._id);
       try {
         await createCall({
@@ -708,18 +728,28 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
           userId,
           type,
         });
+        // ✨ Message honnête — l'appel n'est pas encore connecté
         toast.success(
-          `Appel ${type === "video" ? "vidéo" : "audio"} lancé...`
+          `Connexion ${type === "video" ? "vidéo" : "audio"} en cours…`
         );
       } catch (err) {
         console.error("[Appels] createCall failed:", err);
-        if (err?.message?.includes("déjà en cours")) {
+        const msg = err?.message ?? "";
+        if (msg.includes("déjà en cours")) {
           toast.error("Un appel est déjà en cours avec ce contact.");
+        } else if (msg.includes("occupé") || msg.includes("busy")) {
+          toast.error("Ce contact est déjà en communication.");
+        } else if (msg.includes("permission") || msg.includes("autorisé")) {
+          toast.error("Vous n'êtes pas autorisé à appeler ce contact.");
         } else {
-          toast.error(err?.message ?? "Impossible de lancer l'appel");
+          toast.error(msg || "Impossible de lancer l'appel");
         }
       } finally {
         setCallingId(null);
+        // ✨ Cooldown court pour éviter spam même après résolution
+        setTimeout(() => {
+          callingLockRef.current = false;
+        }, 800);
       }
     },
     [userId, ecoleId, anneeId, createCall]
@@ -734,6 +764,10 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
       toast.error("Veuillez choisir un groupe et des participants.");
       return;
     }
+    // ✨ Garde anti-double-clic
+    if (groupLockRef.current) return;
+    groupLockRef.current = true;
+
     setLaunchingGroup(true);
     try {
       await createGroupCall({
@@ -744,16 +778,25 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
         participantIds: selectedParticipants,
         type: "video",
       });
-      toast.success("Appel de groupe lancé...");
+      // ✨ Message honnête
+      toast.success("Connexion au groupe en cours…");
       setGroupCallMode(false);
       setSelectedParticipants([]);
       setSelectedGroupId("");
       setParticipantSearch("");
     } catch (err) {
       console.error("[Appels] createGroupCall failed:", err);
-      toast.error(err?.message ?? "Impossible de lancer l'appel de groupe");
+      const msg = err?.message ?? "";
+      if (msg.includes("permission") || msg.includes("autorisé")) {
+        toast.error("Vous n'êtes pas autorisé à créer un appel de groupe.");
+      } else if (msg.includes("participants")) {
+        toast.error("Vérifiez les participants sélectionnés.");
+      } else {
+        toast.error(msg || "Impossible de lancer l'appel de groupe");
+      }
     } finally {
       setLaunchingGroup(false);
+      groupLockRef.current = false;
     }
   }, [
     userId,
@@ -1032,7 +1075,6 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  // ✨ Tap target
                   minWidth: isMobile ? MOBILE_TAP : undefined,
                   minHeight: isMobile ? MOBILE_TAP : undefined,
                   transform:
@@ -1071,7 +1113,6 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 border: `1px solid ${tokens.border}`,
                 background: tokens.bg,
                 color: tokens.text,
-                // ✨ 16px évite le zoom iOS
                 fontSize: isMobile ? 16 : 14,
                 outline: "none",
                 marginBottom: 16,
@@ -1216,7 +1257,6 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                     outline: "none",
                     background: "transparent",
                     color: tokens.text,
-                    // ✨ 16px mobile
                     fontSize: isMobile ? 16 : 13,
                     fontFamily: "inherit",
                     WebkitTapHighlightColor: "transparent",
@@ -1395,7 +1435,6 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                     outline: "none",
                     background: "transparent",
                     color: tokens.text,
-                    // ✨ 16px mobile
                     fontSize: isMobile ? 16 : 14,
                     fontFamily: "inherit",
                     WebkitTapHighlightColor: "transparent",
@@ -1416,7 +1455,6 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                       alignItems: "center",
                       justifyContent: "center",
                       color: tokens.textMuted,
-                      // ✨ Tap target 40px
                       minWidth: 40,
                       minHeight: 40,
                       WebkitTapHighlightColor: "transparent",
@@ -1429,6 +1467,23 @@ export function Appels({ user, ecoleId, anneeId, onNavigateToMessaging }) {
                 )}
               </div>
             )}
+
+            {/* ✨ Compteur (uniquement si liste non vide et pas en recherche) */}
+            {!isLoadingContacts &&
+              visibleContacts.length > 0 &&
+              !debouncedSearch && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: tokens.textMuted,
+                    marginBottom: 8,
+                    paddingLeft: 4,
+                  }}
+                >
+                  {visibleContacts.length} contact
+                  {visibleContacts.length > 1 ? "s" : ""}
+                </div>
+              )}
 
             {/* Liste */}
             {isLoadingContacts ? (

@@ -217,6 +217,29 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const rejectCall = useMutation(api.appels.rejectCall);
   const endCall = useMutation(api.appels.endCall);
 
+  // ✨ NEW — infos du contact (nom, role) pour l'appel actif
+  const activeCallDetailsArgs = useMemo(
+    () =>
+      activeCallFromConvex?._id && userId
+        ? { callId: activeCallFromConvex._id, userId }
+        : "skip",
+    [activeCallFromConvex?._id, userId]
+  );
+
+  const activeCallDetails = useQuery(
+    api.appels.getCallDetails,
+    activeCallDetailsArgs
+  );
+
+  // ✨ Nom du contact distant (celui qui n'est PAS moi)
+  const remoteContactName = useMemo(() => {
+    if (!activeCallDetails) return null;
+    const isMeCaller = activeCallDetails.callerId === userId;
+    return isMeCaller
+      ? activeCallDetails.calleeName
+      : activeCallDetails.callerName;
+  }, [activeCallDetails, userId]);
+
   const [localActiveCall, setLocalActiveCall] = useState(null);
 
   useEffect(() => {
@@ -243,6 +266,16 @@ export function AuthenticatedApp({ user, handleLogout }) {
       toast("Appel annulé");
     }
   }, [outgoingCall, userId, endCall]);
+
+  // ✨ Auto-reject silencieux si on est déjà en appel
+  useEffect(() => {
+    if (!pendingCall || !localActiveCall || !userId) return;
+    rejectCall({ callId: pendingCall._id, userId })
+      .then(() => {
+        toast("Appel entrant rejeté (déjà en communication)", { icon: "📵" });
+      })
+      .catch(() => {});
+  }, [pendingCall?._id, localActiveCall?._id, userId, rejectCall]);
 
   // ════════════════════════════════════════════════════════════════════
   // QUERIES PRINCIPALES
@@ -365,17 +398,23 @@ export function AuthenticatedApp({ user, handleLogout }) {
   }, [punitionsEnfants, effectiveUser?.role, enfants, fautes, notify]);
 
   // ════════════════════════════════════════════════════════════════════
-  // APPEL ACTIF
+  // APPEL ACTIF — écran plein
   // ════════════════════════════════════════════════════════════════════
   if (localActiveCall) {
     return (
-      <AppelVideo
-        channelName={localActiveCall.channelName}
-        userId={userId}
-        callId={localActiveCall._id}
-        onCallEnd={handleCallEnd}
-        callType={localActiveCall.type || "video"}
-      />
+      <>
+        {AuthenticatedAppKeyframes}
+        <AppelVideo
+          channelName={localActiveCall.channelName}
+          userId={userId}
+          callId={localActiveCall._id}
+          onCallEnd={handleCallEnd}
+          callType={localActiveCall.type || "video"}
+          // ✨ FIX — props manquantes
+          contactName={remoteContactName}
+          isMobile={isMobile}
+        />
+      </>
     );
   }
 
@@ -514,7 +553,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
         </div>
 
         {/* ═══════════ Rendu AdminApp ═══════════ */}
-        {/* ✅ FIX : key={pathname} pour forcer le re-render sur changement d'URL */}
         <AdminApp
           key={pathname}
           user={ecoleUser}
@@ -725,7 +763,8 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
-      {pendingCall && ecoleId && userId && (
+      {/* ✨ Appel entrant — seulement si pas déjà en appel actif */}
+      {pendingCall && ecoleId && userId && !localActiveCall && (
         <IncomingCallModal
           callerId={pendingCall.callerId}
           onAccept={() => acceptCall({ callId: pendingCall._id, userId })}

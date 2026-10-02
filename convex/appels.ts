@@ -596,3 +596,47 @@ export const getByChannelName = query({
       .first();
   },
 });
+
+// ════════════════════════════════════════════════════════════════════
+// getCallDetails — infos complètes d'un appel (nom, role des 2 côtés)
+// Utilisé par AppelVideo pour afficher le nom du contact distant.
+// ════════════════════════════════════════════════════════════════════
+export const getCallDetails = query({
+  args: {
+    callId: v.id("appels"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.callId);
+    if (!call) return null;
+
+    const caller = await requireAuth(ctx, args.userId);
+
+    // 🔒 Sécurité : seul un participant ou un superAdmin peut lire
+    if (!isUserParticipant(call, args.userId) && !isSuperAdmin(caller)) {
+      return null;
+    }
+
+    // Récupérer les infos des 2 côtés (nom + role)
+    const callerUser = await getUser(ctx, call.callerId);
+    const calleeUser = call.calleeId
+      ? await getUser(ctx, call.calleeId)
+      : null;
+
+    return {
+      _id: call._id,
+      callerId: call.callerId,
+      calleeId: call.calleeId ?? null,
+      callerName: callerUser?.nom ?? "Utilisateur",
+      calleeName: calleeUser?.nom ?? "Utilisateur",
+      callerRole: callerUser?.role ?? null,
+      calleeRole: calleeUser?.role ?? null,
+      type: call.type ?? "audio",
+      channelName: call.channelName,
+      status: call.status,
+      isGroup: call.isGroup ?? false,
+      groupId: call.groupId ?? null,
+      participants: call.participants ?? [],
+    };
+  },
+});
