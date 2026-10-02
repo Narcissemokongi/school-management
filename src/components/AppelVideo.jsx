@@ -31,16 +31,14 @@ export function AppelVideo({
   const [connectionState, setConnectionState] = useState("IDLE");
   const [networkQuality, setNetworkQuality] = useState("unknown");
   const [isFrontCamera, setIsFrontCamera] = useState(true);
-  // ✨ Anti-écho — HP activé par défaut uniquement pour la vidéo
   const [isSpeakerOn, setIsSpeakerOn] = useState(callType === "video");
   const [isOnHold, setIsOnHold] = useState(false);
-  // ✨ Feedback tap sur les boutons de contrôle
   const [pressedBtn, setPressedBtn] = useState(null);
-  // ✨ iOS Safari — écran pré-appel obligatoire (user gesture pour getUserMedia)
   const [hasJoined, setHasJoined] = useState(false);
   const [permissionError, setPermissionError] = useState(null);
-  // ✨ iOS Safari — audio distant bloqué par la politique d'autoplay
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  // ✨ Waveform bars pour mode audio
+  const [wavePhase, setWavePhase] = useState(0);
 
   const endCallMutation = useMutation(api.appels.endCall);
   const generateToken = useAction(api.agora.generateToken);
@@ -52,6 +50,7 @@ export function AppelVideo({
   const screenTrackRef = useRef(null);
   const onCallEndRef = useRef(onCallEnd);
   const destroyedRef = useRef(false);
+  const waveIntervalRef = useRef(null);
 
   useEffect(() => {
     onCallEndRef.current = onCallEnd;
@@ -68,7 +67,18 @@ export function AppelVideo({
     };
   }, []);
 
-  // ✨ Handlers touch génériques
+  // ✨ Animation waveform (mode audio uniquement)
+  useEffect(() => {
+    if (!hasJoined || callType !== "audio") return;
+    waveIntervalRef.current = setInterval(() => {
+      setWavePhase((p) => (p + 1) % 4);
+    }, 140);
+    return () => {
+      clearInterval(waveIntervalRef.current);
+      waveIntervalRef.current = null;
+    };
+  }, [hasJoined, callType]);
+
   const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
   const releaseBtn = useCallback(() => setPressedBtn(null), []);
 
@@ -95,6 +105,8 @@ export function AppelVideo({
     }
     clearInterval(timerRef.current);
     timerRef.current = null;
+    clearInterval(waveIntervalRef.current);
+    waveIntervalRef.current = null;
     setRemoteUsers([]);
     setIsScreenSharing(false);
     setIsMuted(false);
@@ -189,11 +201,10 @@ export function AppelVideo({
       return;
     }
 
-    // ═══ getUserMedia — DOIT être dans le user gesture (iOS) ═══
     try {
       const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
-        { AEC: true, AGC: true, ANS: true }, // Configuration audio
-        { encoderConfig: "480p_1" }          // Configuration vidéo
+        { AEC: true, AGC: true, ANS: true },
+        { encoderConfig: "480p_1" }
       );
       if (destroyedRef.current) {
         tracks.forEach((t) => t.close());
@@ -215,7 +226,6 @@ export function AppelVideo({
 
       setHasJoined(true);
 
-      // ✨ Anti-écho — audio => mode écouteur, vidéo => HP
       try {
         if (callType === "audio") {
           await AgoraRTC.setSpeakerphoneOn(false);
@@ -296,7 +306,6 @@ export function AppelVideo({
     handleEndCall,
   ]);
 
-  // Cleanup au démontage uniquement (pas au mount)
   useEffect(() => {
     return () => {
       destroyedRef.current = true;
@@ -362,7 +371,6 @@ export function AppelVideo({
     }
   };
 
-  // ✨ Anti-écho — message quand on active le HP sur mobile
   const toggleSpeaker = async () => {
     try {
       const newSpeakerState = !isSpeakerOn;
@@ -415,7 +423,6 @@ export function AppelVideo({
     }
   };
 
-  // ✨ iOS Safari — débloquer manuellement l'audio distant
   const unlockRemoteAudio = useCallback(() => {
     console.log("[AppelVideo] tentative de déblocage audio distant");
     let played = 0;
@@ -448,37 +455,25 @@ export function AppelVideo({
     good: "Excellente",
     fair: "Moyenne",
     poor: "Faible",
-    unknown: "",
+    unknown: "—",
   }[networkQuality];
 
   const networkQualityColor = {
     good: "#10B981",
     fair: "#F59E0B",
     poor: "#EF4444",
-    unknown: "#94A3B8",
+    unknown: "#64748B",
   }[networkQuality];
 
   const isAudioCall = callType === "audio";
 
-  const localVideoMirrorStyle = {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    transform: isFrontCamera && !isAudioCall ? "scaleX(-1)" : "scaleX(1)",
-  };
+  // ✨ Fond dégradé radial subtil
+  const bgGradient = isAudioCall
+    ? "radial-gradient(circle at 30% 20%, #1E293B 0%, #0F172A 60%)"
+    : "radial-gradient(circle at 30% 20%, #1E1B4B 0%, #0F172A 60%)";
 
-  const localFloatingStyle = {
-    position: "absolute",
-    top: isMobile ? 12 : 16,
-    right: isMobile ? 12 : 16,
-    width: isMobile ? 96 : 120,
-    height: isMobile ? 128 : 160,
-    borderRadius: 12,
-    overflow: "hidden",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
-    border: "2px solid rgba(255,255,255,0.3)",
-    zIndex: 10,
-  };
+  // ✨ Waveform bar heights (déterministe pour éviter les re-renders)
+  const waveBars = [0.3, 0.7, 0.45, 0.9, 0.5, 0.8, 0.35, 0.65, 0.4];
 
   return (
     <div
@@ -486,7 +481,7 @@ export function AppelVideo({
         position: "relative",
         width: "100%",
         height: "100dvh",
-        background: "#0F172A",
+        background: bgGradient,
         color: "white",
         overflow: "hidden",
         display: "flex",
@@ -500,10 +495,25 @@ export function AppelVideo({
           0%, 100% { box-shadow: 0 4px 16px rgba(245,158,11,0.4); }
           50%      { box-shadow: 0 4px 24px rgba(245,158,11,0.8); }
         }
+        @keyframes av-pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.4; transform: scale(0.85); }
+        }
+        @keyframes av-wave {
+          0%, 100% { transform: scaleY(0.4); }
+          50%      { transform: scaleY(1); }
+        }
         .av-spin { animation: av-spin 1s linear infinite; }
         .av-pulse-orange { animation: av-pulse-orange 1.5s ease-in-out infinite; }
+        .av-pulse-dot { animation: av-pulse-dot 1.6s ease-in-out infinite; }
+        .av-wave {
+          animation: av-wave 1.1s ease-in-out infinite;
+          transform-origin: center;
+        }
         @media (prefers-reduced-motion: reduce) {
-          .av-spin, .av-pulse-orange { animation: none !important; }
+          .av-spin, .av-pulse-orange, .av-pulse-dot, .av-wave {
+            animation: none !important;
+          }
         }
       `}</style>
 
@@ -601,7 +611,7 @@ export function AppelVideo({
         </div>
       )}
 
-      {/* ═══ Écran pré-appel (iOS Safari — user gesture) ═══ */}
+      {/* ═══ Écran pré-appel ═══ */}
       {!hasJoined &&
         connectionState !== "CONNECTING" &&
         connectionState !== "ERROR" && (
@@ -707,35 +717,43 @@ export function AppelVideo({
           </div>
         )}
 
-      {/* ═══ Bandeau supérieur ═══ */}
+      {/* ═══ Top bar — pill glass flottante ═══ */}
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: isMobile
-            ? `calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px))`
-            : "12px 16px",
-          background: "rgba(15,23,42,0.7)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
+          position: "absolute",
+          top: isMobile
+            ? "calc(12px + env(safe-area-inset-top, 0px))"
+            : 16,
+          left: isMobile ? 12 : 16,
+          right: isMobile ? 12 : 16,
           zIndex: 10,
-          gap: 12,
+          display: "flex",
+          justifyContent: "center",
+          pointerEvents: "none",
         }}
       >
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
-            minWidth: 0,
-            flex: 1,
+            gap: 10,
+            padding: isMobile ? "8px 12px" : "10px 16px",
+            background: "rgba(15, 23, 42, 0.55)",
+            backdropFilter: "blur(40px) saturate(180%)",
+            WebkitBackdropFilter: "blur(40px) saturate(180%)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderTop: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 999,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            pointerEvents: "auto",
+            maxWidth: "100%",
           }}
         >
+          {/* Avatar */}
           <div
             style={{
-              width: 36,
-              height: 36,
+              width: 32,
+              height: 32,
               borderRadius: "50%",
               background: "#1E293B",
               display: "flex",
@@ -743,6 +761,7 @@ export function AppelVideo({
               justifyContent: "center",
               overflow: "hidden",
               flexShrink: 0,
+              border: "1.5px solid rgba(255,255,255,0.15)",
             }}
           >
             {contactAvatar ? (
@@ -752,34 +771,113 @@ export function AppelVideo({
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
-              <User size={20} color="#94A3B8" />
+              <User size={16} color="#94A3B8" />
             )}
           </div>
-          <span
+
+          {/* Nom + badge "En communication" */}
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <span
+              style={{
+                fontWeight: 600,
+                fontSize: isMobile ? 13 : 14,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+                lineHeight: 1.2,
+              }}
+            >
+              {contactName || "Appel"}
+            </span>
+            <span
+              style={{
+                fontSize: 10.5,
+                color: "rgba(255,255,255,0.55)",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                lineHeight: 1.2,
+              }}
+            >
+              <span
+                className={connectionState === "CONNECTED" ? "av-pulse-dot" : ""}
+                style={{
+                  display: "inline-block",
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background:
+                    connectionState === "CONNECTED" ? "#10B981" : "#F59E0B",
+                }}
+              />
+              {connectionState === "CONNECTED"
+                ? "En communication"
+                : "Connexion…"}
+            </span>
+          </div>
+
+          {/* Séparateur */}
+          <div
             style={{
+              width: 1,
+              height: 24,
+              background: "rgba(255,255,255,0.12)",
+              flexShrink: 0,
+            }}
+          />
+
+          {/* Durée */}
+          <div
+            style={{
+              fontFamily: "ui-monospace, 'SF Mono', monospace",
+              fontSize: isMobile ? 13 : 14,
               fontWeight: 600,
-              fontSize: isMobile ? 15 : 16,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              minWidth: 0,
+              color: "#E2E8F0",
+              fontVariantNumeric: "tabular-nums",
+              letterSpacing: 0.5,
+              flexShrink: 0,
             }}
           >
-            {contactName || "Appel"}
-          </span>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            color: networkQualityColor,
-            fontSize: isMobile ? 12 : 13,
-            flexShrink: 0,
-          }}
-        >
-          <Wifi size={isMobile ? 14 : 16} />
-          {networkQualityLabel && <span>{networkQualityLabel}</span>}
+            {formatDuration(callDuration)}
+          </div>
+
+          {/* Pastille réseau */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "3px 8px",
+              borderRadius: 999,
+              background: `${networkQualityColor}22`,
+              border: `1px solid ${networkQualityColor}55`,
+              flexShrink: 0,
+            }}
+            title={`Qualité réseau : ${networkQualityLabel}`}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: networkQualityColor,
+                boxShadow: `0 0 6px ${networkQualityColor}`,
+              }}
+            />
+            {!isMobile && (
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: networkQualityColor,
+                }}
+              >
+                {networkQualityLabel}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -792,67 +890,130 @@ export function AppelVideo({
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            gap: 16,
+            gap: 20,
             padding: 16,
           }}
         >
+          {/* Avatar avec halo */}
           <div
             style={{
-              width: isMobile ? 100 : 120,
-              height: isMobile ? 100 : 120,
-              borderRadius: "50%",
-              background: "#1E293B",
+              position: "relative",
+              width: isMobile ? 140 : 160,
+              height: isMobile ? 140 : 160,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 48,
-              fontWeight: 700,
-              color: "#94A3B8",
-              overflow: "hidden",
             }}
           >
-            {contactAvatar ? (
-              <img
-                src={contactAvatar}
-                alt={contactName}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            ) : (
-              <User size={isMobile ? 48 : 56} />
-            )}
+            {/* Halo animé */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: -12,
+                borderRadius: "50%",
+                background:
+                  "radial-gradient(circle, rgba(129,140,248,0.35) 0%, transparent 70%)",
+                animation:
+                  connectionState === "CONNECTED"
+                    ? "av-pulse-dot 2.4s ease-in-out infinite"
+                    : "none",
+              }}
+            />
+
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                height: "100%",
+                borderRadius: "50%",
+                background: "#1E293B",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                border: "3px solid rgba(129,140,248,0.5)",
+                boxShadow: "0 20px 60px rgba(79,70,229,0.3)",
+              }}
+            >
+              {contactAvatar ? (
+                <img
+                  src={contactAvatar}
+                  alt={contactName}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <User size={isMobile ? 64 : 72} color="#94A3B8" />
+              )}
+            </div>
           </div>
+
+          {/* Nom */}
           <h2
             style={{
               margin: 0,
-              fontSize: isMobile ? 20 : 24,
+              fontSize: isMobile ? 22 : 26,
+              fontWeight: 700,
               textAlign: "center",
+              letterSpacing: "-0.02em",
             }}
           >
             {contactName || "Appel audio"}
           </h2>
-          <p
-            style={{
-              margin: 0,
-              color: "#94A3B8",
-              fontSize: isMobile ? 13 : 14,
-            }}
-          >
-            {isMuted ? "Micro coupé" : "En communication"}
-          </p>
+
+          {/* Waveform animée */}
           <div
+            aria-hidden="true"
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 8,
-              color: "#94A3B8",
-              fontSize: isMobile ? 18 : 20,
+              justifyContent: "center",
+              gap: 4,
+              height: 32,
+              marginTop: 4,
             }}
           >
-            <Clock size={isMobile ? 18 : 20} />
-            <span style={{ fontVariantNumeric: "tabular-nums" }}>
-              {formatDuration(callDuration)}
-            </span>
+            {waveBars.map((h, i) => (
+              <span
+                key={i}
+                className={isMuted ? "" : "av-wave"}
+                style={{
+                  display: "inline-block",
+                  width: 4,
+                  height: 32,
+                  borderRadius: 2,
+                  background: isMuted
+                    ? "rgba(148,163,184,0.3)"
+                    : "linear-gradient(180deg, #818CF8, #6366F1)",
+                  transform: `scaleY(${isMuted ? 0.15 : h})`,
+                  animationDelay: `${(i % 4) * 0.15}s`,
+                  transition: "background 0.3s ease",
+                }}
+              />
+            ))}
           </div>
+
+          {/* Statut */}
+          <p
+            style={{
+              margin: 0,
+              color: isMuted ? "#F59E0B" : "#94A3B8",
+              fontSize: isMobile ? 13 : 14,
+              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {isMuted ? (
+              <>
+                <MicOff size={14} />
+                Micro coupé
+              </>
+            ) : (
+              "En communication"
+            )}
+          </p>
         </div>
       ) : (
         <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -864,8 +1025,32 @@ export function AppelVideo({
                 fullscreen
               />
 
-              <div style={localFloatingStyle}>
-                <div ref={localVideoRef} style={localVideoMirrorStyle} />
+              {/* PiP local — moderne avec ombre profonde */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: isMobile ? 80 : 96,
+                  right: isMobile ? 12 : 16,
+                  width: isMobile ? 96 : 128,
+                  height: isMobile ? 132 : 176,
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  boxShadow:
+                    "0 20px 48px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(255,255,255,0.15)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  zIndex: 10,
+                  background: "#1E293B",
+                }}
+              >
+                <div
+                  ref={localVideoRef}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    transform: isFrontCamera ? "scaleX(-1)" : "scaleX(1)",
+                  }}
+                />
                 {isVideoOff && (
                   <div
                     style={{
@@ -883,12 +1068,16 @@ export function AppelVideo({
                 <div
                   style={{
                     position: "absolute",
-                    bottom: 4,
-                    left: 4,
-                    background: "rgba(0,0,0,0.6)",
-                    borderRadius: 4,
-                    padding: "2px 6px",
-                    fontSize: 10,
+                    bottom: 6,
+                    left: 6,
+                    background: "rgba(0,0,0,0.55)",
+                    backdropFilter: "blur(8px)",
+                    WebkitBackdropFilter: "blur(8px)",
+                    borderRadius: 999,
+                    padding: "3px 10px",
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    border: "1px solid rgba(255,255,255,0.1)",
                   }}
                 >
                   Vous
@@ -905,7 +1094,15 @@ export function AppelVideo({
                 bottom: 0,
               }}
             >
-              <div ref={localVideoRef} style={localVideoMirrorStyle} />
+              <div
+                ref={localVideoRef}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: isFrontCamera ? "scaleX(-1)" : "scaleX(1)",
+                }}
+              />
               {isVideoOff && (
                 <div
                   style={{
@@ -920,15 +1117,52 @@ export function AppelVideo({
                   📷
                 </div>
               )}
+              {/* Message "En attente" */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%,-50%)",
+                  background: "rgba(15,23,42,0.7)",
+                  backdropFilter: "blur(20px)",
+                  WebkitBackdropFilter: "blur(20px)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 999,
+                  padding: "8px 18px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: -60,
+                }}
+              >
+                <span
+                  className="av-pulse-dot"
+                  style={{
+                    display: "inline-block",
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#F59E0B",
+                  }}
+                />
+                En attente du correspondant…
+              </div>
               <div
                 style={{
                   position: "absolute",
                   bottom: 12,
                   left: 12,
-                  background: "rgba(0,0,0,0.6)",
-                  borderRadius: 8,
+                  background: "rgba(0,0,0,0.55)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  borderRadius: 999,
                   padding: "4px 12px",
-                  fontSize: 13,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: "1px solid rgba(255,255,255,0.1)",
                 }}
               >
                 Vous
@@ -945,7 +1179,7 @@ export function AppelVideo({
           onClick={unlockRemoteAudio}
           style={{
             position: "absolute",
-            bottom: isMobile ? 100 : 120,
+            bottom: isMobile ? 140 : 160,
             left: "50%",
             transform: "translateX(-50%)",
             padding: "12px 24px",
@@ -974,191 +1208,307 @@ export function AppelVideo({
         </button>
       )}
 
-      {/* ═══ Barre de contrôle ═══ */}
+      {/* ═══ Barre de contrôle — pill glass flottante ═══ */}
       <div
         style={{
+          position: "absolute",
+          bottom: isMobile
+            ? "calc(12px + env(safe-area-inset-bottom, 0px))"
+            : 20,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 20,
           display: "flex",
-          alignItems: "center",
           justifyContent: "center",
-          gap: isMobile ? 8 : 20,
-          padding: isMobile ? "8px 8px" : "12px 16px",
-          paddingBottom: isMobile
-            ? "calc(8px + env(safe-area-inset-bottom, 0px))"
-            : "12px",
-          background: "rgba(15,23,42,0.95)",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          flexWrap: "nowrap",
-          minWidth: 0,
+          width: "calc(100% - 24px)",
+          maxWidth: "fit-content",
         }}
       >
-        {!isMobile && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: isMobile ? 6 : 12,
+            padding: isMobile ? "10px 12px" : "12px 16px",
+            background: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(40px) saturate(180%)",
+            WebkitBackdropFilter: "blur(40px) saturate(180%)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderTop: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 28,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+          }}
+        >
+          {/* Mute */}
+          <ControlButton
+            icon={
+              isMuted ? (
+                <MicOff size={isMobile ? 20 : 22} />
+              ) : (
+                <Mic size={isMobile ? 20 : 22} />
+              )
+            }
+            label={isMobile ? "Micro" : ""}
+            active={isMuted}
+            activeColor="red"
+            pressed={pressedBtn === "mute"}
+            onPress={pressBtn("mute")}
+            onRelease={releaseBtn}
+            onClick={toggleMute}
+            ariaLabel={isMuted ? "Activer le micro" : "Couper le micro"}
+            isMobile={isMobile}
+          />
+
+          {/* Video toggle */}
+          <ControlButton
+            icon={
+              isVideoOff ? (
+                <VideoOff size={isMobile ? 20 : 22} />
+              ) : (
+                <Video size={isMobile ? 20 : 22} />
+              )
+            }
+            label={isMobile ? "Caméra" : ""}
+            active={isVideoOff}
+            activeColor="red"
+            pressed={pressedBtn === "video"}
+            onPress={pressBtn("video")}
+            onRelease={releaseBtn}
+            onClick={toggleVideo}
+            ariaLabel={isVideoOff ? "Activer la caméra" : "Couper la caméra"}
+            isMobile={isMobile}
+          />
+
+          {/* Speaker */}
+          <ControlButton
+            icon={
+              isSpeakerOn ? (
+                <Volume2 size={isMobile ? 20 : 22} />
+              ) : (
+                <VolumeX size={isMobile ? 20 : 22} />
+              )
+            }
+            label={isMobile ? "Son" : ""}
+            active={!isSpeakerOn}
+            activeColor="red"
+            pressed={pressedBtn === "speaker"}
+            onPress={pressBtn("speaker")}
+            onRelease={releaseBtn}
+            onClick={toggleSpeaker}
+            ariaLabel={
+              isSpeakerOn
+                ? "Couper le haut-parleur"
+                : "Activer le haut-parleur"
+            }
+            isMobile={isMobile}
+          />
+
+          {/* Switch camera — mobile friendly maintenant */}
+          {!isAudioCall && (
+            <ControlButton
+              icon={<SwitchCamera size={isMobile ? 20 : 22} />}
+              label={isMobile ? "Pivoter" : ""}
+              active={false}
+              activeColor="blue"
+              pressed={pressedBtn === "switchCam"}
+              onPress={pressBtn("switchCam")}
+              onRelease={releaseBtn}
+              onClick={switchCamera}
+              ariaLabel="Changer de caméra"
+              isMobile={isMobile}
+            />
+          )}
+
+          {/* Hold */}
+          <ControlButton
+            icon={
+              isOnHold ? (
+                <Play size={isMobile ? 20 : 22} />
+              ) : (
+                <Pause size={isMobile ? 20 : 22} />
+              )
+            }
+            label={isMobile ? "Pause" : ""}
+            active={isOnHold}
+            activeColor="blue"
+            pressed={pressedBtn === "hold"}
+            onPress={pressBtn("hold")}
+            onRelease={releaseBtn}
+            onClick={toggleHold}
+            ariaLabel={isOnHold ? "Reprendre l'appel" : "Mettre en attente"}
+            isMobile={isMobile}
+          />
+
+          {/* Screen share — desktop uniquement */}
+          {!isMobile && (
+            <ControlButton
+              icon={
+                isScreenSharing ? (
+                  <MonitorOff size={22} />
+                ) : (
+                  <Monitor size={22} />
+                )
+              }
+              label=""
+              active={isScreenSharing}
+              activeColor="blue"
+              pressed={pressedBtn === "screen"}
+              onPress={pressBtn("screen")}
+              onRelease={releaseBtn}
+              onClick={startScreenShare}
+              ariaLabel={
+                isScreenSharing ? "Arrêter le partage" : "Partager l'écran"
+              }
+              isMobile={isMobile}
+            />
+          )}
+
+          {/* End call — gros bouton rouge détaché */}
           <div
             style={{
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
-              gap: 6,
-              color: "#94A3B8",
-              fontSize: 15,
-              marginRight: "auto",
-              flexShrink: 0,
-              fontVariantNumeric: "tabular-nums",
+              gap: 4,
             }}
           >
-            {connectionState === "CONNECTED" ? (
-              <Wifi size={16} color="#10B981" />
-            ) : (
-              <WifiOff size={16} color="#EF4444" />
+            <button
+              type="button"
+              onClick={handleEndCall}
+              onTouchStart={pressBtn("end")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
+              style={{
+                width: isMobile ? 52 : 60,
+                height: isMobile ? 52 : 60,
+                borderRadius: 20,
+                border: "none",
+                background: "linear-gradient(135deg, #EF4444, #DC2626)",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 8px 24px rgba(239,68,68,0.5)",
+                transform:
+                  pressedBtn === "end" ? "scale(0.92)" : "scale(1)",
+                transition:
+                  "transform 0.1s ease, box-shadow 0.15s ease",
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+                padding: 0,
+              }}
+              aria-label="Terminer l'appel"
+            >
+              <PhoneOff size={isMobile ? 24 : 28} />
+            </button>
+            {isMobile && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                Quitter
+              </span>
             )}
-            <Clock size={18} />
-            <span>{formatDuration(callDuration)}</span>
           </div>
-        )}
-
-        <button
-          type="button"
-          onClick={toggleMute}
-          onTouchStart={pressBtn("mute")}
-          onTouchEnd={releaseBtn}
-          onTouchCancel={releaseBtn}
-          style={controlButtonStyle(
-            isMuted ? "red" : "default",
-            isMobile,
-            pressedBtn === "mute"
-          )}
-          aria-label={isMuted ? "Activer le micro" : "Couper le micro"}
-        >
-          {isMuted ? (
-            <MicOff size={isMobile ? 20 : 22} />
-          ) : (
-            <Mic size={isMobile ? 20 : 22} />
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={toggleVideo}
-          onTouchStart={pressBtn("video")}
-          onTouchEnd={releaseBtn}
-          onTouchCancel={releaseBtn}
-          style={controlButtonStyle(
-            isVideoOff ? "red" : "default",
-            isMobile,
-            pressedBtn === "video"
-          )}
-          aria-label={isVideoOff ? "Activer la caméra" : "Couper la caméra"}
-        >
-          {isVideoOff ? (
-            <VideoOff size={isMobile ? 20 : 22} />
-          ) : (
-            <Video size={isMobile ? 20 : 22} />
-          )}
-        </button>
-
-        {/* ✨ Bouton haut-parleur — désormais visible AUSSI sur mobile */}
-        <button
-          type="button"
-          onClick={toggleSpeaker}
-          onTouchStart={pressBtn("speaker")}
-          onTouchEnd={releaseBtn}
-          onTouchCancel={releaseBtn}
-          style={controlButtonStyle(
-            isSpeakerOn ? "default" : "red",
-            isMobile,
-            pressedBtn === "speaker"
-          )}
-          aria-label={
-            isSpeakerOn
-              ? "Couper le haut-parleur"
-              : "Activer le haut-parleur"
-          }
-        >
-          {isSpeakerOn ? (
-            <Volume2 size={isMobile ? 20 : 22} />
-          ) : (
-            <VolumeX size={isMobile ? 20 : 22} />
-          )}
-        </button>
-
-        {!isAudioCall && !isMobile && (
-          <button
-            type="button"
-            onClick={switchCamera}
-            onTouchStart={pressBtn("switchCam")}
-            onTouchEnd={releaseBtn}
-            onTouchCancel={releaseBtn}
-            style={controlButtonStyle(
-              "default",
-              isMobile,
-              pressedBtn === "switchCam"
-            )}
-            aria-label="Changer de caméra"
-          >
-            <SwitchCamera size={22} />
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={toggleHold}
-          onTouchStart={pressBtn("hold")}
-          onTouchEnd={releaseBtn}
-          onTouchCancel={releaseBtn}
-          style={controlButtonStyle(
-            isOnHold ? "blue" : "default",
-            isMobile,
-            pressedBtn === "hold"
-          )}
-          aria-label={isOnHold ? "Reprendre l'appel" : "Mettre en attente"}
-        >
-          {isOnHold ? (
-            <Play size={isMobile ? 20 : 22} />
-          ) : (
-            <Pause size={isMobile ? 20 : 22} />
-          )}
-        </button>
-
-        {!isMobile && (
-          <button
-            type="button"
-            onClick={startScreenShare}
-            onTouchStart={pressBtn("screen")}
-            onTouchEnd={releaseBtn}
-            onTouchCancel={releaseBtn}
-            style={controlButtonStyle(
-              isScreenSharing ? "blue" : "default",
-              isMobile,
-              pressedBtn === "screen"
-            )}
-            aria-label={
-              isScreenSharing ? "Arrêter le partage" : "Partager l'écran"
-            }
-          >
-            {isScreenSharing ? (
-              <MonitorOff size={22} />
-            ) : (
-              <Monitor size={22} />
-            )}
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={handleEndCall}
-          onTouchStart={pressBtn("end")}
-          onTouchEnd={releaseBtn}
-          onTouchCancel={releaseBtn}
-          style={{
-            ...controlButtonStyle("red", isMobile, pressedBtn === "end"),
-            background: pressedBtn === "end" ? "#DC2626" : "#EF4444",
-            borderColor: "#EF4444",
-            width: isMobile ? 48 : 56,
-            height: isMobile ? 48 : 56,
-          }}
-          aria-label="Terminer l'appel"
-        >
-          <PhoneOff size={isMobile ? 22 : 26} />
-        </button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CONTROL BUTTON — squircle glass avec label
+// ════════════════════════════════════════════════════════════════════
+function ControlButton({
+  icon,
+  label,
+  active,
+  activeColor,
+  pressed,
+  onPress,
+  onRelease,
+  onClick,
+  ariaLabel,
+  isMobile,
+}) {
+  const size = isMobile ? 48 : 56;
+
+  const activeStyle = (() => {
+    if (!active) return {};
+    if (activeColor === "red") {
+      return {
+        background: "rgba(239,68,68,0.22)",
+        borderColor: "rgba(239,68,68,0.6)",
+        color: "#FCA5A5",
+      };
+    }
+    if (activeColor === "blue") {
+      return {
+        background: "rgba(59,130,246,0.22)",
+        borderColor: "rgba(59,130,246,0.6)",
+        color: "#93C5FD",
+      };
+    }
+    return {};
+  })();
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        onTouchStart={onPress}
+        onTouchEnd={onRelease}
+        onTouchCancel={onRelease}
+        aria-label={ariaLabel}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 20,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(255,255,255,0.06)",
+          color: "#E2E8F0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          transition:
+            "background 0.15s ease, transform 0.1s ease, border-color 0.15s ease, color 0.15s ease",
+          transform: pressed ? "scale(0.92)" : "scale(1)",
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
+          padding: 0,
+          flexShrink: 0,
+          ...activeStyle,
+        }}
+      >
+        {icon}
+      </button>
+      {label ? (
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.55)",
+            userSelect: "none",
+          }}
+        >
+          {label}
+        </span>
+      ) : (
+        <span style={{ height: 12 }} aria-hidden="true" />
+      )}
     </div>
   );
 }
@@ -1211,65 +1561,20 @@ function RemoteVideo({ user, fullscreen }) {
           position: "absolute",
           bottom: 12,
           left: 12,
-          background: "rgba(0,0,0,0.6)",
-          borderRadius: 8,
+          background: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          borderRadius: 999,
           padding: "4px 12px",
-          fontSize: 13,
+          fontSize: 12,
+          fontWeight: 600,
+          border: "1px solid rgba(255,255,255,0.1)",
         }}
       >
         Participant {user.uid}
       </div>
     </div>
   );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// HELPER — Style bouton de contrôle (44px mobile + feedback tap)
-// ════════════════════════════════════════════════════════════════════
-function controlButtonStyle(variant, isMobile, pressed = false) {
-  const size = isMobile ? 44 : 52;
-  const base = {
-    width: size,
-    height: size,
-    borderRadius: "50%",
-    border: "2px solid rgba(255,255,255,0.2)",
-    background: pressed
-      ? "rgba(255,255,255,0.16)"
-      : "rgba(255,255,255,0.08)",
-    color: "white",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    transition:
-      "background 0.12s ease, transform 0.1s ease, border-color 0.15s ease",
-    backdropFilter: "blur(4px)",
-    WebkitBackdropFilter: "blur(4px)",
-    flexShrink: 0,
-    padding: 0,
-    transform: pressed ? "scale(0.92)" : "scale(1)",
-    WebkitTapHighlightColor: "transparent",
-    touchAction: "manipulation",
-    outline: "none",
-  };
-
-  if (variant === "red") {
-    return {
-      ...base,
-      background: pressed ? "rgba(239,68,68,0.35)" : "rgba(239,68,68,0.2)",
-      borderColor: "#EF4444",
-    };
-  }
-  if (variant === "blue") {
-    return {
-      ...base,
-      background: pressed
-        ? "rgba(59,130,246,0.35)"
-        : "rgba(59,130,246,0.2)",
-      borderColor: "#3B82F6",
-    };
-  }
-  return base;
 }
 
 export default AppelVideo;
