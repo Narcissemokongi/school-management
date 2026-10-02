@@ -28,7 +28,7 @@ export function AppelVideo({
   const [isVideoOff, setIsVideoOff] = useState(callType === "audio");
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
-  const [connectionState, setConnectionState] = useState("CONNECTING");
+  const [connectionState, setConnectionState] = useState("IDLE");
   const [networkQuality, setNetworkQuality] = useState("unknown");
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
