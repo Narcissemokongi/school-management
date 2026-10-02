@@ -63,7 +63,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,  // ✅ 8 MB (fix Vercel)
         // ✨ Exclure les gros fichiers du cache PWA
         globIgnores: ['**/node_modules/**/*'],
       },
