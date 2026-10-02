@@ -31,7 +31,8 @@ export function AppelVideo({
   const [connectionState, setConnectionState] = useState("IDLE");
   const [networkQuality, setNetworkQuality] = useState("unknown");
   const [isFrontCamera, setIsFrontCamera] = useState(true);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  // ✨ Anti-écho — HP activé par défaut uniquement pour la vidéo
+  const [isSpeakerOn, setIsSpeakerOn] = useState(callType === "video");
   const [isOnHold, setIsOnHold] = useState(false);
   // ✨ Feedback tap sur les boutons de contrôle
   const [pressedBtn, setPressedBtn] = useState(null);
@@ -190,7 +191,10 @@ export function AppelVideo({
 
     // ═══ getUserMedia — DOIT être dans le user gesture (iOS) ═══
     try {
-      const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+      const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+        { AEC: true, AGC: true, ANS: true }, // Configuration audio
+        { encoderConfig: "480p_1" }          // Configuration vidéo
+      );
       if (destroyedRef.current) {
         tracks.forEach((t) => t.close());
         return;
@@ -210,6 +214,19 @@ export function AppelVideo({
       }
 
       setHasJoined(true);
+
+      // ✨ Anti-écho — audio => mode écouteur, vidéo => HP
+      try {
+        if (callType === "audio") {
+          await AgoraRTC.setSpeakerphoneOn(false);
+          setIsSpeakerOn(false);
+        } else {
+          await AgoraRTC.setSpeakerphoneOn(true);
+          setIsSpeakerOn(true);
+        }
+      } catch (e) {
+        console.warn("[AppelVideo] setSpeakerphoneOn init failed:", e);
+      }
     } catch (err) {
       console.error("[AppelVideo] getUserMedia failed:", err);
       const code = err?.code || err?.name;
@@ -238,7 +255,6 @@ export function AppelVideo({
       if (destroyedRef.current) return;
       try {
         await agoraClient.subscribe(user, mediaType);
-        // ✨ Tenter de jouer immédiatement l'audio distant (après subscribe)
         if (mediaType === "audio" && user.audioTrack) {
           try {
             user.audioTrack.play();
@@ -346,11 +362,18 @@ export function AppelVideo({
     }
   };
 
+  // ✨ Anti-écho — message quand on active le HP sur mobile
   const toggleSpeaker = async () => {
     try {
       const newSpeakerState = !isSpeakerOn;
       await AgoraRTC.setSpeakerphoneOn(newSpeakerState);
       setIsSpeakerOn(newSpeakerState);
+      if (newSpeakerState && isMobile) {
+        toast("Utilisez un casque pour éviter l'écho", {
+          icon: "🎧",
+          duration: 3000,
+        });
+      }
     } catch (err) {
       console.warn("setSpeakerphoneOn non supporté", err);
     }
@@ -407,7 +430,6 @@ export function AppelVideo({
       }
     });
     if (played === 0) {
-      // Aucune piste audio distante encore disponible — laisser le bouton visible
       toast.error("En attente de l'audio du correspondant…");
       return;
     }
@@ -1032,27 +1054,30 @@ export function AppelVideo({
           )}
         </button>
 
-        {!isMobile && (
-          <button
-            type="button"
-            onClick={toggleSpeaker}
-            onTouchStart={pressBtn("speaker")}
-            onTouchEnd={releaseBtn}
-            onTouchCancel={releaseBtn}
-            style={controlButtonStyle(
-              isSpeakerOn ? "default" : "red",
-              isMobile,
-              pressedBtn === "speaker"
-            )}
-            aria-label={
-              isSpeakerOn
-                ? "Couper le haut-parleur"
-                : "Activer le haut-parleur"
-            }
-          >
-            {isSpeakerOn ? <Volume2 size={22} /> : <VolumeX size={22} />}
-          </button>
-        )}
+        {/* ✨ Bouton haut-parleur — désormais visible AUSSI sur mobile */}
+        <button
+          type="button"
+          onClick={toggleSpeaker}
+          onTouchStart={pressBtn("speaker")}
+          onTouchEnd={releaseBtn}
+          onTouchCancel={releaseBtn}
+          style={controlButtonStyle(
+            isSpeakerOn ? "default" : "red",
+            isMobile,
+            pressedBtn === "speaker"
+          )}
+          aria-label={
+            isSpeakerOn
+              ? "Couper le haut-parleur"
+              : "Activer le haut-parleur"
+          }
+        >
+          {isSpeakerOn ? (
+            <Volume2 size={isMobile ? 20 : 22} />
+          ) : (
+            <VolumeX size={isMobile ? 20 : 22} />
+          )}
+        </button>
 
         {!isAudioCall && !isMobile && (
           <button
