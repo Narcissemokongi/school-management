@@ -38,6 +38,8 @@ export function AppelVideo({
   // ✨ iOS Safari — écran pré-appel obligatoire (user gesture pour getUserMedia)
   const [hasJoined, setHasJoined] = useState(false);
   const [permissionError, setPermissionError] = useState(null);
+  // ✨ iOS Safari — audio distant bloqué par la politique d'autoplay
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   const endCallMutation = useMutation(api.appels.endCall);
   const generateToken = useAction(api.agora.generateToken);
@@ -53,6 +55,17 @@ export function AppelVideo({
   useEffect(() => {
     onCallEndRef.current = onCallEnd;
   }, [onCallEnd]);
+
+  // ✨ iOS Safari — détecter le blocage d'autoplay audio distant
+  useEffect(() => {
+    AgoraRTC.onAutoplayFailed = () => {
+      console.warn("[AppelVideo] autoplay audio bloqué par le navigateur");
+      setAutoplayBlocked(true);
+    };
+    return () => {
+      AgoraRTC.onAutoplayFailed = undefined;
+    };
+  }, []);
 
   // ✨ Handlers touch génériques
   const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
@@ -86,6 +99,7 @@ export function AppelVideo({
     setIsMuted(false);
     setIsVideoOff(false);
     setIsOnHold(false);
+    setAutoplayBlocked(false);
   }, []);
 
   const handleEndCall = useCallback(async () => {
@@ -224,6 +238,14 @@ export function AppelVideo({
       if (destroyedRef.current) return;
       try {
         await agoraClient.subscribe(user, mediaType);
+        // ✨ Tenter de jouer immédiatement l'audio distant (après subscribe)
+        if (mediaType === "audio" && user.audioTrack) {
+          try {
+            user.audioTrack.play();
+          } catch (e) {
+            console.warn("[AppelVideo] audio play blocked:", e);
+          }
+        }
         setRemoteUsers((prev) =>
           prev.find((u) => u.uid === user.uid) ? prev : [...prev, user]
         );
@@ -370,6 +392,28 @@ export function AppelVideo({
     }
   };
 
+  // ✨ iOS Safari — débloquer manuellement l'audio distant
+  const unlockRemoteAudio = useCallback(() => {
+    console.log("[AppelVideo] tentative de déblocage audio distant");
+    let played = 0;
+    remoteUsers.forEach((user) => {
+      if (user.audioTrack) {
+        try {
+          user.audioTrack.play();
+          played++;
+        } catch (e) {
+          console.warn("[AppelVideo] audio play failed for", user.uid, e);
+        }
+      }
+    });
+    if (played === 0) {
+      // Aucune piste audio distante encore disponible — laisser le bouton visible
+      toast.error("En attente de l'audio du correspondant…");
+      return;
+    }
+    setAutoplayBlocked(false);
+  }, [remoteUsers]);
+
   const formatDuration = (sec) => {
     const mins = Math.floor(sec / 60)
       .toString()
@@ -430,9 +474,14 @@ export function AppelVideo({
       {/* Keyframes */}
       <style>{`
         @keyframes av-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes av-pulse-orange {
+          0%, 100% { box-shadow: 0 4px 16px rgba(245,158,11,0.4); }
+          50%      { box-shadow: 0 4px 24px rgba(245,158,11,0.8); }
+        }
         .av-spin { animation: av-spin 1s linear infinite; }
+        .av-pulse-orange { animation: av-pulse-orange 1.5s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) {
-          .av-spin { animation: none !important; }
+          .av-spin, .av-pulse-orange { animation: none !important; }
         }
       `}</style>
 
@@ -867,6 +916,42 @@ export function AppelVideo({
         </div>
       )}
 
+      {/* ═══ Bouton déblocage audio iOS ═══ */}
+      {autoplayBlocked && (
+        <button
+          type="button"
+          onClick={unlockRemoteAudio}
+          style={{
+            position: "absolute",
+            bottom: isMobile ? 100 : 120,
+            left: "50%",
+            transform: "translateX(-50%)",
+            padding: "12px 24px",
+            background: "#F59E0B",
+            border: "none",
+            borderRadius: 999,
+            color: "white",
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: "pointer",
+            minHeight: 48,
+            boxShadow: "0 4px 16px rgba(245,158,11,0.4)",
+            WebkitTapHighlightColor: "transparent",
+            touchAction: "manipulation",
+            fontFamily: "inherit",
+            zIndex: 30,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            whiteSpace: "nowrap",
+          }}
+          className="av-pulse-orange"
+          aria-label="Activer le son du correspondant"
+        >
+          🔊 Appuyez pour activer le son
+        </button>
+      )}
+
       {/* ═══ Barre de contrôle ═══ */}
       <div
         style={{
@@ -1117,7 +1202,7 @@ function RemoteVideo({ user, fullscreen }) {
 // HELPER — Style bouton de contrôle (44px mobile + feedback tap)
 // ════════════════════════════════════════════════════════════════════
 function controlButtonStyle(variant, isMobile, pressed = false) {
-  const size = isMobile ? 44 : 52; // ✨ 44px mobile (WCAG)
+  const size = isMobile ? 44 : 52;
   const base = {
     width: size,
     height: size,
