@@ -13,9 +13,28 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          rm -rf node_modules
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
+          set -e
+          echo "=== Node version ==="
+          node --version
+          echo "=== Architecture ==="
+          uname -m
+          
+          # Nettoyage complet
+          rm -rf node_modules package-lock.json
+          
+          # Installation avec --force (force l'install des optional deps)
+          npm install --force --include=optional
+          
+          # Vérification critique : vite doit être installé
+          if [ ! -f node_modules/vite/bin/vite.js ]; then
+            echo "❌ VITE NON INSTALLÉ"
+            echo "=== Contenu node_modules ==="
+            ls node_modules/ | head -30
+            exit 1
+          fi
+          echo "✅ Vite installé"
+          
+          # Vérification des bindings
           echo "=== Bindings rolldown ==="
           ls node_modules/@rolldown/ 2>/dev/null || echo "❌ Aucun binding rolldown"
           echo "=== Bindings rollup ==="
@@ -59,13 +78,24 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          rm -rf node_modules
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
+          set -e
+          echo "=== Node version ==="
+          node --version
+          echo "=== Architecture ==="
+          uname -m
+          
+          rm -rf node_modules package-lock.json
+          npm install --force --include=optional
+          
+          if [ ! -f node_modules/vite/bin/vite.js ]; then
+            echo "❌ VITE NON INSTALLÉ"
+            ls node_modules/ | head -30
+            exit 1
+          fi
+          echo "✅ Vite installé"
+          
           echo "=== Bindings rolldown ==="
           ls node_modules/@rolldown/ 2>/dev/null || echo "❌ Aucun binding rolldown"
-          echo "=== Bindings rollup ==="
-          ls node_modules/@rollup/ 2>/dev/null || echo "❌ Aucun binding rollup"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync iOS
@@ -106,9 +136,14 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          rm -rf node_modules
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
+          set -e
+          rm -rf node_modules package-lock.json
+          npm install --force --include=optional
+          
+          if [ ! -f node_modules/vite/bin/vite.js ]; then
+            echo "❌ VITE NON INSTALLÉ"
+            exit 1
+          fi
       - name: Build web app
         script: npm run build
       - name: Capacitor sync electron

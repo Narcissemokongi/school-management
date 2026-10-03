@@ -36,7 +36,9 @@
     "react-router-dom": "^7.18.2",
     "recharts": "^3.8.1",
     "xlsx": "^0.18.5",
-    "zustand": "^5.0.15",
+    "zustand": "^5.0.15"
+  },
+  "optionalDependencies": {
     "@rolldown/binding-darwin-arm64": "1.2.12",
     "@rolldown/binding-darwin-x64": "1.2.12",
     "@rolldown/binding-linux-arm64-gnu": "1.2.12",
