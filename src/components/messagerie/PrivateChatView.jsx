@@ -465,6 +465,7 @@ export function PrivateChatView({
       style={{
         display: "flex",
         flexDirection: "column",
+        // ✨ FIX : 100% pour remplir le parent MessagerieApp
         height: "100%",
         minHeight: 0,
         flex: 1,
@@ -683,7 +684,7 @@ export function PrivateChatView({
       <div
         style={{
           flexShrink: 0,
-          paddingBottom: SAFE_BOTTOM,
+          // ✨ Retiré : ChatInput gère déjà SAFE_BOTTOM dans son padding
           zIndex: 20,
           position: "relative",
         }}

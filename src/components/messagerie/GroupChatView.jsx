@@ -539,7 +539,6 @@ export function GroupChatView({
       <div
         style={{
           flexShrink: 0,
-          paddingBottom: SAFE_BOTTOM,
           zIndex: 20,
           position: "relative",
         }}
@@ -549,7 +548,6 @@ export function GroupChatView({
           setMessage={setNewGroupMessage}
           onSend={handleSend}
           placeholder="Message au groupe…"
-          isMobile={isMobile}
         />
       </div>
     </div>

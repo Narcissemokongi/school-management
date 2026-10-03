@@ -399,8 +399,12 @@ export function MessageGroupe({ user, ecoleId, onBack }) {
     <div
       style={{
         minHeight: "100%",
+        height: "100%",
+        overflowY: "auto",
         background: tokens.bg,
         paddingBottom: `calc(16px + ${SAFE_BOTTOM})`,
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       {MessageGroupeKeyframes}

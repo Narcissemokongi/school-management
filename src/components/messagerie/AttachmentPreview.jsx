@@ -1,9 +1,7 @@
 // src/components/messagerie/AttachmentPreview.jsx
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
-import { Document, Page } from "react-pdf";
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
+// ✨ react-pdf retiré — lazy-loaded dans PdfPreviewInline.jsx (gain ~300 KB)
 import {
   FileText,
   Image as ImageIcon,
@@ -15,6 +13,11 @@ import {
   Download,
   Eye,
 } from "lucide-react";
+
+// ✨ PdfPreviewInline lazy-loaded (react-pdf + pdfjs-dist chargés à la demande)
+const PdfPreviewInline = lazy(() =>
+  import("./PdfPreviewInline").then((m) => ({ default: m.PdfPreviewInline }))
+);
 
 // ════════════════════════════════════════════════════════════════════
 // KEYFRAMES
@@ -87,14 +90,9 @@ function isImageType(type, nom) {
   const t = (type || "").toLowerCase().trim();
   const n = (nom || "").toLowerCase().trim();
 
-  // 1. Type MIME correct
   if (t.startsWith("image/")) return true;
-
-  // 2. Extensions courantes (avec ou sans espace/majuscules)
   if (/\.(png|jpe?g|gif|webp|svg|bmp|heic|heif|avif|tiff?)$/i.test(n))
     return true;
-
-  // 3. MIME "générique" → on regarde le nom
   if (
     (t === "application/octet-stream" || t === "") &&
     /\.(png|jpe?g|gif|webp|svg|bmp|heic|heif|avif|tiff?)$/i.test(n)
@@ -125,7 +123,6 @@ function ImageLightbox({ url, nom, onClose }) {
     setTimeout(onClose, 150);
   }, [onClose]);
 
-  // Escape + lock scroll
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === "Escape") handleClose();
@@ -141,7 +138,6 @@ function ImageLightbox({ url, nom, onClose }) {
     };
   }, [handleClose]);
 
-  // Swipe down pour fermer (mobile)
   const [touchStartY, setTouchStartY] = useState(null);
   const handleTouchStart = (e) => {
     setTouchStartY(e.touches[0].clientY);
@@ -194,7 +190,6 @@ function ImageLightbox({ url, nom, onClose }) {
         draggable={false}
       />
 
-      {/* Bouton fermer */}
       <button
         type="button"
         onClick={(e) => {
@@ -226,7 +221,6 @@ function ImageLightbox({ url, nom, onClose }) {
         <X size={22} />
       </button>
 
-      {/* Bouton télécharger */}
       <a
         href={url}
         download={nom}
@@ -258,7 +252,6 @@ function ImageLightbox({ url, nom, onClose }) {
         <Download size={20} />
       </a>
 
-      {/* Nom du fichier en bas */}
       <div
         style={{
           position: "fixed",
@@ -371,7 +364,6 @@ function ImagePreview({ attachment, isMine, tokens, isMobile, onOpen }) {
           !isMobile && hovered ? "0 4px 12px rgba(0,0,0,0.2)" : "none",
       }}
     >
-      {/* Skeleton pendant le chargement */}
       {!loaded && !error && (
         <div
           style={{
@@ -389,7 +381,6 @@ function ImagePreview({ attachment, isMine, tokens, isMobile, onOpen }) {
         </div>
       )}
 
-      {/* Error fallback */}
       {error && (
         <div
           style={{
@@ -435,7 +426,6 @@ function ImagePreview({ attachment, isMine, tokens, isMobile, onOpen }) {
         />
       )}
 
-      {/* Overlay "voir" au hover (desktop) */}
       {!isMobile && hovered && loaded && !error && (
         <div
           style={{
@@ -466,7 +456,6 @@ function ImagePreview({ attachment, isMine, tokens, isMobile, onOpen }) {
         </div>
       )}
 
-      {/* Badge coin (mobile) : indique qu'on peut agrandir */}
       {isMobile && loaded && !error && (
         <div
           style={{
@@ -491,285 +480,6 @@ function ImagePreview({ attachment, isMine, tokens, isMobile, onOpen }) {
         </div>
       )}
     </button>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// ✨ APERÇU PDF INLINE — première page rendue
-// ════════════════════════════════════════════════════════════════════
-function PdfPreviewInline({ attachment, isMine, tokens, isMobile }) {
-  const [numPages, setNumPages] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const [pressed, setPressed] = useState(false);
-
-  const maxWidth = isMobile ? 240 : 280;
-  const pageHeight = isMobile ? 180 : 200;
-  const pageWidth = maxWidth - 16;
-
-  const bg = isMine ? "rgba(255,255,255,0.15)" : tokens.senderBg;
-  const bgActive = isMine
-    ? "rgba(255,255,255,0.28)"
-    : tokens.attachmentOtherActiveBg || "#C7D2FE";
-  const fg = isMine ? "#FFFFFF" : tokens.attachmentOtherColor;
-
-  const handleLoadSuccess = useCallback(({ numPages: n }) => {
-    setNumPages(n);
-    setLoading(false);
-  }, []);
-
-  const handleLoadError = useCallback((err) => {
-    console.warn("PDF load error:", err);
-    setError(true);
-    setLoading(false);
-  }, []);
-
-  return (
-    <a
-      href={attachment.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onMouseEnter={() => !isMobile && setHovered(true)}
-      onMouseLeave={() => !isMobile && setHovered(false)}
-      onTouchStart={() => setPressed(true)}
-      onTouchEnd={() => setPressed(false)}
-      onTouchCancel={() => setPressed(false)}
-      style={{
-        display: "block",
-        marginTop: 6,
-        marginRight: 6,
-        padding: 8,
-        borderRadius: 12,
-        background: pressed ? bgActive : bg,
-        color: fg,
-        textDecoration: "none",
-        maxWidth,
-        minWidth: 0,
-        WebkitTapHighlightColor: "transparent",
-        touchAction: "manipulation",
-        transition: "background 0.12s ease, transform 0.1s ease",
-        transform: pressed ? "scale(0.98)" : "scale(1)",
-        boxShadow:
-          !isMobile && hovered ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
-        position: "relative",
-        overflow: "hidden",
-      }}
-      title={`Ouvrir ${attachment.nom}`}
-      aria-label={`Aperçu du PDF ${attachment.nom}`}
-    >
-      {/* Header : icône PDF + nom */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 8,
-          minWidth: 0,
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            background: "#DC2626",
-            color: "#FFFFFF",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-            boxShadow: "0 2px 6px rgba(220,38,38,0.3)",
-          }}
-          aria-hidden="true"
-        >
-          <FileText size={16} />
-        </div>
-        <div
-          style={{
-            fontSize: isMobile ? 12.5 : 12,
-            fontWeight: 600,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
-            flex: 1,
-            lineHeight: 1.3,
-          }}
-        >
-          {attachment.nom || "Document PDF"}
-        </div>
-        <ExternalLink
-          size={14}
-          style={{ flexShrink: 0, opacity: 0.6 }}
-          aria-hidden="true"
-        />
-      </div>
-
-      {/* Aperçu PDF */}
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: pageHeight,
-          borderRadius: 8,
-          overflow: "hidden",
-          background: isMine
-            ? "rgba(255,255,255,0.08)"
-            : "rgba(100,116,139,0.08)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {/* Loading skeleton */}
-        {loading && !error && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 6,
-              color: fg,
-              opacity: 0.5,
-              position: "absolute",
-              zIndex: 2,
-            }}
-            aria-hidden="true"
-          >
-            <FileText size={24} />
-            <span style={{ fontSize: 10 }}>Chargement…</span>
-          </div>
-        )}
-
-        {/* Error fallback */}
-        {error && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 6,
-              color: fg,
-              opacity: 0.6,
-              padding: 8,
-              textAlign: "center",
-            }}
-          >
-            <AlertCircle size={20} />
-            <span style={{ fontSize: 10 }}>Aperçu indisponible</span>
-          </div>
-        )}
-
-        {/* PDF renderer */}
-        {!error && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "center",
-              pointerEvents: "none",
-              overflow: "hidden",
-            }}
-          >
-            <Document
-              file={attachment.url}
-              onLoadSuccess={handleLoadSuccess}
-              onLoadError={handleLoadError}
-              loading={null}
-              error={null}
-            >
-              <Page
-                pageNumber={1}
-                width={pageWidth}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                devicePixelRatio={
-                  typeof window !== "undefined"
-                    ? Math.min(window.devicePixelRatio || 1, 2)
-                    : 1
-                }
-                loading={null}
-              />
-            </Document>
-          </div>
-        )}
-
-        {/* Overlay au hover (desktop) */}
-        {!isMobile && hovered && !loading && !error && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "rgba(0,0,0,0.3)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              pointerEvents: "none",
-              transition: "opacity 0.15s ease",
-              zIndex: 3,
-            }}
-          >
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                background: "rgba(255,255,255,0.9)",
-                color: "#1E293B",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Eye size={20} />
-            </div>
-          </div>
-        )}
-
-        {/* Badge "X pages" (mobile) */}
-        {isMobile && !loading && !error && numPages > 1 && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 6,
-              right: 6,
-              padding: "2px 8px",
-              borderRadius: 10,
-              background: "rgba(0,0,0,0.55)",
-              backdropFilter: "blur(4px)",
-              WebkitBackdropFilter: "blur(4px)",
-              color: "#FFFFFF",
-              fontSize: 10,
-              fontWeight: 600,
-              pointerEvents: "none",
-              zIndex: 3,
-            }}
-            aria-hidden="true"
-          >
-            {numPages} page{numPages > 1 ? "s" : ""}
-          </div>
-        )}
-      </div>
-
-      {/* Ligne "Ouvrir" en bas */}
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 10.5,
-          opacity: 0.7,
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-        }}
-      >
-        <span>PDF</span>
-        <span>·</span>
-        <span>Ouvrir dans un nouvel onglet</span>
-      </div>
-    </a>
   );
 }
 
@@ -925,17 +635,43 @@ export function AttachmentPreview({
     );
   }
 
-  // ─── 3. PDF → aperçu inline 1ère page ───
+  // ─── 3. PDF → lazy-loaded avec Suspense ───
   if (isPdfType(attachment.type, attachment.nom)) {
     return (
       <>
         {AttachmentKeyframes}
-        <PdfPreviewInline
-          attachment={attachment}
-          isMine={isMine}
-          tokens={tokens}
-          isMobile={isMobile}
-        />
+        <Suspense
+          fallback={
+            <div
+              style={{
+                marginTop: 6,
+                marginRight: 6,
+                padding: 8,
+                borderRadius: 12,
+                background: isMine
+                  ? "rgba(255,255,255,0.15)"
+                  : tokens.senderBg,
+                color: isMine ? "#FFFFFF" : tokens.attachmentOtherColor,
+                maxWidth: isMobile ? 240 : 280,
+                minHeight: 220,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                opacity: 0.6,
+              }}
+            >
+              Chargement de l'aperçu PDF…
+            </div>
+          }
+        >
+          <PdfPreviewInline
+            attachment={attachment}
+            isMine={isMine}
+            tokens={tokens}
+            isMobile={isMobile}
+          />
+        </Suspense>
       </>
     );
   }
