@@ -1,5 +1,5 @@
 // src/components/AuthenticatedApp.jsx
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "@convex/_generated/api";
@@ -7,14 +7,35 @@ import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { useStyles } from "@/styles/theme";
 import { NotifBanner } from "./NotifBanner";
-import { SuperAdminDashboardV2 as SuperAdminDashboard } from "../components/superadmin/SuperAdminDashboardV2";
-import { DisciplinaireApp } from "./DisciplinaireApp";
-import { DirecteurApp } from "./DirecteurApp";
-import { AdminApp } from "./AdminApp";
-import { ParentApp } from "./ParentApp";
-import { EnseignantApp } from "./EnseignantApp";
-import { ComptableApp } from "./ComptableApp";
-import { EleveApp } from "./EleveApp";
+// ✨ APPS LAZY — chargées à la demande selon le rôle (gain ~2.5 MB)
+const SuperAdminDashboard = lazy(() =>
+  import("../components/superadmin/SuperAdminDashboardV2").then((m) => ({
+    default: m.SuperAdminDashboardV2,
+  }))
+);
+const DisciplinaireApp = lazy(() =>
+  import("./DisciplinaireApp").then((m) => ({ default: m.DisciplinaireApp }))
+);
+const DirecteurApp = lazy(() =>
+  import("./DirecteurApp").then((m) => ({ default: m.DirecteurApp }))
+);
+const AdminApp = lazy(() =>
+  import("./AdminApp").then((m) => ({ default: m.AdminApp }))
+);
+const ParentApp = lazy(() =>
+  import("./ParentApp").then((m) => ({ default: m.ParentApp }))
+);
+const EnseignantApp = lazy(() =>
+  import("./EnseignantApp").then((m) => ({ default: m.EnseignantApp }))
+);
+const ComptableApp = lazy(() =>
+  import("./ComptableApp").then((m) => ({ default: m.ComptableApp }))
+);
+const EleveApp = lazy(() =>
+  import("./EleveApp").then((m) => ({ default: m.EleveApp }))
+);
+
+// ⚡ NON-lazy (affichage instantané critique)
 import AppelVideo from "./AppelVideo";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { OutgoingCallModal } from "./OutgoingCallModal";
@@ -22,7 +43,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { NotificationsManager } from "./NotificationsManager";
 import toast from "react-hot-toast";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { ArrowLeft, School as SchoolIcon } from "lucide-react";
+import { ArrowLeft, School as SchoolIcon, Loader2 } from "lucide-react";
 import { useImpersonationStore } from "@/store/impersonationStore";
 import { ImpersonationBanner } from "./ImpersonationBanner";
 import { useActivityPing } from "@/hooks/useActivityPing";
@@ -42,6 +63,44 @@ const AuthenticatedAppKeyframes = (
     }
   `}</style>
 );
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense pour les apps lazy-loaded
+// ════════════════════════════════════════════════════════════════════
+function AppLoader({ dark }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 16,
+        background: dark ? "#0F172A" : "#F8FAFC",
+      }}
+    >
+      <Loader2
+        size={40}
+        className="aa-spin"
+        style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          color: dark ? "#94A3B8" : "#64748B",
+          fontSize: 14,
+          fontWeight: 500,
+        }}
+      >
+        Chargement…
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // CHEMINS PAR DÉFAUT PAR RÔLE
@@ -65,11 +124,10 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const location = useLocation();
 
   // ✅ FIX CRITIQUE : `pathname` lu à chaque render, utilisé en `key=` sur les apps
-  // → force le remontage complet quand l'URL change
   const pathname = location.pathname;
 
   // ════════════════════════════════════════════════════════════════════
-  // ✨ IMPERSONATION — Restauration + user effectif
+  // ✨ IMPERSONATION
   // ════════════════════════════════════════════════════════════════════
   const impersonationSession = useImpersonationStore((s) => s.session);
   const restoreImpersonation = useImpersonationStore((s) => s.restore);
@@ -217,7 +275,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
   const rejectCall = useMutation(api.appels.rejectCall);
   const endCall = useMutation(api.appels.endCall);
 
-  // ✨ NEW — infos du contact (nom, role) pour l'appel actif
   const activeCallDetailsArgs = useMemo(
     () =>
       activeCallFromConvex?._id && userId
@@ -231,7 +288,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     activeCallDetailsArgs
   );
 
-  // ✨ Nom du contact distant (celui qui n'est PAS moi)
   const remoteContactName = useMemo(() => {
     if (!activeCallDetails) return null;
     const isMeCaller = activeCallDetails.callerId === userId;
@@ -373,7 +429,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     return () => clearTimeout(t);
   }, [notifs]);
 
-  // Notifications punitions graves (parent)
   const prevPunitionsEnfantsRef = useRef([]);
   useEffect(() => {
     if (effectiveUser?.role !== "parent" || punitionsEnfants.length === 0)
@@ -398,7 +453,7 @@ export function AuthenticatedApp({ user, handleLogout }) {
   }, [punitionsEnfants, effectiveUser?.role, enfants, fautes, notify]);
 
   // ════════════════════════════════════════════════════════════════════
-  // APPEL ACTIF — écran plein
+  // APPEL ACTIF — écran plein (AppelVideo sync — pas de Suspense)
   // ════════════════════════════════════════════════════════════════════
   if (localActiveCall) {
     return (
@@ -410,7 +465,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
           callId={localActiveCall._id}
           onCallEnd={handleCallEnd}
           callType={localActiveCall.type || "video"}
-          // ✨ FIX — props manquantes
           contactName={remoteContactName}
           isMobile={isMobile}
         />
@@ -552,32 +606,34 @@ export function AuthenticatedApp({ user, handleLogout }) {
           </div>
         </div>
 
-        {/* ═══════════ Rendu AdminApp ═══════════ */}
-        <AdminApp
-          key={pathname}
-          user={ecoleUser}
-          ecoleId={openedEcoleId}
-          eleves={eleves}
-          addEleve={addEleve}
-          removeEleve={removeEleve}
-          importEleves={importEleves}
-          classes={classes}
-          addClasse={addClasse}
-          removeClasse={removeClasse}
-          fautes={fautes}
-          addFaute={addFaute}
-          updateFaute={updateFaute}
-          removeFaute={removeFaute}
-          sanctions={sanctions}
-          users={users}
-          frais={frais}
-          anneeActive={anneeActive}
-          anneeId={dataAnneeId}
-          onAnneeChange={setSelectedAnneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
+        {/* ═══════════ Rendu AdminApp (lazy) ═══════════ */}
+        <Suspense fallback={<AppLoader dark={dark} />}>
+          <AdminApp
+            key={pathname}
+            user={ecoleUser}
+            ecoleId={openedEcoleId}
+            eleves={eleves}
+            addEleve={addEleve}
+            removeEleve={removeEleve}
+            importEleves={importEleves}
+            classes={classes}
+            addClasse={addClasse}
+            removeClasse={removeClasse}
+            fautes={fautes}
+            addFaute={addFaute}
+            updateFaute={updateFaute}
+            removeFaute={removeFaute}
+            sanctions={sanctions}
+            users={users}
+            frais={frais}
+            anneeActive={anneeActive}
+            anneeId={dataAnneeId}
+            onAnneeChange={setSelectedAnneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        </Suspense>
 
         {openedEcoleId && (
           <NotificationsManager
@@ -593,19 +649,21 @@ export function AuthenticatedApp({ user, handleLogout }) {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // SUPER ADMIN — DASHBOARD V2
+  // SUPER ADMIN — DASHBOARD V2 (lazy)
   // ════════════════════════════════════════════════════════════════════
   if (isSuperAdmin) {
     return (
       <>
         {AuthenticatedAppKeyframes}
         <NotifBanner notifs={notifs} />
-        <SuperAdminDashboard
-          key={pathname}
-          user={effectiveUser}
-          onLogout={handleLogout}
-          onSelectEcole={setOpenedEcoleId}
-        />
+        <Suspense fallback={<AppLoader dark={dark} />}>
+          <SuperAdminDashboard
+            key={pathname}
+            user={effectiveUser}
+            onLogout={handleLogout}
+            onSelectEcole={setOpenedEcoleId}
+          />
+        </Suspense>
       </>
     );
   }
@@ -617,7 +675,6 @@ export function AuthenticatedApp({ user, handleLogout }) {
     <>
       {AuthenticatedAppKeyframes}
 
-      {/* ✨ Bandeau impersonation — sticky top */}
       {isImpersonating && <ImpersonationBanner />}
 
       <NotifBanner notifs={notifs} />
@@ -632,141 +689,145 @@ export function AuthenticatedApp({ user, handleLogout }) {
         />
       )}
 
+      {/* ✨ FIX — guard restauré (était supprimé) */}
       {outgoingCall && !localActiveCall && (
         <OutgoingCallModal
           callId={outgoingCall._id}
           calleeId={outgoingCall.calleeId}
+          callType={outgoingCall.type || "video"}
           onCancel={handleCancelCall}
         />
       )}
 
       {/* ✅ FIX : key={pathname} sur CHAQUE app pour forcer le re-render */}
+      <Suspense fallback={<AppLoader dark={dark} />}>
+        {effectiveUser?.role === "disciplinaire" && (
+          <DisciplinaireApp
+            key={pathname}
+            user={effectiveUser}
+            ecoleId={ecoleId}
+            punitions={punitions}
+            eleves={eleves}
+            fautes={fautes}
+            sanctions={sanctions}
+            onNotif={handleNotif}
+            anneeActive={anneeActive}
+            anneeId={dataAnneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        )}
 
-      {effectiveUser?.role === "disciplinaire" && (
-        <DisciplinaireApp
-          key={pathname}
-          user={effectiveUser}
-          ecoleId={ecoleId}
-          punitions={punitions}
-          eleves={eleves}
-          fautes={fautes}
-          sanctions={sanctions}
-          onNotif={handleNotif}
-          anneeActive={anneeActive}
-          anneeId={dataAnneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
-      )}
+        {effectiveUser?.role === "directeur" && (
+          <DirecteurApp
+            key={pathname}
+            user={effectiveUser}
+            punitions={punitions}
+            eleves={eleves}
+            classes={classes}
+            fautes={fautes}
+            notifs={notifs}
+            anneeActive={anneeActive}
+            anneeId={dataAnneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        )}
 
-      {effectiveUser?.role === "directeur" && (
-        <DirecteurApp
-          key={pathname}
-          user={effectiveUser}
-          punitions={punitions}
-          eleves={eleves}
-          classes={classes}
-          fautes={fautes}
-          notifs={notifs}
-          anneeActive={anneeActive}
-          anneeId={dataAnneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
-      )}
+        {effectiveUser?.role === "admin" && (
+          <AdminApp
+            key={pathname}
+            user={effectiveUser}
+            ecoleId={ecoleId}
+            eleves={eleves}
+            addEleve={addEleve}
+            removeEleve={removeEleve}
+            importEleves={importEleves}
+            classes={classes}
+            addClasse={addClasse}
+            removeClasse={removeClasse}
+            fautes={fautes}
+            addFaute={addFaute}
+            updateFaute={updateFaute}
+            removeFaute={removeFaute}
+            sanctions={sanctions}
+            users={users}
+            frais={frais}
+            anneeActive={anneeActive}
+            anneeId={dataAnneeId}
+            onAnneeChange={setSelectedAnneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        )}
 
-      {effectiveUser?.role === "admin" && (
-        <AdminApp
-          key={pathname}
-          user={effectiveUser}
-          ecoleId={ecoleId}
-          eleves={eleves}
-          addEleve={addEleve}
-          removeEleve={removeEleve}
-          importEleves={importEleves}
-          classes={classes}
-          addClasse={addClasse}
-          removeClasse={removeClasse}
-          fautes={fautes}
-          addFaute={addFaute}
-          updateFaute={updateFaute}
-          removeFaute={removeFaute}
-          sanctions={sanctions}
-          users={users}
-          frais={frais}
-          anneeActive={anneeActive}
-          anneeId={dataAnneeId}
-          onAnneeChange={setSelectedAnneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
-      )}
+        {effectiveUser?.role === "parent" && (
+          <ParentApp
+            key={pathname}
+            user={effectiveUser}
+            ecoleId={ecoleId}
+            eleves={enfants}
+            punitions={punitionsEnfants}
+            fautes={fautes}
+            anneeActive={anneeActive}
+            anneeId={anneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        )}
 
-      {effectiveUser?.role === "parent" && (
-        <ParentApp
-          key={pathname}
-          user={effectiveUser}
-          ecoleId={ecoleId}
-          eleves={enfants}
-          punitions={punitionsEnfants}
-          fautes={fautes}
-          anneeActive={anneeActive}
-          anneeId={anneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
-      )}
+        {effectiveUser?.role === "enseignant" && (
+          <EnseignantApp
+            key={pathname}
+            user={effectiveUser}
+            ecoleId={ecoleId}
+            eleves={eleves}
+            classes={classes}
+            anneeActive={anneeActive}
+            anneeId={dataAnneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        )}
 
-      {effectiveUser?.role === "enseignant" && (
-        <EnseignantApp
-          key={pathname}
-          user={effectiveUser}
-          ecoleId={ecoleId}
-          eleves={eleves}
-          classes={classes}
-          anneeActive={anneeActive}
-          anneeId={dataAnneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
-      )}
+        {effectiveUser?.role === "comptable" && (
+          <ComptableApp
+            key={pathname}
+            user={effectiveUser}
+            ecoleId={ecoleId}
+            eleves={eleves}
+            anneeActive={anneeActive}
+            anneeId={dataAnneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        )}
 
-      {effectiveUser?.role === "comptable" && (
-        <ComptableApp
-          key={pathname}
-          user={effectiveUser}
-          ecoleId={ecoleId}
-          eleves={eleves}
-          anneeActive={anneeActive}
-          anneeId={dataAnneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
-      )}
-
-      {effectiveUser?.role === "eleve" && (
-        <EleveApp
-          key={pathname}
-          user={effectiveUser}
-          ecoleId={ecoleId}
-          anneeActive={anneeActive}
-          anneeId={anneeId}
-          dark={dark}
-          toggle={toggle}
-          handleLogout={handleLogout}
-        />
-      )}
+        {effectiveUser?.role === "eleve" && (
+          <EleveApp
+            key={pathname}
+            user={effectiveUser}
+            ecoleId={ecoleId}
+            anneeActive={anneeActive}
+            anneeId={anneeId}
+            dark={dark}
+            toggle={toggle}
+            handleLogout={handleLogout}
+          />
+        )}
+      </Suspense>
 
       {/* ✨ Appel entrant — seulement si pas déjà en appel actif */}
       {pendingCall && ecoleId && userId && !localActiveCall && (
         <IncomingCallModal
           callerId={pendingCall.callerId}
+          callType={pendingCall.type || "video"}
           onAccept={() => acceptCall({ callId: pendingCall._id, userId })}
           onReject={() => rejectCall({ callId: pendingCall._id, userId })}
         />

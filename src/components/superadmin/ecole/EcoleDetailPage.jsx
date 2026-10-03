@@ -1,5 +1,5 @@
 // src/components/SuperAdmin/ecole/EcoleDetailPage.jsx
-import { useMemo, useState } from "react";
+import { useMemo, useState, lazy, Suspense } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useTokens } from "@/theme/tokens";
@@ -12,16 +12,66 @@ import {
   Plus,
   Settings,
 } from "lucide-react";
+// ✨ Onglets + modale lazy-loaded — gain ~80 KB au 1er render
+const OverviewTab = lazy(() =>
+  import("./tabs/OverviewTab").then((m) => ({ default: m.OverviewTab }))
+);
+const UsersTab = lazy(() =>
+  import("./tabs/UsersTab").then((m) => ({ default: m.UsersTab }))
+);
+const AbonnementTab = lazy(() =>
+  import("./tabs/AbonnementTab").then((m) => ({ default: m.AbonnementTab }))
+);
+const AuditTab = lazy(() =>
+  import("./tabs/AuditTab").then((m) => ({ default: m.AuditTab }))
+);
+const NotesTab = lazy(() =>
+  import("./tabs/NotesTab").then((m) => ({ default: m.NotesTab }))
+);
+const TimelineTab = lazy(() =>
+  import("./tabs/TimelineTab").then((m) => ({ default: m.TimelineTab }))
+);
+const ImpersonationPickerModal = lazy(() =>
+  import("./ImpersonationPickerModal").then((m) => ({
+    default: m.ImpersonationPickerModal,
+  }))
+);
+// ⚡ NON-lazy (petits, toujours visibles)
 import { EcoleDetailHeader } from "./EcoleDetailHeader";
-import { OverviewTab } from "./tabs/OverviewTab";
-import { UsersTab } from "./tabs/UsersTab";
-import { AbonnementTab } from "./tabs/AbonnementTab";
-import { AuditTab } from "./tabs/AuditTab";
-import { NotesTab } from "./tabs/NotesTab";
-import { TimelineTab } from "./tabs/TimelineTab";
-import { ImpersonationPickerModal } from "./ImpersonationPickerModal";
 import { ExportRgpdButton } from "./ExportRgpdButton";
 import { Fab } from "@/components/ui";
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense pour les onglets lazy
+// ════════════════════════════════════════════════════════════════════
+function TabLoader({ accent }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: 200,
+        gap: 10,
+        padding: 32,
+      }}
+    >
+      <Loader
+        size={28}
+        className="edp-spin"
+        color={accent}
+        aria-hidden="true"
+      />
+      <span style={{ color: "#94A3B8", fontSize: 12, fontWeight: 500 }}>
+        Chargement…
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // SAFE-AREA
@@ -31,7 +81,6 @@ const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
 const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
 
-// ✨ Taille minimale tap target mobile
 const MOBILE_TAP = 44;
 
 // ════════════════════════════════════════════════════════════════════
@@ -70,7 +119,6 @@ export function EcoleDetailPage({
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("overview");
 
-  // ✨ Feedback tap pour les tabs et boutons
   const [pressedTab, setPressedTab] = useState(null);
   const [backPressed, setBackPressed] = useState(false);
 
@@ -80,7 +128,6 @@ export function EcoleDetailPage({
   const args = useMemo(() => ({ userId, ecoleId }), [userId, ecoleId]);
   const data = useQuery(api.ecoles.getDetailComplet, args);
 
-  // Permissions locales pour les notes
   const permissions = user?.permissions ?? [];
   const canWriteNotes =
     data?.isOwner === true || permissions.includes("ecoles.write");
@@ -162,7 +209,6 @@ export function EcoleDetailPage({
     );
   }
 
-  // Filtrer l'onglet Abonnement si non-owner
   const tabs = data.isOwner
     ? ALL_TABS
     : ALL_TABS.filter((tab) => !tab.ownerOnly);
@@ -175,7 +221,6 @@ export function EcoleDetailPage({
           display: "flex",
           flexDirection: "column",
           gap: t.space.lg,
-          // ✨ Safe-area mobile
           padding: isMobile
             ? `0 ${SAFE_RIGHT} calc(${SAFE_BOTTOM} + 80px) ${SAFE_LEFT}`
             : 0,
@@ -211,9 +256,7 @@ export function EcoleDetailPage({
               fontSize: t.font.size.sm,
               fontWeight: 500,
               fontFamily: t.font.family,
-              // ✨ Mobile : tap target WCAG
               minHeight: isMobile ? MOBILE_TAP : undefined,
-              // ✨ Feedback tap
               transform: backPressed ? "scale(0.96)" : "scale(1)",
               transition: "transform 0.1s ease, background 0.12s ease",
               WebkitTapHighlightColor: "transparent",
@@ -245,7 +288,6 @@ export function EcoleDetailPage({
         <div
           style={{
             position: "relative",
-            // ✨ Empêche débordement visuel du fade
             overflow: "hidden",
           }}
         >
@@ -257,12 +299,9 @@ export function EcoleDetailPage({
               gap: 4,
               borderBottom: `1px solid ${t.border.subtle}`,
               overflowX: "auto",
-              // ✨ Mobile : momentum iOS + pas de pull-to-refresh
               WebkitOverflowScrolling: "touch",
               overscrollBehavior: "contain",
-              // ✨ Scrollbar fine
               scrollbarWidth: "thin",
-              // ✨ Réserve d'espace pour le fade gradient à droite
               paddingRight: isMobile ? 32 : 0,
             }}
           >
@@ -297,9 +336,7 @@ export function EcoleDetailPage({
                     fontFamily: t.font.family,
                     whiteSpace: "nowrap",
                     marginBottom: -1,
-                    // ✨ Mobile : min height WCAG
                     minHeight: isMobile ? MOBILE_TAP : undefined,
-                    // ✨ Feedback tap
                     transform: isPressed ? "scale(0.96)" : "scale(1)",
                     transition:
                       "transform 0.1s ease, color 0.15s ease, border-color 0.15s ease",
@@ -315,7 +352,6 @@ export function EcoleDetailPage({
             })}
           </div>
 
-          {/* ✨ Fade gradient → indique scroll horizontal */}
           {isMobile && (
             <div
               aria-hidden="true"
@@ -332,41 +368,45 @@ export function EcoleDetailPage({
           )}
         </div>
 
-        {/* ═══ Contenu onglet ═══ */}
-        <div>
-          {activeTab === "overview" && (
-            <OverviewTab stats={data.stats} ecole={data.ecole} />
-          )}
-          {activeTab === "users" && (
-            <UsersTab userId={userId} ecoleId={ecoleId} />
-          )}
-          {activeTab === "abonnement" && data.isOwner && (
-            <AbonnementTab
-              abonnement={data.abonnement}
-              paiements={data.paiements}
-            />
-          )}
-          {activeTab === "audit" && <AuditTab audits={data.audits} />}
-          {activeTab === "notes" && (
-            <NotesTab
-              userId={userId}
-              ecoleId={ecoleId}
-              canWrite={canWriteNotes}
-              canDelete={canDeleteNotes}
-            />
-          )}
-          {activeTab === "timeline" && <TimelineTab audits={data.audits} />}
-        </div>
+        {/* ═══ Contenu onglet (lazy-loaded) ═══ */}
+        <Suspense fallback={<TabLoader accent={t.accent.primary} />}>
+          <div>
+            {activeTab === "overview" && (
+              <OverviewTab stats={data.stats} ecole={data.ecole} />
+            )}
+            {activeTab === "users" && (
+              <UsersTab userId={userId} ecoleId={ecoleId} />
+            )}
+            {activeTab === "abonnement" && data.isOwner && (
+              <AbonnementTab
+                abonnement={data.abonnement}
+                paiements={data.paiements}
+              />
+            )}
+            {activeTab === "audit" && <AuditTab audits={data.audits} />}
+            {activeTab === "notes" && (
+              <NotesTab
+                userId={userId}
+                ecoleId={ecoleId}
+                canWrite={canWriteNotes}
+                canDelete={canDeleteNotes}
+              />
+            )}
+            {activeTab === "timeline" && <TimelineTab audits={data.audits} />}
+          </div>
+        </Suspense>
 
-        {/* ═══ Modal impersonation ═══ */}
+        {/* ═══ Modal impersonation (lazy) ═══ */}
         {impersonationOpen && impersonationTarget && (
-          <ImpersonationPickerModal
-            userId={userId}
-            ecoleId={impersonationTarget.id}
-            ecoleNom={impersonationTarget.nom}
-            ownerUser={user}
-            onClose={handleCloseImpersonation}
-          />
+          <Suspense fallback={null}>
+            <ImpersonationPickerModal
+              userId={userId}
+              ecoleId={impersonationTarget.id}
+              ecoleNom={impersonationTarget.nom}
+              ownerUser={user}
+              onClose={handleCloseImpersonation}
+            />
+          </Suspense>
         )}
 
         {/* ═══ FAB contextuel mobile — Notes ═══ */}

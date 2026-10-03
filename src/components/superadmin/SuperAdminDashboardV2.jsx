@@ -1,5 +1,5 @@
 // src/components/SuperAdmin/SuperAdminDashboardV2.jsx
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import {
@@ -11,20 +11,102 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAppStore } from "@/store/appStore";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { GestionAbonnements } from "@/components/GestionAbonnements";
-import { GestionSuperAdmins } from "./GestionSuperAdmins";
-import { SettingsTab } from "./SettingsTab";
+// ✨ Sections lazy-loaded — chaque onglet devient un chunk séparé (gain ~250 KB)
+const GestionAbonnements = lazy(() =>
+  import("@/components/GestionAbonnements").then((m) => ({
+    default: m.GestionAbonnements,
+  }))
+);
+const GestionSuperAdmins = lazy(() =>
+  import("./GestionSuperAdmins").then((m) => ({
+    default: m.GestionSuperAdmins,
+  }))
+);
+const SettingsTab = lazy(() =>
+  import("./SettingsTab").then((m) => ({ default: m.SettingsTab }))
+);
+const OverviewSection = lazy(() =>
+  import("./sections/OverviewSection").then((m) => ({
+    default: m.OverviewSection,
+  }))
+);
+const SchoolsSection = lazy(() =>
+  import("./sections/SchoolsSection").then((m) => ({
+    default: m.SchoolsSection,
+  }))
+);
+const PendingSection = lazy(() =>
+  import("./sections/PendingSection").then((m) => ({
+    default: m.PendingSection,
+  }))
+);
+const FinancesSection = lazy(() =>
+  import("../superadmin/sections/FinancesSection").then((m) => ({
+    default: m.FinancesSection,
+  }))
+);
+const AnnoncesSection = lazy(() =>
+  import("./sections/AnnoncesSection").then((m) => ({
+    default: m.AnnoncesSection,
+  }))
+);
+const AuditSection = lazy(() =>
+  import("./sections/AuditSection").then((m) => ({
+    default: m.AuditSection,
+  }))
+);
+const EcoleDetailPage = lazy(() =>
+  import("./ecole/EcoleDetailPage").then((m) => ({
+    default: m.EcoleDetailPage,
+  }))
+);
+const ImpayesSection = lazy(() =>
+  import("./sections/ImpayesSection").then((m) => ({
+    default: m.ImpayesSection,
+  }))
+);
+// ⚡ NON-lazy (toujours affichés, feedback instantané critique)
 import { SuperAdminSidebar } from "../superadmin/SuperAdminSidebar";
 import { SuperAdminHeader } from "./SuperAdminHeader";
 import { NotificationsPanel } from "./NotificationsPanel";
-import { OverviewSection } from "./sections/OverviewSection";
-import { SchoolsSection } from "./sections/SchoolsSection";
-import { PendingSection } from "./sections/PendingSection";
-import { FinancesSection } from "../superadmin/sections/FinancesSection";
-import { AnnoncesSection } from "./sections/AnnoncesSection";
-import { AuditSection } from "./sections/AuditSection";
-import { EcoleDetailPage } from "./ecole/EcoleDetailPage";
-import { ImpayesSection } from "./sections/ImpayesSection";
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense pour les sections lazy-loaded
+// ════════════════════════════════════════════════════════════════════
+function SectionLoader({ dark }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: 260,
+        gap: 12,
+        padding: 40,
+      }}
+    >
+      <Loader
+        size={32}
+        style={{ animation: "spin 1s linear infinite" }}
+        color={dark ? "#818CF8" : "#4F46E5"}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          color: dark ? "#94A3B8" : "#64748B",
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        Chargement…
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // CONFIG DES SECTIONS — permissions granulaires
@@ -110,9 +192,6 @@ function getVisibleSections(user) {
   });
 }
 
-// ════════════════════════════════════════════════════════════════════
-// ✨ Détection iOS (pour dvh)
-// ════════════════════════════════════════════════════════════════════
 function getIsIOS() {
   if (typeof navigator === "undefined") return false;
   return /iPad|iPhone|iPod/.test(navigator.userAgent || "");
@@ -127,7 +206,6 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
   const { confirm, dialogProps } = useConfirm();
   const userId = user?._id;
 
-  // ✨ Hauteur adaptée iOS
   const fullHeight = useMemo(() => (getIsIOS() ? "100dvh" : "100vh"), []);
 
   const isOwner = useMemo(() => checkIsOwner(user), [user]);
@@ -139,7 +217,6 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [drilldownEcoleId, setDrilldownEcoleId] = useState(null);
 
-  // ✨ Ferme le drawer quand on change de section
   useEffect(() => {
     if (isMobile) setMobileNavOpen(false);
   }, [activeSection, isMobile]);
@@ -152,7 +229,6 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
     }
   }, [visibleSections, activeSection]);
 
-  // Queries
   const canViewSchools = visibleSections.some((s) => s.id === "schools");
   const canViewOverview = visibleSections.some((s) => s.id === "overview");
   const canViewPending = visibleSections.some((s) => s.id === "pending");
@@ -311,7 +387,6 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
     }
   };
 
-  // Aucune section
   if (visibleSections.length === 0) {
     return (
       <div
@@ -375,7 +450,6 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
     );
   }
 
-  // Rendu principal
   return (
     <div
       style={{
@@ -421,13 +495,15 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
         }}
       >
         {drilldownEcoleId ? (
-          <EcoleDetailPage
-            userId={userId}
-            ecoleId={drilldownEcoleId}
-            onBack={() => setDrilldownEcoleId(null)}
-            onSelectEcole={onSelectEcole}
-            user={user}
-          />
+          <Suspense fallback={<SectionLoader dark={dark} />}>
+            <EcoleDetailPage
+              userId={userId}
+              ecoleId={drilldownEcoleId}
+              onBack={() => setDrilldownEcoleId(null)}
+              onSelectEcole={onSelectEcole}
+              user={user}
+            />
+          </Suspense>
         ) : (
           <>
             <SuperAdminHeader
@@ -459,7 +535,12 @@ export function SuperAdminDashboardV2({ user, onSelectEcole, onLogout }) {
               }
             />
 
-            <div key={activeSection}>{renderSection()}</div>
+            {/* ✨ Suspense : chaque section lazy-loaded */}
+            <div key={activeSection}>
+              <Suspense fallback={<SectionLoader dark={dark} />}>
+                {renderSection()}
+              </Suspense>
+            </div>
           </>
         )}
       </main>

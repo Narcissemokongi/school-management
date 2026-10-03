@@ -6,6 +6,7 @@ import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   PhoneIncoming, PhoneOff, Phone, User, Volume2, VolumeX,
+  Video, Mic,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -16,6 +17,7 @@ const RING_DURATION = 60; // secondes
 // ════════════════════════════════════════════════════════════════════
 const IncomingCallModalKeyframes = (
   <style>{`
+    /* ─── Général ─── */
     @keyframes icm-fade-in {
       from { opacity: 0; }
       to   { opacity: 1; }
@@ -24,41 +26,56 @@ const IncomingCallModalKeyframes = (
       from { transform: translateY(24px); opacity: 0; }
       to   { transform: translateY(0); opacity: 1; }
     }
-    @keyframes icm-halo {
-      0%, 100% { transform: scale(1);    opacity: 0.4; }
-      50%      { transform: scale(1.15); opacity: 0.1; }
+
+    /* ─── Mobile : anneaux concentriques ─── */
+    @keyframes icm-ring-cascade {
+      0%   { transform: scale(1);   opacity: 0.5; }
+      80%  { transform: scale(2.1); opacity: 0; }
+      100% { transform: scale(2.1); opacity: 0; }
     }
-    @keyframes icm-shake {
-      0%, 100% { transform: rotate(0deg); }
-      25%      { transform: rotate(-12deg); }
-      75%      { transform: rotate(12deg); }
+
+    /* ─── Desktop : anneau rotatif ─── */
+    @keyframes icm-ring-rotate {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
     }
-    @keyframes icm-pulse-green {
-      0% {
-        box-shadow: 0 6px 18px rgba(16,185,129,0.4),
-                    0 0 0 0 rgba(16,185,129,0.5);
-      }
-      70% {
-        box-shadow: 0 6px 18px rgba(16,185,129,0.4),
-                    0 0 0 16px rgba(16,185,129,0);
-      }
-      100% {
-        box-shadow: 0 6px 18px rgba(16,185,129,0.4),
-                    0 0 0 0 rgba(16,185,129,0);
-      }
+
+    /* ─── Desktop : pulse du bouton Accepter ─── */
+    @keyframes icm-pulse-accept {
+      0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.6); }
+      70%  { box-shadow: 0 0 0 18px rgba(16,185,129,0); }
+      100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
     }
-    .icm-fade-in    { animation: icm-fade-in 0.22s ease; }
-    .icm-slide-up   { animation: icm-slide-up 0.3s cubic-bezier(0.4,0,0.2,1); }
-    .icm-halo       { animation: icm-halo 1.8s ease-in-out infinite; }
-    .icm-shake      { animation: icm-shake 1.2s ease-in-out infinite; }
-    .icm-pulse-green { animation: icm-pulse-green 1.5s ease-in-out infinite; }
+
+    /* ─── Points animés "Sonnerie…" ─── */
+    @keyframes icm-dot {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+      40%           { opacity: 1;   transform: scale(1); }
+    }
+
+    /* ─── Halo flottant (mobile) ─── */
+    @keyframes icm-float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
+    }
+
+    /* ─── Classes ─── */
+    .icm-fade-in   { animation: icm-fade-in 0.3s ease; }
+    .icm-slide-up  { animation: icm-slide-up 0.35s cubic-bezier(0.4,0,0.2,1); }
+    .icm-ring      { animation: icm-ring-cascade 2.4s ease-out infinite; }
+    .icm-ring-2    { animation-delay: 0.8s; }
+    .icm-ring-3    { animation-delay: 1.6s; }
+    .icm-ring-rot  { animation: icm-ring-rotate 4s linear infinite; }
+    .icm-pulse-ok  { animation: icm-pulse-accept 1.8s ease-in-out infinite; }
+    .icm-float     { animation: icm-float 3s ease-in-out infinite; }
+    .icm-dot-1     { animation: icm-dot 1.4s ease-in-out infinite; }
+    .icm-dot-2     { animation: icm-dot 1.4s ease-in-out 0.2s infinite; }
+    .icm-dot-3     { animation: icm-dot 1.4s ease-in-out 0.4s infinite; }
 
     @media (prefers-reduced-motion: reduce) {
-      .icm-fade-in,
-      .icm-slide-up,
-      .icm-halo,
-      .icm-shake,
-      .icm-pulse-green {
+      .icm-fade-in, .icm-slide-up, .icm-ring, .icm-ring-2, .icm-ring-3,
+      .icm-ring-rot, .icm-pulse-ok, .icm-float,
+      .icm-dot-1, .icm-dot-2, .icm-dot-3 {
         animation: none !important;
       }
     }
@@ -66,38 +83,47 @@ const IncomingCallModalKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// TOKENS (mêmes que OutgoingCallModal pour cohérence)
+// TOKENS
 // ════════════════════════════════════════════════════════════════════
 function buildTokens(dark) {
   return {
-    modalBg: dark ? "#1E293B" : "#FFFFFF",
+    // Desktop — glass
+    modalBg: dark
+      ? "rgba(30, 41, 59, 0.55)"
+      : "rgba(255, 255, 255, 0.55)",
     modalBorder: dark
-      ? "rgba(255,255,255,0.08)"
-      : "rgba(0,0,0,0.04)",
+      ? "rgba(255, 255, 255, 0.12)"
+      : "rgba(255, 255, 255, 0.7)",
+    modalHighlight: dark
+      ? "rgba(255, 255, 255, 0.08)"
+      : "rgba(255, 255, 255, 0.9)",
     modalShadow: dark
-      ? "0 12px 40px rgba(0,0,0,0.5)"
-      : "0 12px 40px rgba(0,0,0,0.15)",
-    overlay: dark ? "rgba(15, 23, 42, 0.8)" : "rgba(15, 23, 42, 0.7)",
+      ? "0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05) inset"
+      : "0 24px 80px rgba(79,70,229,0.25), 0 0 0 1px rgba(255,255,255,0.5) inset",
+    overlay: dark ? "rgba(15, 23, 42, 0.6)" : "rgba(15, 23, 42, 0.4)",
+
+    // Texte
     text: dark ? "#F1F5F9" : "#1E293B",
     textMuted: dark ? "#94A3B8" : "#64748B",
     textDim: dark ? "#CBD5E1" : "#475569",
-    track: dark ? "#334155" : "#E2E8F0",
+
+    // Avatar
     avatarBg: dark ? "#312E81" : "#EEF2FF",
-    avatarFg: dark ? "#818CF8" : "#4F46E5",
-    primary: dark ? "#818CF8" : "#4F46E5",
+    avatarFg: dark ? "#A5B4FC" : "#4F46E5",
     primaryBorder: dark ? "#1E293B" : "#FFFFFF",
-    rejectGradient: "linear-gradient(135deg, #EF4444, #DC2626)",
-    rejectShadow: "0 6px 18px rgba(239,68,68,0.4)",
+
+    // Boutons
     acceptGradient: "linear-gradient(135deg, #10B981, #059669)",
-    acceptShadow: "0 6px 18px rgba(16,185,129,0.4)",
+    acceptShadow: "0 8px 24px rgba(16,185,129,0.4)",
+    rejectGradient: "linear-gradient(135deg, #EF4444, #DC2626)",
+    rejectShadow: "0 8px 24px rgba(239,68,68,0.4)",
+
+    // Divers
+    track: dark ? "#334155" : "#E2E8F0",
+    progress: { safe: "#10B981", warn: "#F59E0B", danger: "#EF4444" },
     kbdBg: dark ? "#0F172A" : "#F1F5F9",
     kbdBorder: dark ? "#334155" : "#E2E8F0",
     kbdText: dark ? "#CBD5E1" : "#475569",
-    progress: {
-      safe: "#10B981",
-      warn: "#F59E0B",
-      danger: "#EF4444",
-    },
   };
 }
 
@@ -113,18 +139,12 @@ function getInitials(name) {
   ).toUpperCase();
 }
 
-/**
- * ✅ FIX : accepte un `masterGain` node pour permettre le mute global.
- * Le gain individuel du ringtone reste à 0.15, mais le masterGain
- * multiplie tout (0 = muted, 1 = normal).
- */
 function createRingtone(ctx, masterGain) {
   const oscillator = ctx.createOscillator();
   const gain = ctx.createGain();
   oscillator.frequency.value = 425;
   oscillator.type = "sine";
   oscillator.connect(gain);
-  // ✅ Connecte au masterGain (qui gère le mute) au lieu de ctx.destination
   gain.connect(masterGain);
   gain.gain.setValueAtTime(0, ctx.currentTime);
   gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.02);
@@ -136,106 +156,14 @@ function createRingtone(ctx, masterGain) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANT — Bouton rond avec hover/press/focus state
-// ════════════════════════════════════════════════════════════════════
-function RoundActionButton({
-  icon,
-  label,
-  onClick,
-  variant = "reject", // "reject" | "accept"
-  size,
-  pulse = false,
-  tokens,
-}) {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [pressed, setPressed] = useState(false);
-
-  const styleByVariant = useMemo(() => {
-    if (variant === "reject") {
-      return {
-        background: hovered
-          ? "linear-gradient(135deg, #DC2626, #B91C1C)"
-          : tokens.rejectGradient,
-        color: "#FFFFFF",
-        boxShadow: tokens.rejectShadow,
-      };
-    }
-    return {
-      background: hovered
-        ? "linear-gradient(135deg, #059669, #047857)"
-        : tokens.acceptGradient,
-      color: "#FFFFFF",
-      boxShadow: tokens.acceptShadow,
-    };
-  }, [variant, hovered, tokens]);
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 8,
-      }}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => {
-          setHovered(false);
-          setPressed(false);
-        }}
-        onMouseDown={() => setPressed(true)}
-        onMouseUp={() => setPressed(false)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => {
-          setFocused(false);
-          setPressed(false);
-        }}
-        aria-label={label}
-        title={label}
-        className={pulse && !focused ? "icm-pulse-green" : undefined}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: "50%",
-          border: "none",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 0,
-          transition:
-            "background 0.15s ease, transform 0.1s ease",
-          transform: pressed ? "scale(0.94)" : "scale(1)",
-          outline: focused ? `2px solid ${tokens.primary}` : "none",
-          outlineOffset: 3,
-          WebkitTapHighlightColor: "transparent",
-          ...styleByVariant,
-        }}
-      >
-        {icon}
-      </button>
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: tokens.textMuted,
-          userSelect: "none",
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
-export function IncomingCallModal({ callerId, onAccept, onReject }) {
+export function IncomingCallModal({
+  callerId,
+  callType = "video",
+  onAccept,
+  onReject,
+}) {
   const { dark } = useStyles();
   const isMobile = useIsMobile();
 
@@ -255,25 +183,47 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
   const audioRef = useRef(null);
   const webAudioCtxRef = useRef(null);
   const webAudioIntervalRef = useRef(null);
-  // ✅ FIX : ref vers le GainNode maître (permet le mute global)
   const webAudioMasterGainRef = useRef(null);
   const timerRef = useRef(null);
 
   const hasEndedRef = useRef(false);
-  // ✅ Ref pour lire `muted` sans re-déclencher le useEffect de démarrage
   const mutedRef = useRef(muted);
   const onRejectRef = useRef(onReject);
   const onAcceptRef = useRef(onAccept);
+
+  // ✅ FIX StrictMode — reset au mount
+  useEffect(() => {
+    hasEndedRef.current = false;
+    return () => {
+      hasEndedRef.current = true;
+    };
+  }, []);
 
   useEffect(() => {
     onRejectRef.current = onReject;
     onAcceptRef.current = onAccept;
   }, [onReject, onAccept]);
 
-  // ✅ Sync mutedRef avec muted (pour lecture dans le useEffect audio)
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  // ✨ Vibration mobile (appel entrant)
+  useEffect(() => {
+    if (!isMobile) return;
+    if (typeof navigator === "undefined" || !navigator.vibrate) return;
+    const interval = setInterval(() => {
+      try {
+        navigator.vibrate([100, 200, 100]);
+      } catch {}
+    }, 2000);
+    return () => {
+      clearInterval(interval);
+      try {
+        navigator.vibrate(0);
+      } catch {}
+    };
+  }, [isMobile]);
 
   // ════════════════════════════════════════════════════════════════════
   // STOP AUDIO
@@ -295,24 +245,32 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
       } catch {}
       webAudioCtxRef.current = null;
     }
-    // ✅ Reset master gain
     webAudioMasterGainRef.current = null;
   }, []);
 
-  const handleAccept = useCallback(() => {
+  const handleAccept = useCallback(async () => {
     if (hasEndedRef.current) return;
     hasEndedRef.current = true;
     clearInterval(timerRef.current);
     stopAllAudio();
-    onAcceptRef.current?.();
+    try {
+      await onAcceptRef.current?.();
+    } catch (err) {
+      console.warn("[IncomingCallModal] accept failed:", err);
+      toast.error("Appel déjà terminé ou indisponible.");
+    }
   }, [stopAllAudio]);
 
-  const handleReject = useCallback(() => {
+  const handleReject = useCallback(async () => {
     if (hasEndedRef.current) return;
     hasEndedRef.current = true;
     clearInterval(timerRef.current);
     stopAllAudio();
-    onRejectRef.current?.();
+    try {
+      await onRejectRef.current?.();
+    } catch (err) {
+      // silencieux — l'appel est peut-être déjà terminé
+    }
   }, [stopAllAudio]);
 
   // ════════════════════════════════════════════════════════════════════
@@ -322,11 +280,9 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
     timerRef.current = setInterval(() => {
       setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
-
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // ✅ Expiration HORS du updater
   useEffect(() => {
     if (secondsLeft === 0 && !hasEndedRef.current) {
       toast.error("Appel manqué (expiré).");
@@ -335,10 +291,8 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
   }, [secondsLeft, handleReject]);
 
   // ════════════════════════════════════════════════════════════════════
-  // AUDIO — Démarrage (une seule fois au montage)
+  // AUDIO — Démarrage
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX : `muted` retiré des deps → ne redémarre plus à chaque toggle
-  //          Le volume est ajusté séparément (useEffect ci-dessous).
   useEffect(() => {
     let cancelled = false;
 
@@ -347,17 +301,16 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
       if (!audio) return;
 
       audio.loop = true;
-      // ✅ Utilise mutedRef.current (valeur actuelle sans dépendance)
       audio.volume = mutedRef.current ? 0 : 1;
 
       try {
         await audio.play();
         return;
       } catch {
-        // Fallback Web Audio API
         if (cancelled) return;
         try {
-          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          const AudioCtx =
+            window.AudioContext || window.webkitAudioContext;
           const ctx = new AudioCtx();
           webAudioCtxRef.current = ctx;
 
@@ -365,11 +318,13 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
             try {
               await ctx.resume();
             } catch (resumeErr) {
-              console.warn("[IncomingCallModal] resume failed:", resumeErr);
+              console.warn(
+                "[IncomingCallModal] resume failed:",
+                resumeErr
+              );
             }
           }
 
-          // ✅ FIX : masterGain qui permet de muter tout le ringtone
           const masterGain = ctx.createGain();
           masterGain.gain.value = mutedRef.current ? 0 : 1;
           masterGain.connect(ctx.destination);
@@ -403,20 +358,20 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
   }, [stopAllAudio]);
 
   // ════════════════════════════════════════════════════════════════════
-  // AUDIO — Volume (indépendant du démarrage)
+  // AUDIO — Volume
   // ════════════════════════════════════════════════════════════════════
-  // ✅ FIX : ajuste `<audio>` ET le masterGain Web Audio
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio) {
-      audio.volume = muted ? 0 : 1;
-    }
+    if (audio) audio.volume = muted ? 0 : 1;
     const masterGain = webAudioMasterGainRef.current;
     if (masterGain) {
       try {
         masterGain.gain.value = muted ? 0 : 1;
       } catch (err) {
-        console.warn("[IncomingCallModal] masterGain update failed:", err);
+        console.warn(
+          "[IncomingCallModal] masterGain update failed:",
+          err
+        );
       }
     }
   }, [muted]);
@@ -426,12 +381,8 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
   // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "Escape") {
-        handleReject();
-      }
-      if (e.key === "Enter") {
-        handleAccept();
-      }
+      if (e.key === "Escape") handleReject();
+      if (e.key === "Enter") handleAccept();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -462,10 +413,345 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
       ? tokens.progress.warn
       : tokens.progress.danger;
 
-  const buttonSize = isMobile ? 64 : 68;
+  const isAudio = callType === "audio";
+  const callLabel = isAudio ? "Appel audio" : "Appel vidéo";
+
+  // ✨ Dégradé mobile selon le type d'appel
+  const mobileGradient = isAudio
+    ? "linear-gradient(180deg, #0F172A 0%, #312E81 55%, #4F46E5 100%)"
+    : "linear-gradient(180deg, #0F172A 0%, #1E3A8A 55%, #0E7490 100%)";
+
+  const avatarSize = isMobile ? 128 : 112;
 
   // ════════════════════════════════════════════════════════════════════
-  // RENDU
+  // RENDU — MOBILE (full-screen iOS style)
+  // ════════════════════════════════════════════════════════════════════
+  if (isMobile) {
+    return (
+      <>
+        {IncomingCallModalKeyframes}
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="incoming-call-title"
+          className="icm-fade-in"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: mobileGradient,
+            color: "white",
+            display: "flex",
+            flexDirection: "column",
+            zIndex: 9999,
+            overflow: "hidden",
+          }}
+        >
+          {/* ─── Mute (top-right) ─── */}
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(16px + env(safe-area-inset-top, 0px))",
+              right: 16,
+              zIndex: 10,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setMuted((m) => !m)}
+              disabled={audioBlocked}
+              aria-label={
+                muted ? "Activer la sonnerie" : "Couper la sonnerie"
+              }
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "rgba(255,255,255,0.12)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: audioBlocked ? "not-allowed" : "pointer",
+                opacity: audioBlocked ? 0.5 : 1,
+                WebkitTapHighlightColor: "transparent",
+                touchAction: "manipulation",
+              }}
+            >
+              {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </button>
+          </div>
+
+          {/* ─── Type d'appel (top-center) ─── */}
+          <div
+            style={{
+              paddingTop: "calc(24px + env(safe-area-inset-top, 0px))",
+              textAlign: "center",
+              fontSize: 13,
+              fontWeight: 600,
+              letterSpacing: 1.5,
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.7)",
+            }}
+          >
+            {isAudio ? "Appel audio" : "Appel vidéo"}
+          </div>
+
+          {/* ─── Zone centrale : Avatar + nom ─── */}
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0 24px",
+              gap: 24,
+            }}
+          >
+            {/* Avatar + anneaux */}
+            <div
+              style={{
+                position: "relative",
+                width: avatarSize,
+                height: avatarSize,
+              }}
+            >
+              {/* Anneaux concentriques */}
+              <div
+                className="icm-ring"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.5)",
+                }}
+                aria-hidden="true"
+              />
+              <div
+                className="icm-ring icm-ring-2"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.5)",
+                }}
+                aria-hidden="true"
+              />
+              <div
+                className="icm-ring icm-ring-3"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.5)",
+                }}
+                aria-hidden="true"
+              />
+
+              {/* Avatar lui-même */}
+              <div
+                className="icm-float"
+                style={{
+                  position: "relative",
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.18)",
+                  backdropFilter: "blur(20px)",
+                  WebkitBackdropFilter: "blur(20px)",
+                  border: "3px solid rgba(255,255,255,0.5)",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 46,
+                  fontWeight: 700,
+                  color: "white",
+                  letterSpacing: "-0.02em",
+                  zIndex: 2,
+                }}
+                aria-hidden="true"
+              >
+                {initials || <User size={52} color="white" />}
+              </div>
+            </div>
+
+            {/* Nom */}
+            <h2
+              id="incoming-call-title"
+              style={{
+                margin: 0,
+                fontSize: 32,
+                fontWeight: 700,
+                textAlign: "center",
+                letterSpacing: "-0.02em",
+                color: "white",
+                textShadow: "0 2px 12px rgba(0,0,0,0.3)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
+              }}
+            >
+              {callerUser ? callerUser.nom : "Appel entrant"}
+            </h2>
+
+            {/* Statut avec points */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 15,
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.8)",
+              }}
+            >
+              <span>Sonnerie</span>
+              <span className="icm-dot-1">.</span>
+              <span className="icm-dot-2">.</span>
+              <span className="icm-dot-3">.</span>
+            </div>
+
+            {/* Timer discret */}
+            <div
+              role="timer"
+              aria-live="polite"
+              style={{
+                fontSize: 13,
+                fontFamily: "ui-monospace, 'SF Mono', monospace",
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.5)",
+                letterSpacing: 1,
+              }}
+            >
+              {formatTime(secondsLeft)}
+            </div>
+          </div>
+
+          {/* ─── Boutons (bottom) ─── */}
+          <div
+            style={{
+              paddingBottom: "calc(40px + env(safe-area-inset-bottom, 0px))",
+              paddingTop: 24,
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "center",
+              gap: 80,
+            }}
+          >
+            {/* Refuser */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleReject}
+                aria-label="Refuser l'appel"
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: "50%",
+                  background: tokens.rejectGradient,
+                  border: "none",
+                  color: "white",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: tokens.rejectShadow,
+                  cursor: "pointer",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  transition: "transform 0.15s ease",
+                }}
+                onTouchStart={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.94)")
+                }
+                onTouchEnd={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+              >
+                <PhoneOff size={34} />
+              </button>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "rgba(255,255,255,0.85)",
+                }}
+              >
+                Refuser
+              </span>
+            </div>
+
+            {/* Accepter */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleAccept}
+                aria-label="Accepter l'appel"
+                className="icm-pulse-ok"
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: "50%",
+                  background: tokens.acceptGradient,
+                  border: "none",
+                  color: "white",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: tokens.acceptShadow,
+                  cursor: "pointer",
+                  WebkitTapHighlightColor: "transparent",
+                  touchAction: "manipulation",
+                  transition: "transform 0.15s ease",
+                }}
+                onTouchStart={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.94)")
+                }
+                onTouchEnd={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+              >
+                <Phone size={34} />
+              </button>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "rgba(255,255,255,0.85)",
+                }}
+              >
+                Accepter
+              </span>
+            </div>
+          </div>
+
+          {/* Audio */}
+          <audio ref={audioRef} src="/ringtone.mp3" preload="auto" />
+        </div>
+      </>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU — DESKTOP (glassmorphism premium)
   // ════════════════════════════════════════════════════════════════════
   return (
     <>
@@ -479,109 +765,137 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
           position: "fixed",
           inset: 0,
           background: tokens.overlay,
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
+          backdropFilter: "blur(20px) saturate(180%)",
+          WebkitBackdropFilter: "blur(20px) saturate(180%)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           zIndex: 9999,
-          paddingTop: "calc(16px + env(safe-area-inset-top, 0px))",
-          paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
-          paddingLeft: 16,
-          paddingRight: 16,
+          padding: 24,
         }}
       >
+        {/* Halo lumineux coloré derrière le modal */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            width: 400,
+            height: 400,
+            borderRadius: "50%",
+            background: isAudio
+              ? "radial-gradient(circle, rgba(79,70,229,0.35) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(14,116,144,0.35) 0%, transparent 70%)",
+            filter: "blur(60px)",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Modal glass */}
         <div
           className="icm-slide-up"
           style={{
+            position: "relative",
             background: tokens.modalBg,
-            borderRadius: 28,
-            padding: isMobile ? "28px 20px" : "36px 32px",
+            backdropFilter: "blur(40px) saturate(180%)",
+            WebkitBackdropFilter: "blur(40px) saturate(180%)",
+            border: `1px solid ${tokens.modalBorder}`,
+            borderTop: `1px solid ${tokens.modalHighlight}`,
+            borderRadius: 32,
+            padding: "40px 36px 32px",
             textAlign: "center",
             boxShadow: tokens.modalShadow,
-            maxWidth: 380,
+            maxWidth: 400,
             width: "100%",
-            border: `1px solid ${tokens.modalBorder}`,
-            position: "relative",
             boxSizing: "border-box",
           }}
         >
-          {/* ═══ AVATAR AVEC HALO + PASTILLE ═══ */}
+          {/* ─── Avatar + anneau rotatif ─── */}
           <div
             style={{
               position: "relative",
               display: "inline-block",
-              marginBottom: 20,
+              marginBottom: 24,
             }}
           >
+            {/* Anneau rotatif conic-gradient */}
             <div
-              className="icm-halo"
+              className="icm-ring-rot"
+              aria-hidden="true"
               style={{
                 position: "absolute",
-                inset: -8,
+                inset: -6,
                 borderRadius: "50%",
-                background: tokens.avatarBg,
-                opacity: 0.4,
-                zIndex: 0,
+                background: isAudio
+                  ? "conic-gradient(from 0deg, transparent, #818CF8, transparent, #6366F1, transparent)"
+                  : "conic-gradient(from 0deg, transparent, #22D3EE, transparent, #0E7490, transparent)",
+                maskImage:
+                  "radial-gradient(circle, transparent 68%, black 70%)",
+                WebkitMaskImage:
+                  "radial-gradient(circle, transparent 68%, black 70%)",
               }}
-              aria-hidden="true"
             />
 
+            {/* Avatar */}
             <div
               style={{
-                width: isMobile ? 96 : 112,
-                height: isMobile ? 96 : 112,
+                position: "relative",
+                width: avatarSize,
+                height: avatarSize,
                 borderRadius: "50%",
                 background: tokens.avatarBg,
                 color: tokens.avatarFg,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: isMobile ? 36 : 44,
+                fontSize: 42,
                 fontWeight: 700,
-                border: `3px solid ${tokens.primaryBorder}`,
-                position: "relative",
-                zIndex: 1,
                 letterSpacing: "-0.02em",
-              }}
-              aria-hidden="true"
-            >
-              {initials || <User size={isMobile ? 40 : 48} />}
-            </div>
-
-            <div
-              className="icm-shake"
-              style={{
-                position: "absolute",
-                bottom: -4,
-                right: -4,
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: tokens.primary,
-                color: "#FFFFFF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
                 border: `3px solid ${tokens.primaryBorder}`,
-                boxShadow: "0 2px 8px rgba(79,70,229,0.4)",
+                boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
                 zIndex: 2,
               }}
               aria-hidden="true"
             >
-              <PhoneIncoming size={14} />
+              {initials || <User size={48} />}
+            </div>
+
+            {/* Pastille icône */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: 0,
+                right: 0,
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                background: isAudio ? "#4F46E5" : "#0E7490",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: `3px solid ${tokens.primaryBorder}`,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                zIndex: 3,
+              }}
+              aria-hidden="true"
+            >
+              {isAudio ? (
+                <Mic size={16} />
+              ) : (
+                <Video size={16} />
+              )}
             </div>
           </div>
 
-          {/* ═══ NOM + STATUT ═══ */}
+          {/* ─── Nom + statut ─── */}
           <h2
             id="incoming-call-title"
             style={{
-              fontSize: isMobile ? 18 : 20,
+              fontSize: 22,
               fontWeight: 700,
               color: tokens.text,
-              margin: "0 0 4px",
-              lineHeight: 1.2,
+              margin: "0 0 6px",
+              letterSpacing: "-0.02em",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -590,34 +904,49 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
             {callerUser ? callerUser.nom : "Appel entrant"}
           </h2>
 
-          <p
+          <div
             style={{
-              fontSize: 13,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13.5,
               color: tokens.textMuted,
-              margin: "0 0 6px",
+              marginBottom: 6,
             }}
           >
-            {callerUser ? "Vous appelle…" : "Quelqu'un vous appelle"}
-          </p>
+            <span
+              style={{
+                display: "inline-block",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#10B981",
+                boxShadow: "0 0 8px #10B981",
+                animation: "icm-dot-1 1.4s ease-in-out infinite",
+              }}
+              aria-hidden="true"
+            />
+            <span>{callLabel} · Sonnerie…</span>
+          </div>
 
-          {/* ═══ TIMER ═══ */}
+          {/* ─── Timer ─── */}
           <div
             role="timer"
             aria-live="polite"
             aria-atomic="true"
             style={{
-              fontSize: 15,
+              fontSize: 14,
               fontFamily: "ui-monospace, 'SF Mono', monospace",
               fontWeight: 700,
               color: tokens.textDim,
-              letterSpacing: 1,
-              marginBottom: 20,
+              letterSpacing: 1.5,
+              marginBottom: 24,
             }}
           >
             {formatTime(secondsLeft)}
           </div>
 
-          {/* ═══ BARRE DE PROGRESSION ═══ */}
+          {/* ─── Barre de progression ─── */}
           <div
             role="progressbar"
             aria-valuemin={0}
@@ -626,7 +955,7 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
             aria-label="Progression de l'appel"
             style={{
               width: "100%",
-              height: 4,
+              height: 3,
               background: tokens.track,
               borderRadius: 2,
               overflow: "hidden",
@@ -639,41 +968,99 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
                 height: "100%",
                 background: progressColor,
                 borderRadius: 2,
-                transition:
-                  "width 0.3s ease, background-color 0.3s ease",
+                transition: "width 0.3s ease, background-color 0.3s ease",
               }}
             />
           </div>
 
-          {/* ═══ BOUTONS ═══ */}
+          {/* ─── Pill unifiée (Refuser | Accepter) ─── */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: isMobile ? 28 : 36,
+              borderRadius: 32,
+              overflow: "hidden",
+              border: `1px solid ${tokens.modalBorder}`,
+              boxShadow: "0 12px 32px rgba(0,0,0,0.15)",
+              height: 64,
             }}
           >
-            <RoundActionButton
-              icon={<PhoneOff size={isMobile ? 26 : 28} />}
-              label="Refuser"
+            {/* Zone Refuser */}
+            <button
+              type="button"
               onClick={handleReject}
-              variant="reject"
-              size={buttonSize}
-              tokens={tokens}
+              aria-label="Refuser l'appel"
+              style={{
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                color: "#EF4444",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: "inherit",
+                transition: "background 0.15s ease",
+                WebkitTapHighlightColor: "transparent",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background =
+                  "rgba(239,68,68,0.1)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
+            >
+              <PhoneOff size={20} />
+              Refuser
+            </button>
+
+            {/* Divider */}
+            <div
+              aria-hidden="true"
+              style={{
+                width: 1,
+                background: tokens.modalBorder,
+              }}
             />
-            <RoundActionButton
-              icon={<Phone size={isMobile ? 26 : 28} />}
-              label="Accepter"
+
+            {/* Zone Accepter */}
+            <button
+              type="button"
               onClick={handleAccept}
-              variant="accept"
-              size={buttonSize}
-              pulse
-              tokens={tokens}
-            />
+              aria-label="Accepter l'appel"
+              className="icm-pulse-ok"
+              style={{
+                flex: 1,
+                background: tokens.acceptGradient,
+                border: "none",
+                color: "white",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                fontSize: 15,
+                fontWeight: 700,
+                fontFamily: "inherit",
+                transition: "filter 0.15s ease",
+                WebkitTapHighlightColor: "transparent",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.filter = "brightness(1.1)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.filter = "brightness(1)")
+              }
+            >
+              <Phone size={20} />
+              Accepter
+            </button>
           </div>
 
-          {/* ═══ MUTE ═══ */}
+          {/* ─── Mute ─── */}
           <button
             type="button"
             onClick={() => setMuted((m) => !m)}
@@ -682,20 +1069,26 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
               muted ? "Activer la sonnerie" : "Couper la sonnerie"
             }
             style={{
-              marginTop: 20,
+              marginTop: 16,
               padding: "6px 12px",
               background: "transparent",
               border: "none",
-              color: audioBlocked
-                ? tokens.textDim
-                : tokens.textMuted,
+              color: audioBlocked ? tokens.textDim : tokens.textMuted,
               cursor: audioBlocked ? "not-allowed" : "pointer",
-              fontSize: 11.5,
+              fontSize: 12,
               fontWeight: 600,
               display: "inline-flex",
               alignItems: "center",
-              gap: 5,
+              gap: 6,
               opacity: audioBlocked ? 0.6 : 1,
+              fontFamily: "inherit",
+              transition: "color 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!audioBlocked) e.currentTarget.style.color = tokens.text;
+            }}
+            onMouseLeave={(e) => {
+              if (!audioBlocked) e.currentTarget.style.color = tokens.textMuted;
             }}
           >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
@@ -706,48 +1099,46 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
               : "Couper la sonnerie"}
           </button>
 
-          {/* ═══ RACCOURCIS CLAVIER (desktop uniquement) ═══ */}
-          {!isMobile && (
-            <p
+          {/* ─── Raccourcis clavier ─── */}
+          <p
+            style={{
+              fontSize: 10.5,
+              color: tokens.textMuted,
+              marginTop: 12,
+              marginBottom: 0,
+              lineHeight: 1.5,
+              opacity: 0.7,
+            }}
+          >
+            <kbd
               style={{
+                background: tokens.kbdBg,
+                color: tokens.kbdText,
+                padding: "1px 6px",
+                borderRadius: 4,
                 fontSize: 10,
-                color: tokens.textMuted,
-                marginTop: 12,
-                marginBottom: 0,
-                lineHeight: 1.5,
-                opacity: 0.8,
+                fontFamily: "ui-monospace, monospace",
+                border: `1px solid ${tokens.kbdBorder}`,
               }}
             >
-              <kbd
-                style={{
-                  background: tokens.kbdBg,
-                  color: tokens.kbdText,
-                  padding: "1px 5px",
-                  borderRadius: 3,
-                  fontSize: 9,
-                  fontFamily: "ui-monospace, monospace",
-                  border: `1px solid ${tokens.kbdBorder}`,
-                }}
-              >
-                Entrée
-              </kbd>{" "}
-              accepter ·{" "}
-              <kbd
-                style={{
-                  background: tokens.kbdBg,
-                  color: tokens.kbdText,
-                  padding: "1px 5px",
-                  borderRadius: 3,
-                  fontSize: 9,
-                  fontFamily: "ui-monospace, monospace",
-                  border: `1px solid ${tokens.kbdBorder}`,
-                }}
-              >
-                Échap
-              </kbd>{" "}
-              refuser
-            </p>
-          )}
+              Entrée
+            </kbd>{" "}
+            accepter ·{" "}
+            <kbd
+              style={{
+                background: tokens.kbdBg,
+                color: tokens.kbdText,
+                padding: "1px 6px",
+                borderRadius: 4,
+                fontSize: 10,
+                fontFamily: "ui-monospace, monospace",
+                border: `1px solid ${tokens.kbdBorder}`,
+              }}
+            >
+              Échap
+            </kbd>{" "}
+            refuser
+          </p>
         </div>
 
         {/* Audio */}
@@ -756,3 +1147,5 @@ export function IncomingCallModal({ callerId, onAccept, onReject }) {
     </>
   );
 }
+
+export default IncomingCallModal;

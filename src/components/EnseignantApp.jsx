@@ -1,28 +1,100 @@
 // src/components/EnseignantApp.jsx
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback, useState, lazy, Suspense } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { Layout } from "./Layout";
-import { ProfilUtilisateur } from "./ProfilUtilisateur";
-import { MessagerieApp } from "./messagerie/MessagerieApp";
-import { Appels } from "./Appels";
-import { ConsultationEmploiDuTemps } from "./ConsultationEmploiDuTemps";
-import { SaisirAbsence } from "./SaisirAbsence";
-import { GestionNotes } from "./GestionNotes";
-import { Aide } from "./Aide";
-import { MentionsLegales } from "./MentionsLegales";
-import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { AssistantPassageEnseignant } from "./AssistantPassageEnseignant";
+// ✨ Écrans lazy-loaded — chaque onglet devient un chunk séparé (gain ~35 KB)
+const ProfilUtilisateur = lazy(() =>
+  import("./ProfilUtilisateur").then((m) => ({
+    default: m.ProfilUtilisateur,
+  }))
+);
+const MessagerieApp = lazy(() =>
+  import("./messagerie/MessagerieApp").then((m) => ({
+    default: m.MessagerieApp,
+  }))
+);
+const Appels = lazy(() =>
+  import("./Appels").then((m) => ({ default: m.Appels }))
+);
+const ConsultationEmploiDuTemps = lazy(() =>
+  import("./ConsultationEmploiDuTemps").then((m) => ({
+    default: m.ConsultationEmploiDuTemps,
+  }))
+);
+const SaisirAbsence = lazy(() =>
+  import("./SaisirAbsence").then((m) => ({ default: m.SaisirAbsence }))
+);
+const GestionNotes = lazy(() =>
+  import("./GestionNotes").then((m) => ({ default: m.GestionNotes }))
+);
+const Aide = lazy(() => import("./Aide").then((m) => ({ default: m.Aide })));
+const MentionsLegales = lazy(() =>
+  import("./MentionsLegales").then((m) => ({ default: m.MentionsLegales }))
+);
+const PolitiqueConfidentialite = lazy(() =>
+  import("./PolitiqueConfidentialite").then((m) => ({
+    default: m.PolitiqueConfidentialite,
+  }))
+);
+const AssistantPassageEnseignant = lazy(() =>
+  import("./AssistantPassageEnseignant").then((m) => ({
+    default: m.AssistantPassageEnseignant,
+  }))
+);
+const ConsultationExamens = lazy(() =>
+  import("./ConsultationExamens").then((m) => ({
+    default: m.ConsultationExamens,
+  }))
+);
+
 import { useAppStore } from "@/store/appStore";
 import {
   BookOpen, AlertTriangle, Calendar, MessageCircle, Phone, User,
   HelpCircle, FileText, Shield, ArrowLeft, BarChart3, GraduationCap,
-  Clock, ChevronRight, ClipboardList,
+  Clock, ChevronRight, ClipboardList, Loader2,
 } from "lucide-react";
-import { ConsultationExamens } from "./ConsultationExamens";
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense pour les onglets lazy-loaded
+// ════════════════════════════════════════════════════════════════════
+function TabLoader({ dark }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        minHeight: 320,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        padding: 40,
+      }}
+    >
+      <Loader2
+        size={32}
+        className="aa-spin"
+        style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          color: dark ? "#94A3B8" : "#64748B",
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        Chargement…
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // CONSTANTES
@@ -214,7 +286,7 @@ function CoursCard({ cours, dark, isMobile, onClick, showStats }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// BOUTON RETOUR (avec state React, plus de manipulation DOM)
+// BOUTON RETOUR
 // ════════════════════════════════════════════════════════════════════
 function BackButton({ onClick, isMobile, cardBg, cardBorder, textPrimary }) {
   const [pressed, setPressed] = useState(false);
@@ -278,11 +350,9 @@ export function EnseignantApp({
   const userId = user?._id;
   const classe = user?.classe;
 
-  // ✅ FIX : useLocation au lieu de useParams
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ FIX : extrait le tab depuis le pathname (ex: /enseignant/dashboard → "dashboard")
   const tab = useMemo(() => {
     const parts = location.pathname.split("/").filter(Boolean);
     const candidate = parts[1];
@@ -389,7 +459,6 @@ export function EnseignantApp({
     []
   );
 
-  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
@@ -906,7 +975,10 @@ export function EnseignantApp({
             : undefined
         }
       >
-        {renderContent()}
+        {/* ✨ Suspense : chaque écran lazy-loaded avec son propre chunk */}
+        <Suspense fallback={<TabLoader dark={dark} />}>
+          {renderContent()}
+        </Suspense>
       </div>
     </Layout>
   );

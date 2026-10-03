@@ -1,29 +1,111 @@
 // src/components/DirecteurApp.jsx
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, lazy, Suspense } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { Layout } from "./Layout";
-import { DashboardDirecteur } from "./DashboardDirecteur";
-import { RechercheEleve } from "./RechercheEleve";
-import { StatistiquesClasses } from "./StatistiquesClasses";
-import { MessagerieApp } from "./messagerie/MessagerieApp";
-import { Appels } from "./Appels";
-import { ProfilUtilisateur } from "./ProfilUtilisateur";
-import { Aide } from "./Aide";
-import { MentionsLegales } from "./MentionsLegales";
-import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
-import { StatistiquesAvancees } from "./StatistiquesAvancees";
-import { AssistantPassage } from "./AssistantPassage";
-import { ConsultationExamens } from "./ConsultationExamens";
-import { ConsultationEmploiDuTemps } from "./ConsultationEmploiDuTemps";
+// ✨ Écrans lazy-loaded — chaque onglet devient un chunk séparé (gain ~40 KB)
+const DashboardDirecteur = lazy(() =>
+  import("./DashboardDirecteur").then((m) => ({
+    default: m.DashboardDirecteur,
+  }))
+);
+const RechercheEleve = lazy(() =>
+  import("./RechercheEleve").then((m) => ({ default: m.RechercheEleve }))
+);
+const StatistiquesClasses = lazy(() =>
+  import("./StatistiquesClasses").then((m) => ({
+    default: m.StatistiquesClasses,
+  }))
+);
+const MessagerieApp = lazy(() =>
+  import("./messagerie/MessagerieApp").then((m) => ({
+    default: m.MessagerieApp,
+  }))
+);
+const Appels = lazy(() =>
+  import("./Appels").then((m) => ({ default: m.Appels }))
+);
+const ProfilUtilisateur = lazy(() =>
+  import("./ProfilUtilisateur").then((m) => ({
+    default: m.ProfilUtilisateur,
+  }))
+);
+const Aide = lazy(() => import("./Aide").then((m) => ({ default: m.Aide })));
+const MentionsLegales = lazy(() =>
+  import("./MentionsLegales").then((m) => ({ default: m.MentionsLegales }))
+);
+const PolitiqueConfidentialite = lazy(() =>
+  import("./PolitiqueConfidentialite").then((m) => ({
+    default: m.PolitiqueConfidentialite,
+  }))
+);
+const StatistiquesAvancees = lazy(() =>
+  import("./StatistiquesAvancees").then((m) => ({
+    default: m.StatistiquesAvancees,
+  }))
+);
+const AssistantPassage = lazy(() =>
+  import("./AssistantPassage").then((m) => ({
+    default: m.AssistantPassage,
+  }))
+);
+const ConsultationExamens = lazy(() =>
+  import("./ConsultationExamens").then((m) => ({
+    default: m.ConsultationExamens,
+  }))
+);
+const ConsultationEmploiDuTemps = lazy(() =>
+  import("./ConsultationEmploiDuTemps").then((m) => ({
+    default: m.ConsultationEmploiDuTemps,
+  }))
+);
+
 import { useAppStore } from "@/store/appStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Home, User, Building, MessageCircle, Phone, HelpCircle,
   FileText, Shield, Calendar, BarChart, ArrowRight, AlertTriangle,
-  GraduationCap, School,
+  GraduationCap, School, Loader2,
 } from "lucide-react";
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense pour les onglets lazy-loaded
+// ════════════════════════════════════════════════════════════════════
+function TabLoader({ dark }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        minHeight: 320,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        padding: 40,
+      }}
+    >
+      <Loader2
+        size={32}
+        className="aa-spin"
+        style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          color: dark ? "#94A3B8" : "#64748B",
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        Chargement…
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // CONSTANTES
@@ -62,11 +144,9 @@ export function DirecteurApp({
   const userId = user?._id;
   const userEcoleId = user?.ecoleId;
 
-  // ✅ FIX : useLocation au lieu de useParams
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ FIX : extrait le tab depuis le pathname (ex: /directeur/statistiques → "statistiques")
   const tab = useMemo(() => {
     const parts = location.pathname.split("/").filter(Boolean);
     const candidate = parts[1];
@@ -86,10 +166,8 @@ export function DirecteurApp({
     (state) => state.setMessagingContactId
   );
 
-  // ── État local pour la classe sélectionnée
   const [classeConsultation, setClasseConsultation] = useState("");
 
-  // ── Queries
   const anneesRaw = useQuery(
     api.anneesScolaires.listByEcole,
     userEcoleId && userId ? { ecoleId: userEcoleId, userId } : "skip"
@@ -130,7 +208,6 @@ export function DirecteurApp({
     [setMessagingContactId, navigate]
   );
 
-  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const cardBg = dark ? "#1E293B" : "#FFFFFF";
@@ -575,7 +652,11 @@ export function DirecteurApp({
             </span>
           </div>
         )}
-        {renderContent()}
+
+        {/* ✨ Suspense : chaque écran lazy-loaded avec son propre chunk */}
+        <Suspense fallback={<TabLoader dark={dark} />}>
+          {renderContent()}
+        </Suspense>
       </div>
     </Layout>
   );

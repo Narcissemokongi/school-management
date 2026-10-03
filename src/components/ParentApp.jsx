@@ -1,19 +1,52 @@
 // src/components/ParentApp.jsx
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { Layout } from "./Layout";
-import { MessagerieApp } from "./messagerie/MessagerieApp";
-import { Appels } from "./Appels";
-import { ConsultationEmploiDuTemps } from "./ConsultationEmploiDuTemps";
-import { ConsultationExamens } from "./ConsultationExamens";
-import { FraisEnfant } from "./FraisEnfant";
-import { BulletinEnfant } from "./BulletinEnfant";
-import { AbsencesEnfant } from "./AbsencesEnfant";
-import { MentionsLegales } from "./MentionsLegales";
-import { Aide } from "./Aide";
-import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
+// ✨ Écrans lazy-loaded — chaque onglet devient un chunk séparé (gain ~35 KB)
+const MessagerieApp = lazy(() =>
+  import("./messagerie/MessagerieApp").then((m) => ({
+    default: m.MessagerieApp,
+  }))
+);
+const Appels = lazy(() =>
+  import("./Appels").then((m) => ({ default: m.Appels }))
+);
+const ConsultationEmploiDuTemps = lazy(() =>
+  import("./ConsultationEmploiDuTemps").then((m) => ({
+    default: m.ConsultationEmploiDuTemps,
+  }))
+);
+const ConsultationExamens = lazy(() =>
+  import("./ConsultationExamens").then((m) => ({
+    default: m.ConsultationExamens,
+  }))
+);
+const FraisEnfant = lazy(() =>
+  import("./FraisEnfant").then((m) => ({ default: m.FraisEnfant }))
+);
+const BulletinEnfant = lazy(() =>
+  import("./BulletinEnfant").then((m) => ({ default: m.BulletinEnfant }))
+);
+const AbsencesEnfant = lazy(() =>
+  import("./AbsencesEnfant").then((m) => ({ default: m.AbsencesEnfant }))
+);
+const MentionsLegales = lazy(() =>
+  import("./MentionsLegales").then((m) => ({ default: m.MentionsLegales }))
+);
+const Aide = lazy(() => import("./Aide").then((m) => ({ default: m.Aide })));
+const PolitiqueConfidentialite = lazy(() =>
+  import("./PolitiqueConfidentialite").then((m) => ({
+    default: m.PolitiqueConfidentialite,
+  }))
+);
+const DemandeAssociation = lazy(() =>
+  import("./DemandeAssociation").then((m) => ({
+    default: m.DemandeAssociation,
+  }))
+);
+
 import { useAppStore } from "@/store/appStore";
 import { Fab } from "./ui/Fab";
 import {
@@ -37,8 +70,46 @@ import {
   CheckCircle2,
   TrendingUp,
   ArrowLeft,
+  Loader2,
 } from "lucide-react";
-import DemandeAssociation from "./DemandeAssociation";
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense
+// ════════════════════════════════════════════════════════════════════
+function TabLoader({ dark }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        minHeight: 280,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        padding: 40,
+      }}
+    >
+      <Loader2
+        size={32}
+        className="pa-spin"
+        style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          color: dark ? "#94A3B8" : "#64748B",
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        Chargement…
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // CONSTANTES MODULE-LEVEL
@@ -62,9 +133,14 @@ const ParentAppKeyframes = (
       from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    @keyframes pa-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
     .pa-fade-in { animation: pa-fade-in 0.25s ease-out; }
+    .pa-spin { animation: pa-spin 1s linear infinite; }
     @media (prefers-reduced-motion: reduce) {
-      .pa-fade-in { animation: none !important; }
+      .pa-fade-in, .pa-spin { animation: none !important; }
     }
   `}</style>
 );
@@ -135,7 +211,6 @@ export function ParentApp({
   const userId = user?._id;
   const tokens = useMemo(() => buildTokens(dark), [dark]);
 
-  // ─── Tab depuis l'URL ───
   const parsed = useMemo(
     () => parseParentUrl(location.pathname),
     [location.pathname]
@@ -164,7 +239,6 @@ export function ParentApp({
     }
   }, [parsed.tab]);
 
-  // ─── Zustand ───
   const setMessagingContactId = useAppStore(
     (state) => state.setMessagingContactId
   );
@@ -175,7 +249,6 @@ export function ParentApp({
     (state) => state.setParentSelectedEnfant
   );
 
-  // ─── Enfant dérivé URL ───
   const selectedEnfantFromUrl = useMemo(() => {
     if (tab !== "enfants" || !sub || sub === "new") return null;
     return eleves.find((e) => e._id === sub) || null;
@@ -190,7 +263,6 @@ export function ParentApp({
     }
   }, [selectedEnfantFromUrl, selectedEnfantZustand?._id, setSelectedEnfant]);
 
-  // ─── Handlers navigation ───
   const handleNavigateToMessaging = useCallback((contactId) => {
     if (contactId) {
       navigateRef.current(`/parent/messagerie/chat/${contactId}`);
@@ -225,7 +297,6 @@ export function ParentApp({
     navigateRef.current("/parent/enfants");
   }, []);
 
-  // ─── Menu ───
   const menu = useMemo(
     () => [
       { id: "enfants", label: "Mes enfants", icon: <Users size={20} /> },
@@ -243,7 +314,6 @@ export function ParentApp({
     []
   );
 
-  // ─── Rendu contenu ───
   const renderContent = () => {
     switch (tab) {
       case "enfants":
@@ -335,7 +405,6 @@ export function ParentApp({
     }
   };
 
-  // ✨ Onglets qui ont besoin d'une hauteur plein écran (chat, messagerie)
   const needsFullHeight = tab === "messagerie";
 
   return (
@@ -365,7 +434,10 @@ export function ParentApp({
             : undefined
         }
       >
-        {renderContent()}
+        {/* ✨ Suspense : chaque écran lazy-loaded */}
+        <Suspense fallback={<TabLoader dark={dark} />}>
+          {renderContent()}
+        </Suspense>
       </div>
     </Layout>
   );
@@ -512,7 +584,6 @@ function ListeEnfants({
       });
   }, [eleves, search]);
 
-  // ─── État vide ───
   if (eleves.length === 0) {
     return (
       <div
@@ -601,7 +672,6 @@ function ListeEnfants({
         boxSizing: "border-box",
       }}
     >
-      {/* ═══ En-tête ═══ */}
       <div
         style={{
           display: "flex",
@@ -659,7 +729,6 @@ function ListeEnfants({
         )}
       </div>
 
-      {/* ═══ Stats — 2x2 grid sur mobile ═══ */}
       <div
         style={{
           display: "grid",
@@ -696,7 +765,6 @@ function ListeEnfants({
         />
       </div>
 
-      {/* ═══ Recherche ═══ */}
       <div
         style={{
           display: "flex",
@@ -757,7 +825,6 @@ function ListeEnfants({
         )}
       </div>
 
-      {/* ═══ Liste ═══ */}
       {elevesTries.length === 0 ? (
         <div
           style={{
@@ -799,7 +866,6 @@ function ListeEnfants({
         </div>
       )}
 
-      {/* ═══ FAB design system ═══ */}
       {isMobile && (
         <Fab
           icon={<UserPlus size={24} />}
@@ -1090,7 +1156,6 @@ function DossierEnfant({
         boxSizing: "border-box",
       }}
     >
-      {/* ═══ HEADER ═══ */}
       <div
         style={{
           display: "flex",
@@ -1169,7 +1234,6 @@ function DossierEnfant({
           </p>
         </div>
 
-        {/* Score compact mobile */}
         <div
           style={{
             display: "flex",
@@ -1215,7 +1279,6 @@ function DossierEnfant({
         </div>
       </div>
 
-      {/* ═══ SUBTABS scrollables avec fade ═══ */}
       <div
         style={{
           position: "relative",
@@ -1271,7 +1334,6 @@ function DossierEnfant({
           })}
         </div>
 
-        {/* Fade gradient — indique qu'il y a du scroll */}
         {isMobile && (
           <div
             aria-hidden="true"
@@ -1288,175 +1350,177 @@ function DossierEnfant({
         )}
       </div>
 
-      {/* ═══ CONTENU ═══ */}
-      {subTab === "punitions" && (
-        <div>
-          {enfantPunitions.length === 0 ? (
-            <div
-              style={{
-                background: tokens.surface,
-                borderRadius: 14,
-                padding: isMobile ? 32 : 48,
-                textAlign: "center",
-                boxShadow: tokens.shadow,
-                color: tokens.textMuted,
-                border: `1px solid ${tokens.border}`,
-              }}
-            >
+      {/* ✨ Suspense local : chaque sous-onglet lazy-loaded */}
+      <Suspense fallback={<TabLoader dark={dark} />}>
+        {subTab === "punitions" && (
+          <div>
+            {enfantPunitions.length === 0 ? (
               <div
                 style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: "50%",
-                  background: tokens.successSoft,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto 12px",
+                  background: tokens.surface,
+                  borderRadius: 14,
+                  padding: isMobile ? 32 : 48,
+                  textAlign: "center",
+                  boxShadow: tokens.shadow,
+                  color: tokens.textMuted,
+                  border: `1px solid ${tokens.border}`,
                 }}
               >
-                <CheckCircle2 size={26} color={tokens.success} />
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: "50%",
+                    background: tokens.successSoft,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 12px",
+                  }}
+                >
+                  <CheckCircle2 size={26} color={tokens.success} />
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    color: tokens.text,
+                  }}
+                >
+                  Aucune punition
+                </p>
+                <p style={{ margin: "4px 0 0", fontSize: 12 }}>
+                  Cet enfant n'a aucun antécédent disciplinaire
+                </p>
               </div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  color: tokens.text,
-                }}
-              >
-                Aucune punition
-              </p>
-              <p style={{ margin: "4px 0 0", fontSize: 12 }}>
-                Cet enfant n'a aucun antécédent disciplinaire
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {enfantPunitions.map((p) => {
-                const faute = fautesById.get(p.idFaute);
-                const gravite = faute?.gravite || "—";
-                const isGrave = gravite === "Grave";
-                const isMoyenne = gravite === "Moyenne";
-                const badgeBg = isGrave
-                  ? tokens.dangerSoft
-                  : isMoyenne
-                  ? tokens.warningSoft
-                  : tokens.successSoft;
-                const badgeColor = isGrave
-                  ? tokens.danger
-                  : isMoyenne
-                  ? tokens.warning
-                  : tokens.success;
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {enfantPunitions.map((p) => {
+                  const faute = fautesById.get(p.idFaute);
+                  const gravite = faute?.gravite || "—";
+                  const isGrave = gravite === "Grave";
+                  const isMoyenne = gravite === "Moyenne";
+                  const badgeBg = isGrave
+                    ? tokens.dangerSoft
+                    : isMoyenne
+                    ? tokens.warningSoft
+                    : tokens.successSoft;
+                  const badgeColor = isGrave
+                    ? tokens.danger
+                    : isMoyenne
+                    ? tokens.warning
+                    : tokens.success;
 
-                return (
-                  <div
-                    key={p._id}
-                    style={{
-                      background: tokens.surface,
-                      borderRadius: 12,
-                      padding: isMobile ? "12px 14px" : "14px 16px",
-                      boxShadow: tokens.shadow,
-                      border: `1px solid ${tokens.border}`,
-                    }}
-                  >
+                  return (
                     <div
+                      key={p._id}
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 6,
+                        background: tokens.surface,
+                        borderRadius: 12,
+                        padding: isMobile ? "12px 14px" : "14px 16px",
+                        boxShadow: tokens.shadow,
+                        border: `1px solid ${tokens.border}`,
                       }}
                     >
                       <div
                         style={{
-                          fontWeight: 600,
-                          fontSize: isMobile ? 13.5 : 14,
-                          color: tokens.text,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          minWidth: 0,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 8,
+                          marginBottom: 6,
                         }}
                       >
-                        {faute?.libelle || "Faute inconnue"}
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            fontSize: isMobile ? 13.5 : 14,
+                            color: tokens.text,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            minWidth: 0,
+                          }}
+                        >
+                          {faute?.libelle || "Faute inconnue"}
+                        </div>
+                        <span
+                          style={{
+                            background: badgeBg,
+                            color: badgeColor,
+                            padding: "3px 9px",
+                            borderRadius: 10,
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {gravite}
+                        </span>
                       </div>
-                      <span
-                        style={{
-                          background: badgeBg,
-                          color: badgeColor,
-                          padding: "3px 9px",
-                          borderRadius: 10,
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {gravite}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11.5,
-                        color: tokens.textMuted,
-                        marginBottom: 4,
-                      }}
-                    >
-                      {p.date} · Sanction : {p.sanction}
-                    </div>
-                    {p.commentaire && (
                       <div
                         style={{
-                          fontSize: 11,
+                          fontSize: 11.5,
                           color: tokens.textMuted,
-                          marginTop: 4,
-                          fontStyle: "italic",
+                          marginBottom: 4,
                         }}
                       >
-                        « {p.commentaire} »
+                        {p.date} · Sanction : {p.sanction}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+                      {p.commentaire && (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: tokens.textMuted,
+                            marginTop: 4,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          « {p.commentaire} »
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-      {subTab === "frais" && (
-        <FraisEnfant eleveId={enfant._id} user={user} />
-      )}
-      {subTab === "bulletin" && (
-        <BulletinEnfant
-          eleveId={enfant._id}
-          ecoleId={ecoleId}
-          nom={enfant.nom}
-          postnom={enfant.postnom}
-          classe={enfant.classe}
-          user={user}
-        />
-      )}
-      {subTab === "absences" && (
-        <AbsencesEnfant eleveId={enfant._id} user={user} />
-      )}
-      {subTab === "emploi" && (
-        <ConsultationEmploiDuTemps
-          ecoleId={ecoleId}
-          classe={enfant.classe}
-          anneeId={anneeId}
-          user={user}
-        />
-      )}
-      {subTab === "examens" && (
-        <ConsultationExamens
-          ecoleId={ecoleId}
-          anneeId={anneeId}
-          classe={enfant.classe}
-          user={user}
-        />
-      )}
+        {subTab === "frais" && (
+          <FraisEnfant eleveId={enfant._id} user={user} />
+        )}
+        {subTab === "bulletin" && (
+          <BulletinEnfant
+            eleveId={enfant._id}
+            ecoleId={ecoleId}
+            nom={enfant.nom}
+            postnom={enfant.postnom}
+            classe={enfant.classe}
+            user={user}
+          />
+        )}
+        {subTab === "absences" && (
+          <AbsencesEnfant eleveId={enfant._id} user={user} />
+        )}
+        {subTab === "emploi" && (
+          <ConsultationEmploiDuTemps
+            ecoleId={ecoleId}
+            classe={enfant.classe}
+            anneeId={anneeId}
+            user={user}
+          />
+        )}
+        {subTab === "examens" && (
+          <ConsultationExamens
+            ecoleId={ecoleId}
+            anneeId={anneeId}
+            classe={enfant.classe}
+            user={user}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

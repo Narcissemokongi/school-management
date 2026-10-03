@@ -183,7 +183,10 @@ export function AppelGroupe({
 
     // ═══ getUserMedia — DOIT être dans le user gesture (iOS) ═══
     try {
-      const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+      const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+        { AEC: true, AGC: true, ANS: true }, // Configuration audio
+        { encoderConfig: "480p_1" }          // Configuration vidéo (optionnel)
+      );
       if (destroyedRef.current) {
         tracks.forEach((t) => t.close());
         return;

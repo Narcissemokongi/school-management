@@ -37,7 +37,6 @@ export function AppelVideo({
   const [hasJoined, setHasJoined] = useState(false);
   const [permissionError, setPermissionError] = useState(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
-  // ✨ Waveform bars pour mode audio
   const [wavePhase, setWavePhase] = useState(0);
 
   const endCallMutation = useMutation(api.appels.endCall);
@@ -78,6 +77,39 @@ export function AppelVideo({
       waveIntervalRef.current = null;
     };
   }, [hasJoined, callType]);
+
+  // ✨ Re-attacher la piste vidéo locale quand la zone change
+  // (PiP ↔ plein écran, caméra on ↔ off)
+  useEffect(() => {
+    if (!hasJoined) return;
+    const videoTrack = localTracksRef.current[1];
+    if (!videoTrack) return;
+
+    const el = localVideoRef.current;
+    if (!el) return;
+
+    let cancelled = false;
+
+    const reattach = () => {
+      if (cancelled) return;
+      try {
+        videoTrack.stop();
+      } catch (e) {}
+      try {
+        videoTrack.play(el);
+      } catch (e) {
+        console.warn("[AppelVideo] reattach failed:", e);
+      }
+    };
+
+    // Petit délai pour laisser React finir le montage du nouveau div
+    const timeoutId = setTimeout(reattach, 50);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [hasJoined, remoteUsers.length, isVideoOff]);
 
   const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
   const releaseBtn = useCallback(() => setPressedBtn(null), []);
@@ -330,20 +362,30 @@ export function AppelVideo({
 
   const toggleVideo = () => {
     const videoTrack = localTracksRef.current[1];
-    if (videoTrack) {
-      const newVideoOff = !isVideoOff;
-      videoTrack.setEnabled(!newVideoOff);
-      setIsVideoOff(newVideoOff);
-      if (!newVideoOff && localVideoRef.current) {
+    if (!videoTrack) return;
+
+    const newVideoOff = !isVideoOff;
+    videoTrack.setEnabled(!newVideoOff);
+    setIsVideoOff(newVideoOff);
+
+    if (!newVideoOff && localVideoRef.current) {
+      // ⚠️ Stop avant re-play (Agora exige)
+      try {
+        videoTrack.stop();
+      } catch (e) {}
+      try {
         videoTrack.play(localVideoRef.current);
-        if (callType === "audio" && clientRef.current) {
-          clientRef.current.publish(videoTrack).catch((err) => {
-            console.warn("Erreur publication vidéo", err);
-            toast.error("Impossible d'activer la vidéo");
-            videoTrack.setEnabled(false);
-            setIsVideoOff(true);
-          });
-        }
+      } catch (e) {
+        console.warn("[AppelVideo] play after enable failed:", e);
+      }
+
+      if (callType === "audio" && clientRef.current) {
+        clientRef.current.publish(videoTrack).catch((err) => {
+          console.warn("Erreur publication vidéo", err);
+          toast.error("Impossible d'activer la vidéo");
+          videoTrack.setEnabled(false);
+          setIsVideoOff(true);
+        });
       }
     }
   };
@@ -467,12 +509,10 @@ export function AppelVideo({
 
   const isAudioCall = callType === "audio";
 
-  // ✨ Fond dégradé radial subtil
   const bgGradient = isAudioCall
     ? "radial-gradient(circle at 30% 20%, #1E293B 0%, #0F172A 60%)"
     : "radial-gradient(circle at 30% 20%, #1E1B4B 0%, #0F172A 60%)";
 
-  // ✨ Waveform bar heights (déterministe pour éviter les re-renders)
   const waveBars = [0.3, 0.7, 0.45, 0.9, 0.5, 0.8, 0.35, 0.65, 0.4];
 
   return (
@@ -488,7 +528,6 @@ export function AppelVideo({
         flexDirection: "column",
       }}
     >
-      {/* Keyframes */}
       <style>{`
         @keyframes av-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes av-pulse-orange {
@@ -517,7 +556,7 @@ export function AppelVideo({
         }
       `}</style>
 
-      {/* ═══ Overlay CONNECTING ═══ */}
+      {/* Overlay CONNECTING */}
       {connectionState === "CONNECTING" && (
         <div
           role="status"
@@ -539,7 +578,7 @@ export function AppelVideo({
         </div>
       )}
 
-      {/* ═══ Overlay ERROR ═══ */}
+      {/* Overlay ERROR */}
       {connectionState === "ERROR" && (
         <div
           role="alert"
@@ -611,7 +650,7 @@ export function AppelVideo({
         </div>
       )}
 
-      {/* ═══ Écran pré-appel ═══ */}
+      {/* Écran pré-appel */}
       {!hasJoined &&
         connectionState !== "CONNECTING" &&
         connectionState !== "ERROR" && (
@@ -717,7 +756,7 @@ export function AppelVideo({
           </div>
         )}
 
-      {/* ═══ Top bar — pill glass flottante ═══ */}
+      {/* Top bar — pill glass */}
       <div
         style={{
           position: "absolute",
@@ -749,7 +788,6 @@ export function AppelVideo({
             maxWidth: "100%",
           }}
         >
-          {/* Avatar */}
           <div
             style={{
               width: 32,
@@ -775,7 +813,6 @@ export function AppelVideo({
             )}
           </div>
 
-          {/* Nom + badge "En communication" */}
           <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
             <span
               style={{
@@ -817,7 +854,6 @@ export function AppelVideo({
             </span>
           </div>
 
-          {/* Séparateur */}
           <div
             style={{
               width: 1,
@@ -827,7 +863,6 @@ export function AppelVideo({
             }}
           />
 
-          {/* Durée */}
           <div
             style={{
               fontFamily: "ui-monospace, 'SF Mono', monospace",
@@ -842,7 +877,6 @@ export function AppelVideo({
             {formatDuration(callDuration)}
           </div>
 
-          {/* Pastille réseau */}
           <div
             style={{
               display: "flex",
@@ -881,7 +915,7 @@ export function AppelVideo({
         </div>
       </div>
 
-      {/* ═══ Zone principale ═══ */}
+      {/* Zone principale */}
       {isAudioCall ? (
         <div
           style={{
@@ -894,7 +928,6 @@ export function AppelVideo({
             padding: 16,
           }}
         >
-          {/* Avatar avec halo */}
           <div
             style={{
               position: "relative",
@@ -905,7 +938,6 @@ export function AppelVideo({
               justifyContent: "center",
             }}
           >
-            {/* Halo animé */}
             <div
               aria-hidden="true"
               style={{
@@ -948,7 +980,6 @@ export function AppelVideo({
             </div>
           </div>
 
-          {/* Nom */}
           <h2
             style={{
               margin: 0,
@@ -961,7 +992,6 @@ export function AppelVideo({
             {contactName || "Appel audio"}
           </h2>
 
-          {/* Waveform animée */}
           <div
             aria-hidden="true"
             style={{
@@ -993,7 +1023,6 @@ export function AppelVideo({
             ))}
           </div>
 
-          {/* Statut */}
           <p
             style={{
               margin: 0,
@@ -1025,7 +1054,7 @@ export function AppelVideo({
                 fullscreen
               />
 
-              {/* PiP local — moderne avec ombre profonde */}
+              {/* PiP local */}
               <div
                 style={{
                   position: "absolute",
@@ -1117,7 +1146,6 @@ export function AppelVideo({
                   📷
                 </div>
               )}
-              {/* Message "En attente" */}
               <div
                 style={{
                   position: "absolute",
@@ -1172,7 +1200,7 @@ export function AppelVideo({
         </div>
       )}
 
-      {/* ═══ Bouton déblocage audio iOS ═══ */}
+      {/* Bouton déblocage audio iOS */}
       {autoplayBlocked && (
         <button
           type="button"
@@ -1208,7 +1236,7 @@ export function AppelVideo({
         </button>
       )}
 
-      {/* ═══ Barre de contrôle — pill glass flottante ═══ */}
+      {/* Barre de contrôle — pill glass */}
       <div
         style={{
           position: "absolute",
@@ -1239,7 +1267,6 @@ export function AppelVideo({
             boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
           }}
         >
-          {/* Mute */}
           <ControlButton
             icon={
               isMuted ? (
@@ -1259,7 +1286,6 @@ export function AppelVideo({
             isMobile={isMobile}
           />
 
-          {/* Video toggle */}
           <ControlButton
             icon={
               isVideoOff ? (
@@ -1279,7 +1305,6 @@ export function AppelVideo({
             isMobile={isMobile}
           />
 
-          {/* Speaker */}
           <ControlButton
             icon={
               isSpeakerOn ? (
@@ -1303,7 +1328,6 @@ export function AppelVideo({
             isMobile={isMobile}
           />
 
-          {/* Switch camera — mobile friendly maintenant */}
           {!isAudioCall && (
             <ControlButton
               icon={<SwitchCamera size={isMobile ? 20 : 22} />}
@@ -1319,7 +1343,6 @@ export function AppelVideo({
             />
           )}
 
-          {/* Hold */}
           <ControlButton
             icon={
               isOnHold ? (
@@ -1339,7 +1362,6 @@ export function AppelVideo({
             isMobile={isMobile}
           />
 
-          {/* Screen share — desktop uniquement */}
           {!isMobile && (
             <ControlButton
               icon={
@@ -1363,7 +1385,6 @@ export function AppelVideo({
             />
           )}
 
-          {/* End call — gros bouton rouge détaché */}
           <div
             style={{
               display: "flex",
@@ -1421,7 +1442,7 @@ export function AppelVideo({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// CONTROL BUTTON — squircle glass avec label
+// CONTROL BUTTON
 // ════════════════════════════════════════════════════════════════════
 function ControlButton({
   icon,

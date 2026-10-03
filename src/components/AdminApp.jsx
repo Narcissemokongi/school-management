@@ -1,34 +1,125 @@
 // src/components/AdminApp.jsx
-import { useMemo, useCallback, useEffect, useRef } from "react";
+import { useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { useQuery } from "convex/react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "@convex/_generated/api";
 import { Layout } from "./Layout";
-import { DashboardAdmin } from "./DashboardAdmin";
-import { GestionElevesEtClasses } from "./GestionElevesEtClasses";
-import { GestionFautesEtSanctions } from "./GestionFautesEtSanctions";
-import { GestionUtilisateurs } from "./GestionUtilisateurs";
-import { GestionEmploiDuTemps } from "./GestionEmploiDuTemps";
-import { GestionExamens } from "./GestionExamens";
-import { MessagerieApp } from "./messagerie/MessagerieApp";
-import { GestionCoursEtNotes } from "./GestionCoursEtNotes";
-import { GestionFrais } from "./GestionFrais";
-import { GestionAudit } from "./GestionAudit";
-import { Appels } from "./Appels";
-import { Parametres } from "./Parametres";
-import { Aide } from "./Aide";
-import { MentionsLegales } from "./MentionsLegales";
-import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
+// ✨ Écrans lazy-loaded — chaque onglet devient un chunk séparé (gain ~300 KB)
+const DashboardAdmin = lazy(() =>
+  import("./DashboardAdmin").then((m) => ({ default: m.DashboardAdmin }))
+);
+const GestionElevesEtClasses = lazy(() =>
+  import("./GestionElevesEtClasses").then((m) => ({
+    default: m.GestionElevesEtClasses,
+  }))
+);
+const GestionFautesEtSanctions = lazy(() =>
+  import("./GestionFautesEtSanctions").then((m) => ({
+    default: m.GestionFautesEtSanctions,
+  }))
+);
+const GestionUtilisateurs = lazy(() =>
+  import("./GestionUtilisateurs").then((m) => ({
+    default: m.GestionUtilisateurs,
+  }))
+);
+const GestionEmploiDuTemps = lazy(() =>
+  import("./GestionEmploiDuTemps").then((m) => ({
+    default: m.GestionEmploiDuTemps,
+  }))
+);
+const GestionExamens = lazy(() =>
+  import("./GestionExamens").then((m) => ({ default: m.GestionExamens }))
+);
+const MessagerieApp = lazy(() =>
+  import("./messagerie/MessagerieApp").then((m) => ({
+    default: m.MessagerieApp,
+  }))
+);
+const GestionCoursEtNotes = lazy(() =>
+  import("./GestionCoursEtNotes").then((m) => ({
+    default: m.GestionCoursEtNotes,
+  }))
+);
+const GestionFrais = lazy(() =>
+  import("./GestionFrais").then((m) => ({ default: m.GestionFrais }))
+);
+const GestionAudit = lazy(() =>
+  import("./GestionAudit").then((m) => ({ default: m.GestionAudit }))
+);
+const Appels = lazy(() =>
+  import("./Appels").then((m) => ({ default: m.Appels }))
+);
+const Parametres = lazy(() =>
+  import("./Parametres").then((m) => ({ default: m.Parametres }))
+);
+const Aide = lazy(() => import("./Aide").then((m) => ({ default: m.Aide })));
+const MentionsLegales = lazy(() =>
+  import("./MentionsLegales").then((m) => ({ default: m.MentionsLegales }))
+);
+const PolitiqueConfidentialite = lazy(() =>
+  import("./PolitiqueConfidentialite").then((m) => ({
+    default: m.PolitiqueConfidentialite,
+  }))
+);
+const ParentLinkRequests = lazy(() =>
+  import("./ParentLinkRequests").then((m) => ({
+    default: m.ParentLinkRequests,
+  }))
+);
+const AccueilAdmin = lazy(() =>
+  import("./AccueilAdmin").then((m) => ({ default: m.AccueilAdmin }))
+);
+const AssistantPassage = lazy(() =>
+  import("./AssistantPassage").then((m) => ({ default: m.AssistantPassage }))
+);
+
 import { AnneeSelector } from "./AnneeSelector";
-import { ParentLinkRequests } from "./ParentLinkRequests";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Home, Users, AlertTriangle, BookOpen, DollarSign, Shield,
   MessageCircle, Phone, ScrollText, Settings, HelpCircle,
   FileText, ClipboardList, Link2, Calendar, GraduationCap, User,
+  Loader2,
 } from "lucide-react";
-import { AccueilAdmin } from "./AccueilAdmin";
-import { AssistantPassage } from "./AssistantPassage";
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense pour les onglets lazy-loaded
+// ════════════════════════════════════════════════════════════════════
+function TabLoader({ dark }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        minHeight: 320,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        padding: 40,
+      }}
+    >
+      <Loader2
+        size={32}
+        className="aa-spin"
+        style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          color: dark ? "#94A3B8" : "#64748B",
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        Chargement…
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════
 // CONSTANTES MODULE-LEVEL
@@ -68,7 +159,6 @@ const VALID_ADMIN_TABS = [
 
 const DEFAULT_ADMIN_TAB = "accueil";
 
-// ✨ Onglets avec hauteur plein écran
 const TABS_FULL_HEIGHT = ["messagerie", "appels"];
 
 // ════════════════════════════════════════════════════════════════════
@@ -264,7 +354,7 @@ export function AdminApp({
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // RENDU CONTENU
+  // RENDU CONTENU (chaque écran est lazy-loaded)
   // ════════════════════════════════════════════════════════════════════
   const renderContent = () => {
     switch (tab) {
@@ -415,10 +505,7 @@ export function AdminApp({
     }
   };
 
-  // ✅ Évite le `.includes()` sur array recréé
   const showAnneeSelector = TABS_WITH_ANNEE_SELECTOR.has(tab);
-
-  // ✨ Onglets avec hauteur plein écran
   const needsFullHeight = TABS_FULL_HEIGHT.includes(tab);
 
   // ════════════════════════════════════════════════════════════════════
@@ -471,7 +558,11 @@ export function AdminApp({
             />
           </div>
         )}
-        {renderContent()}
+
+        {/* ✨ Suspense : chaque écran lazy-loaded avec son propre chunk */}
+        <Suspense fallback={<TabLoader dark={dark} />}>
+          {renderContent()}
+        </Suspense>
       </div>
     </Layout>
   );

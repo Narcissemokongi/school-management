@@ -1,24 +1,105 @@
 // src/components/DisciplinaireApp.jsx
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, lazy, Suspense } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Layout } from "./Layout";
-import { ProfilUtilisateur } from "./ProfilUtilisateur";
-import { AccueilDisciplinaire } from "./AccueilDisciplinaire";
-import { SaisirPunition } from "./SaisirPunition";
-import { HistoriqueDisciplinaire } from "./HistoriqueDisciplinaire";
-import { SaisirAbsence } from "./SaisirAbsence";
-import { MessagerieApp } from "./messagerie/MessagerieApp";
-import { Appels } from "./Appels";
-import { Aide } from "./Aide";
-import { MentionsLegales } from "./MentionsLegales";
-import { PolitiqueConfidentialite } from "./PolitiqueConfidentialite";
 import { Skeleton } from "./Skeleton";
+// ✨ Écrans lazy-loaded — chaque onglet devient un chunk séparé (gain ~25 KB)
+const ProfilUtilisateur = lazy(() =>
+  import("./ProfilUtilisateur").then((m) => ({
+    default: m.ProfilUtilisateur,
+  }))
+);
+const AccueilDisciplinaire = lazy(() =>
+  import("./AccueilDisciplinaire").then((m) => ({
+    default: m.AccueilDisciplinaire,
+  }))
+);
+const SaisirPunition = lazy(() =>
+  import("./SaisirPunition").then((m) => ({ default: m.SaisirPunition }))
+);
+const HistoriqueDisciplinaire = lazy(() =>
+  import("./HistoriqueDisciplinaire").then((m) => ({
+    default: m.HistoriqueDisciplinaire,
+  }))
+);
+const SaisirAbsence = lazy(() =>
+  import("./SaisirAbsence").then((m) => ({ default: m.SaisirAbsence }))
+);
+const MessagerieApp = lazy(() =>
+  import("./messagerie/MessagerieApp").then((m) => ({
+    default: m.MessagerieApp,
+  }))
+);
+const Appels = lazy(() =>
+  import("./Appels").then((m) => ({ default: m.Appels }))
+);
+const Aide = lazy(() => import("./Aide").then((m) => ({ default: m.Aide })));
+const MentionsLegales = lazy(() =>
+  import("./MentionsLegales").then((m) => ({ default: m.MentionsLegales }))
+);
+const PolitiqueConfidentialite = lazy(() =>
+  import("./PolitiqueConfidentialite").then((m) => ({
+    default: m.PolitiqueConfidentialite,
+  }))
+);
+
 import { useAppStore } from "@/store/appStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Home, Pen, ClipboardList, AlertTriangle, MessageCircle, Phone, User,
-  HelpCircle, FileText, Shield, Calendar,
+  HelpCircle, FileText, Shield, Calendar, Loader2,
 } from "lucide-react";
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER — fallback Suspense pour les onglets lazy-loaded
+// ════════════════════════════════════════════════════════════════════
+function TabLoader({ dark }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      style={{
+        minHeight: 280,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        padding: 40,
+      }}
+    >
+      <Loader2
+        size={32}
+        className="da-spin"
+        style={{ color: dark ? "#818CF8" : "#4F46E5" }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          color: dark ? "#94A3B8" : "#64748B",
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        Chargement…
+      </span>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES
+// ════════════════════════════════════════════════════════════════════
+const DisciplinaireAppKeyframes = (
+  <style>{`
+    @keyframes da-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .da-spin { animation: da-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .da-spin { animation: none !important; }
+    }
+  `}</style>
+);
 
 // ════════════════════════════════════════════════════════════════════
 // CONSTANTES
@@ -54,7 +135,6 @@ export function DisciplinaireApp({
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Extrait le tab depuis le pathname (ex: /disciplinaire/saisir → "saisir")
   const tab = useMemo(() => {
     const parts = location.pathname.split("/").filter(Boolean);
     const candidate = parts[1];
@@ -91,7 +171,6 @@ export function DisciplinaireApp({
   const loading =
     punitions === undefined || eleves === undefined || fautes === undefined;
 
-  // Couleurs
   const textPrimary = dark ? "#F1F5F9" : "#1E293B";
   const textSecondary = dark ? "#94A3B8" : "#64748B";
   const warning = "#F59E0B";
@@ -320,6 +399,7 @@ export function DisciplinaireApp({
       onToggleTheme={toggle}
       onLogout={handleLogout}
     >
+      {DisciplinaireAppKeyframes}
       <div
         style={
           needsFullHeight
@@ -358,7 +438,11 @@ export function DisciplinaireApp({
             </span>
           </div>
         )}
-        {renderContent()}
+
+        {/* ✨ Suspense : chaque écran lazy-loaded avec son propre chunk */}
+        <Suspense fallback={<TabLoader dark={dark} />}>
+          {renderContent()}
+        </Suspense>
       </div>
     </Layout>
   );

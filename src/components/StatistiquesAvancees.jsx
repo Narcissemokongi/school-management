@@ -1,13 +1,10 @@
 // src/components/StatistiquesAvancees.jsx
-import { useState, useMemo, useCallback, useId } from "react";
+import { useState, useEffect, useMemo, useCallback, useId } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, LineChart, Line,
-} from "recharts";
+// ✨ recharts retiré — chargé dynamiquement au 1er graphique (gain ~400 KB)
 import { School, TrendingUp, BarChart3, Loader } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
@@ -30,7 +27,7 @@ const FOCUS_RING = (color) => ({
 });
 
 // ════════════════════════════════════════════════════════════════════
-// KEYFRAMES MODULE-LEVEL (rendus UNE fois)
+// KEYFRAMES MODULE-LEVEL
 // ════════════════════════════════════════════════════════════════════
 const StatistiquesAvanceesKeyframes = (
   <style>{`
@@ -43,7 +40,7 @@ const StatistiquesAvanceesKeyframes = (
 );
 
 // ════════════════════════════════════════════════════════════════════
-// PRESSABLE — feedback tap + focus ring via state React
+// PRESSABLE
 // ════════════════════════════════════════════════════════════════════
 function Pressable({
   onClick, style, children, disabled = false, type = "button",
@@ -122,7 +119,9 @@ export function StatistiquesAvancees({
   const [selectedClasse, setSelectedClasse] = useState("");
   const [seuil, setSeuil] = useState(50);
 
-  // IDs stables pour aria-labelledby
+  // ✨ Recharts lazy-loaded
+  const [recharts, setRecharts] = useState(null);
+
   const tauxPanelId = useId();
   const evolutionPanelId = useId();
   const comparaisonPanelId = useId();
@@ -174,7 +173,31 @@ export function StatistiquesAvancees({
     (shouldFetchEvo && evolutionRaw === undefined) ||
     (shouldFetchComp && comparaisonRaw === undefined);
 
-  // ===== Couleurs (mémoïsées) =====
+  // ✨ Chargement de recharts à la demande (dès qu'un graphique doit s'afficher)
+  const needsRecharts = useMemo(() => {
+    return (
+      (tab === "taux" && selectedClasse && tauxReussite.length > 0) ||
+      (tab === "evolution" && selectedClasse && evolution.length > 0) ||
+      (tab === "comparaison" && comparaison.length > 0)
+    );
+  }, [tab, selectedClasse, tauxReussite.length, evolution.length, comparaison.length]);
+
+  useEffect(() => {
+    if (!needsRecharts || recharts) return;
+    let cancelled = false;
+    import("recharts")
+      .then((mod) => {
+        if (!cancelled) setRecharts(mod);
+      })
+      .catch((err) => {
+        console.error("[StatistiquesAvancees] recharts load failed:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsRecharts, recharts]);
+
+  // ===== Couleurs =====
   const colors = useMemo(() => ({
     textPrimary: dark ? "#F1F5F9" : "#1E293B",
     textSecondary: dark ? "#94A3B8" : "#64748B",
@@ -259,6 +282,9 @@ export function StatistiquesAvancees({
       "",
     [anneeActive, annees, anneeId]
   );
+
+  // ✨ Mini-loader pendant le chargement de recharts
+  const rechartsLoading = needsRecharts && !recharts;
 
   return (
     <div
@@ -411,7 +437,7 @@ export function StatistiquesAvancees({
         </div>
       )}
 
-      {/* ═══════════ Loader ═══════════ */}
+      {/* ═══════════ Loader données ═══════════ */}
       {isLoading && (
         <div
           role="status"
@@ -431,8 +457,34 @@ export function StatistiquesAvancees({
         </div>
       )}
 
+      {/* ═══════════ Loader recharts ═══════════ */}
+      {!isLoading && rechartsLoading && (
+        <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+          style={{
+            ...cardStyle,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: 200,
+          }}
+        >
+          <Loader
+            size={28}
+            className="sxa-animate-spin"
+            style={{ color: accent }}
+            aria-hidden="true"
+          />
+          <span style={{ position: "absolute", left: -9999 }}>
+            Chargement du graphique
+          </span>
+        </div>
+      )}
+
       {/* ═══════════ Panel : Taux de réussite ═══════════ */}
-      {!isLoading && tab === "taux" && selectedClasse && (
+      {!isLoading && !rechartsLoading && tab === "taux" && selectedClasse && (
         <section
           id={tauxPanelId}
           role="tabpanel"
@@ -459,20 +511,20 @@ export function StatistiquesAvancees({
                 role="img"
                 aria-label={`Graphique en barres : taux de réussite par matière pour la classe ${selectedClasse}`}
               >
-                <ResponsiveContainer width="100%" height={graphHeight}>
-                  <BarChart data={tauxReussite}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis dataKey="matiere" stroke={axisStroke} />
-                    <YAxis unit="%" domain={[0, 100]} stroke={axisStroke} />
-                    <Tooltip content={<CustomTooltip colors={colors} />} />
-                    <Bar
+                <recharts.ResponsiveContainer width="100%" height={graphHeight}>
+                  <recharts.BarChart data={tauxReussite}>
+                    <recharts.CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <recharts.XAxis dataKey="matiere" stroke={axisStroke} />
+                    <recharts.YAxis unit="%" domain={[0, 100]} stroke={axisStroke} />
+                    <recharts.Tooltip content={<CustomTooltip colors={colors} />} />
+                    <recharts.Bar
                       dataKey="tauxReussite"
                       fill={accent}
                       radius={[4, 4, 0, 0]}
                       name="Taux de réussite"
                     />
-                  </BarChart>
-                </ResponsiveContainer>
+                  </recharts.BarChart>
+                </recharts.ResponsiveContainer>
               </div>
               <div
                 style={{
@@ -554,7 +606,7 @@ export function StatistiquesAvancees({
       )}
 
       {/* ═══════════ Panel : Évolution ═══════════ */}
-      {!isLoading && tab === "evolution" && selectedClasse && (
+      {!isLoading && !rechartsLoading && tab === "evolution" && selectedClasse && (
         <section
           id={evolutionPanelId}
           role="tabpanel"
@@ -580,29 +632,29 @@ export function StatistiquesAvancees({
               role="img"
               aria-label={`Graphique linéaire : évolution de la moyenne générale pour la classe ${selectedClasse}`}
             >
-              <ResponsiveContainer width="100%" height={graphHeight}>
-                <LineChart data={evolution}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                  <XAxis dataKey="anneeNom" stroke={axisStroke} />
-                  <YAxis domain={[0, 100]} stroke={axisStroke} />
-                  <Tooltip content={<CustomTooltip colors={colors} />} />
-                  <Legend />
-                  <Line
+              <recharts.ResponsiveContainer width="100%" height={graphHeight}>
+                <recharts.LineChart data={evolution}>
+                  <recharts.CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <recharts.XAxis dataKey="anneeNom" stroke={axisStroke} />
+                  <recharts.YAxis domain={[0, 100]} stroke={axisStroke} />
+                  <recharts.Tooltip content={<CustomTooltip colors={colors} />} />
+                  <recharts.Legend />
+                  <recharts.Line
                     type="monotone"
                     dataKey="moyenne"
                     stroke={accent}
                     strokeWidth={2}
                     name="Moy. générale (%)"
                   />
-                </LineChart>
-              </ResponsiveContainer>
+                </recharts.LineChart>
+              </recharts.ResponsiveContainer>
             </div>
           )}
         </section>
       )}
 
       {/* ═══════════ Panel : Comparaison ═══════════ */}
-      {!isLoading && tab === "comparaison" && (
+      {!isLoading && !rechartsLoading && tab === "comparaison" && (
         <section
           id={comparaisonPanelId}
           role="tabpanel"
@@ -628,20 +680,20 @@ export function StatistiquesAvancees({
               role="img"
               aria-label={`Graphique en barres : comparaison des moyennes par classe${anneeLabel ? ` pour l'année ${anneeLabel}` : ""}`}
             >
-              <ResponsiveContainer width="100%" height={graphHeight}>
-                <BarChart data={comparaison}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                  <XAxis dataKey="classe" stroke={axisStroke} />
-                  <YAxis domain={[0, 100]} stroke={axisStroke} />
-                  <Tooltip content={<CustomTooltip colors={colors} />} />
-                  <Bar
+              <recharts.ResponsiveContainer width="100%" height={graphHeight}>
+                <recharts.BarChart data={comparaison}>
+                  <recharts.CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <recharts.XAxis dataKey="classe" stroke={axisStroke} />
+                  <recharts.YAxis domain={[0, 100]} stroke={axisStroke} />
+                  <recharts.Tooltip content={<CustomTooltip colors={colors} />} />
+                  <recharts.Bar
                     dataKey="moyenne"
                     fill={success}
                     radius={[4, 4, 0, 0]}
                     name="Moy. générale (%)"
                   />
-                </BarChart>
-              </ResponsiveContainer>
+                </recharts.BarChart>
+              </recharts.ResponsiveContainer>
             </div>
           )}
         </section>

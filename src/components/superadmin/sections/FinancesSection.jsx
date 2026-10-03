@@ -1,5 +1,5 @@
 // src/components/SuperAdmin/sections/FinancesSection.jsx
-import { useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useTokens } from "@/theme/tokens";
@@ -7,11 +7,22 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { MetricCard } from "@/components/ui/MetricCard";
 import {
   DollarSign, TrendingUp, AlertTriangle, Users, Calendar, ChevronRight,
+  Loader,
 } from "lucide-react";
-import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
-  Tooltip, CartesianGrid,
-} from "recharts";
+// ✨ recharts retiré — chargé dynamiquement au 1er affichage du graphique (gain ~400 KB)
+
+// ════════════════════════════════════════════════════════════════════
+// LOADER RECHARTS (singleton partagé au niveau module)
+// Évite de re-télécharger si plusieurs composants l'utilisent
+// ════════════════════════════════════════════════════════════════════
+let rechartsPromise = null;
+
+function loadRecharts() {
+  if (!rechartsPromise) {
+    rechartsPromise = import("recharts");
+  }
+  return rechartsPromise;
+}
 
 const formatEUR = (n) =>
   new Intl.NumberFormat("fr-FR", {
@@ -20,12 +31,43 @@ const formatEUR = (n) =>
     maximumFractionDigits: 0,
   }).format(n || 0);
 
+// ════════════════════════════════════════════════════════════════════
+// KEYFRAMES
+// ════════════════════════════════════════════════════════════════════
+const FinancesSectionKeyframes = (
+  <style>{`
+    @keyframes fin-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .fin-spin { animation: fin-spin 1s linear infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .fin-spin { animation: none !important; }
+    }
+  `}</style>
+);
+
 export function FinancesSection({ userId, onDrilldown }) {
   const t = useTokens();
   const isMobile = useIsMobile();
 
   const args = useMemo(() => ({ userId, moisRecents: 6 }), [userId]);
   const stats = useQuery(api.abonnements.statsFinancieres, args);
+
+  // ✨ Recharts lazy-loaded
+  const [recharts, setRecharts] = useState(null);
+
+  useEffect(() => {
+    if (recharts) return;
+    let cancelled = false;
+    loadRecharts()
+      .then((mod) => {
+        if (!cancelled) setRecharts(mod);
+      })
+      .catch((err) => {
+        console.error("[FinancesSection] recharts load failed:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [recharts]);
 
   if (stats === undefined) {
     return (
@@ -41,8 +83,13 @@ export function FinancesSection({ userId, onDrilldown }) {
     );
   }
 
+  // ✨ Loader mini pendant le chargement de recharts
+  const rechartsReady = !!recharts;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: t.space.lg }}>
+      {FinancesSectionKeyframes}
+
       {/* Header */}
       <div>
         <h2
@@ -136,60 +183,80 @@ export function FinancesSection({ userId, onDrilldown }) {
           Revenus des 6 derniers mois
         </h3>
         <div style={{ height: 260 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={stats.revenusParMois}>
-              <defs>
-                <linearGradient id="finGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor={t.accent.primary}
-                    stopOpacity={0.3}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={t.accent.primary}
-                    stopOpacity={0}
-                  />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke={t.border.subtle}
-                vertical={false}
-              />
-              <XAxis
-                dataKey="label"
-                stroke={t.text.secondary}
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke={t.text.secondary}
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={formatEUR}
-                width={70}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: t.surface.elevated,
-                  border: `1px solid ${t.border.subtle}`,
-                  borderRadius: t.radius.sm,
-                  fontSize: 12,
-                }}
-                formatter={(v) => [formatEUR(v), "Revenus"]}
-              />
-              <Area
-                type="monotone"
-                dataKey="montant"
-                stroke={t.accent.primary}
-                strokeWidth={2}
-                fill="url(#finGrad)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {!rechartsReady ? (
+            // ✨ Loader pendant le chargement de recharts
+            <div
+              role="status"
+              aria-busy="true"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                color: t.text.secondary,
+                fontSize: t.font.size.sm,
+                gap: 8,
+              }}
+            >
+              <Loader size={18} className="fin-spin" aria-hidden="true" />
+              <span>Chargement du graphique…</span>
+            </div>
+          ) : (
+            <recharts.ResponsiveContainer width="100%" height="100%">
+              <recharts.AreaChart data={stats.revenusParMois}>
+                <defs>
+                  <linearGradient id="finGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop
+                      offset="0%"
+                      stopColor={t.accent.primary}
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor={t.accent.primary}
+                      stopOpacity={0}
+                    />
+                  </linearGradient>
+                </defs>
+                <recharts.CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke={t.border.subtle}
+                  vertical={false}
+                />
+                <recharts.XAxis
+                  dataKey="label"
+                  stroke={t.text.secondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <recharts.YAxis
+                  stroke={t.text.secondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={formatEUR}
+                  width={70}
+                />
+                <recharts.Tooltip
+                  contentStyle={{
+                    background: t.surface.elevated,
+                    border: `1px solid ${t.border.subtle}`,
+                    borderRadius: t.radius.sm,
+                    fontSize: 12,
+                  }}
+                  formatter={(v) => [formatEUR(v), "Revenus"]}
+                />
+                <recharts.Area
+                  type="monotone"
+                  dataKey="montant"
+                  stroke={t.accent.primary}
+                  strokeWidth={2}
+                  fill="url(#finGrad)"
+                />
+              </recharts.AreaChart>
+            </recharts.ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -201,7 +268,7 @@ export function FinancesSection({ userId, onDrilldown }) {
           gap: t.space.md,
         }}
       >
-        {/* Top 5 écoles — ✨ cliquable */}
+        {/* Top 5 écoles */}
         <div
           style={{
             background: t.surface.elevated,

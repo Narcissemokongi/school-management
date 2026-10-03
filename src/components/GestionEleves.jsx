@@ -2,7 +2,7 @@
 import { useState, useRef, useMemo, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import * as XLSX from "xlsx";
+// ✨ xlsx retiré — chargé dynamiquement dans exportExcel() (gain bundle ~430 KB)
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -465,7 +465,7 @@ function FiltersSheet({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// CARTE ÉLÈVE — ✨ refactorée avec state React
+// CARTE ÉLÈVE
 // ════════════════════════════════════════════════════════════════════
 function EleveCard({
   eleve,
@@ -530,7 +530,6 @@ function EleveCard({
         cursor: "pointer",
         transition:
           "border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease",
-        // ✨ Feedback tap
         transform: pressed ? "scale(0.985)" : "scale(1)",
         userSelect: "none",
         WebkitTapHighlightColor: "transparent",
@@ -545,7 +544,6 @@ function EleveCard({
       }}
       aria-label={`Ouvrir la fiche de ${eleve.prenom} ${eleve.nom}`}
     >
-      {/* ✨ Checkbox — zone 44×44 mobile */}
       <button
         type="button"
         onClick={(e) => {
@@ -580,7 +578,6 @@ function EleveCard({
         {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
       </button>
 
-      {/* Avatar */}
       <div
         style={{
           width: 36,
@@ -601,7 +598,6 @@ function EleveCard({
         {eleve.nom?.[0]}
       </div>
 
-      {/* Infos */}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div
           style={{
@@ -707,8 +703,9 @@ export function GestionEleves({
   const [showAddForm, setShowAddForm] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const { confirm, dialogProps } = useConfirm();
-  // ✨ Feedback tap sur les boutons
   const [pressedBtn, setPressedBtn] = useState(null);
+  // ✨ Export en cours (feedback visuel + anti double-clic)
+  const [exporting, setExporting] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSexe, setFilterSexe] = useState("all");
@@ -730,7 +727,6 @@ export function GestionEleves({
     ) ?? [];
   const [showAssociationsFor, setShowAssociationsFor] = useState(null);
 
-  // ✨ Feedback tap handlers
   const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
   const releaseBtn = useCallback(() => setPressedBtn(null), []);
 
@@ -875,7 +871,13 @@ export function GestionEleves({
     }
   };
 
-  const exportExcel = (data, filename) => {
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ EXPORT EXCEL — xlsx chargé dynamiquement (~430 KB économisés)
+  // ════════════════════════════════════════════════════════════════════
+  const exportExcel = useCallback(async (data, filename) => {
+    // ✨ Import dynamique : xlsx n'est chargé QUE lors d'un export
+    const XLSX = await import("xlsx");
+
     const rows = data.map((e) => ({
       Nom: e.nom || "",
       Postnom: e.postnom || "",
@@ -890,24 +892,43 @@ export function GestionEleves({
       Parent: e.parentName || "",
       "Login parent": e.parentLogin || "",
     }));
+
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Élèves");
     XLSX.writeFile(workbook, filename);
-  };
+  }, []);
 
-  const handleExportFiltered = () => {
-    exportExcel(filteredAndSorted, "eleves_filtres.xlsx");
-    toast.success("Export Excel généré");
-  };
+  const handleExportFiltered = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportExcel(filteredAndSorted, "eleves_filtres.xlsx");
+      toast.success("Export Excel généré");
+    } catch (err) {
+      console.error("[GestionEleves] export failed:", err);
+      toast.error("Impossible de générer l'export");
+    } finally {
+      setExporting(false);
+    }
+  }, [exportExcel, filteredAndSorted, exporting]);
 
-  const handleExportSelected = () => {
-    if (selectedIds.length === 0) return;
-    const selected = enrichedEleves.filter((e) =>
-      selectedIds.includes(e._id)
-    );
-    exportExcel(selected, "eleves_selection.xlsx");
-  };
+  const handleExportSelected = useCallback(async () => {
+    if (selectedIds.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      const selected = enrichedEleves.filter((e) =>
+        selectedIds.includes(e._id)
+      );
+      await exportExcel(selected, "eleves_selection.xlsx");
+      toast.success("Export Excel généré");
+    } catch (err) {
+      console.error("[GestionEleves] export failed:", err);
+      toast.error("Impossible de générer l'export");
+    } finally {
+      setExporting(false);
+    }
+  }, [exportExcel, enrichedEleves, selectedIds, exporting]);
 
   const handleDeleteOne = async (eleve) => {
     const ok = await confirm(
@@ -1222,7 +1243,7 @@ export function GestionEleves({
   );
 
   // ════════════════════════════════════════════════════════════════════
-  // RENDU CARTES (mobile + desktop)
+  // RENDU CARTES
   // ════════════════════════════════════════════════════════════════════
   const renderCards = () => (
     <div
@@ -1273,7 +1294,7 @@ export function GestionEleves({
     >
       {GestionElevesKeyframes}
 
-      {/* ═══ EN-TÊTE ═══ */}
+      {/* EN-TÊTE */}
       <div
         style={{
           display: "flex",
@@ -1317,6 +1338,7 @@ export function GestionEleves({
             <button
               type="button"
               onClick={handleExportFiltered}
+              disabled={exporting}
               onTouchStart={pressBtn("export")}
               onTouchEnd={releaseBtn}
               onTouchCancel={releaseBtn}
@@ -1330,8 +1352,9 @@ export function GestionEleves({
                 background: dark ? "#1E293B" : "#FFFFFF",
                 color: dark ? "#F1F5F9" : "#1E293B",
                 fontWeight: 500,
-                cursor: "pointer",
+                cursor: exporting ? "wait" : "pointer",
                 fontSize: 13,
+                opacity: exporting ? 0.6 : 1,
                 transform:
                   pressedBtn === "export" ? "scale(0.97)" : "scale(1)",
                 transition: "transform 0.1s ease",
@@ -1340,7 +1363,7 @@ export function GestionEleves({
                 fontFamily: "inherit",
               }}
             >
-              <Download size={15} /> Exporter
+              <Download size={15} /> {exporting ? "…" : "Exporter"}
             </button>
             <button
               type="button"
@@ -1374,7 +1397,7 @@ export function GestionEleves({
         )}
       </div>
 
-      {/* ═══ STATS — ✨ 2×2 grid mobile ═══ */}
+      {/* STATS */}
       <div
         style={{
           display: "grid",
@@ -1427,7 +1450,7 @@ export function GestionEleves({
         />
       </div>
 
-      {/* ═══ BARRE OUTILS ═══ */}
+      {/* BARRE OUTILS */}
       {isMobile ? (
         <div
           style={{
@@ -1709,7 +1732,7 @@ export function GestionEleves({
         </div>
       )}
 
-      {/* ═══ PUCES FILTRES ═══ */}
+      {/* PUCES FILTRES */}
       {activeFiltersCount > 0 && (
         <div
           style={{
@@ -1770,7 +1793,7 @@ export function GestionEleves({
         </div>
       )}
 
-      {/* ═══ LISTE ═══ */}
+      {/* LISTE */}
       {filteredAndSorted.length > 0 ? (
         effectiveViewMode === "table" ? renderTable() : renderCards()
       ) : (
@@ -1815,7 +1838,7 @@ export function GestionEleves({
         </div>
       )}
 
-      {/* ═══ FAB AJOUTER — ✨ design system ═══ */}
+      {/* FAB AJOUTER */}
       {isMobile && !selectionMode && (
         <Fab
           icon={<Plus size={24} />}
@@ -1825,7 +1848,7 @@ export function GestionEleves({
         />
       )}
 
-      {/* ═══ BARRE ACTIONS GROUPÉES MOBILE ═══ */}
+      {/* BARRE ACTIONS GROUPÉES MOBILE */}
       {isMobile && selectionMode && (
         <div
           style={{
@@ -1883,6 +1906,7 @@ export function GestionEleves({
             <button
               type="button"
               onClick={handleExportSelected}
+              disabled={exporting}
               aria-label="Exporter la sélection"
               style={{
                 padding: 10,
@@ -1890,7 +1914,8 @@ export function GestionEleves({
                 border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
                 background: "transparent",
                 color: dark ? "#F1F5F9" : "#1E293B",
-                cursor: "pointer",
+                cursor: exporting ? "wait" : "pointer",
+                opacity: exporting ? 0.6 : 1,
                 minWidth: MOBILE_TAP,
                 minHeight: MOBILE_TAP,
                 display: "flex",
@@ -1928,7 +1953,7 @@ export function GestionEleves({
         </div>
       )}
 
-      {/* ═══ BARRE ACTIONS GROUPÉES DESKTOP ═══ */}
+      {/* BARRE ACTIONS GROUPÉES DESKTOP */}
       {!isMobile && selectionMode && (
         <div
           style={{
@@ -1959,6 +1984,7 @@ export function GestionEleves({
           <button
             type="button"
             onClick={handleExportSelected}
+            disabled={exporting}
             style={{
               display: "flex",
               alignItems: "center",
@@ -1968,7 +1994,8 @@ export function GestionEleves({
               border: `1px solid ${dark ? "#334155" : "#E2E8F0"}`,
               background: "transparent",
               color: dark ? "#F1F5F9" : "#1E293B",
-              cursor: "pointer",
+              cursor: exporting ? "wait" : "pointer",
+              opacity: exporting ? 0.6 : 1,
               fontSize: 13,
               fontWeight: 500,
               WebkitTapHighlightColor: "transparent",
@@ -1976,7 +2003,7 @@ export function GestionEleves({
               fontFamily: "inherit",
             }}
           >
-            <Download size={14} /> Exporter
+            <Download size={14} /> {exporting ? "…" : "Exporter"}
           </button>
           <button
             type="button"
@@ -2019,7 +2046,7 @@ export function GestionEleves({
         </div>
       )}
 
-      {/* ═══ BOTTOM SHEET FILTRES ═══ */}
+      {/* BOTTOM SHEET FILTRES */}
       <FiltersSheet
         open={showFilters}
         onClose={() => setShowFilters(false)}
@@ -2041,7 +2068,7 @@ export function GestionEleves({
         activeFiltersCount={activeFiltersCount}
       />
 
-      {/* ═══ MODALE AJOUT ═══ */}
+      {/* MODALE AJOUT */}
       {showAddForm && (
         <div
           style={{
@@ -2166,7 +2193,7 @@ export function GestionEleves({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// FILTER CHIP — ✨ zone tap 44px
+// FILTER CHIP
 // ════════════════════════════════════════════════════════════════════
 function FilterChip({ label, onClear, dark }) {
   const [pressed, setPressed] = useState(false);
@@ -2407,7 +2434,6 @@ function EleveDetailModal({
           </Section>
         </div>
 
-        {/* Actions */}
         <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
           <button
             type="button"
