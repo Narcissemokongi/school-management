@@ -143,9 +143,10 @@ function AppRoutes() {
   const navigate = useNavigate();
 
   // ✨ FIX #1 : user initialisé DIRECTEMENT depuis localStorage
+  // → app affichée instantanément, plus d'écran de chargement
   const [savedUser] = useState(readSavedUser);
-  const [user, setUser] = useState(savedUser); // ← optimiste
-  const [sessionChecked, setSessionChecked] = useState(!savedUser); // ← skip si user
+  const [user, setUser] = useState(savedUser);
+  const [sessionChecked, setSessionChecked] = useState(!savedUser);
 
   const savedUserId = savedUser?._id ?? null;
 
@@ -155,7 +156,7 @@ function AppRoutes() {
   );
   const sessionQuery = useQuery(api.users.get, sessionArgs);
 
-  // ✨ FIX #2 : ne JAMAIS déconnecter sur cold start
+  // ✨ FIX #2 : ne JAMAIS déconnecter sur cold start Convex
   useEffect(() => {
     if (!savedUserId) {
       setSessionChecked(true);
@@ -202,7 +203,8 @@ function AppRoutes() {
           STORAGE_KEY,
           JSON.stringify({
             ...merged,
-            _sessionExpires: savedUser._sessionExpires || Date.now() + SESSION_TTL_MS,
+            _sessionExpires:
+              savedUser._sessionExpires || Date.now() + SESSION_TTL_MS,
           })
         );
       } catch {}
@@ -250,7 +252,9 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {import.meta.env.DEV && <Route path="/ui-showcase" element={<UIShowcase />} />}
+      {import.meta.env.DEV && (
+        <Route path="/ui-showcase" element={<UIShowcase />} />
+      )}
 
       <Route
         path="/login"

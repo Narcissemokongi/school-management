@@ -6,9 +6,9 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import App from "./App";
 import toast from "react-hot-toast";
-import './fonts.css';
-import './index.css';
-import './App.css';
+import "./fonts.css";
+import "./index.css";
+import "./App.css";
 import "./lib/pdfWorker";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
@@ -44,11 +44,13 @@ window.addEventListener("error", (event) => {
   // React ErrorBoundary gère déjà les erreurs de rendu.
   // Un reload auto pouvait causer une boucle infinie.
 
-  // Toast informatif (mais pas de reload)
-  toast.error("Une erreur est survenue. Veuillez rafraîchir si le problème persiste.", {
-    duration: 5000,
-    id: "global-error", // ✨ évite les toasts en boucle
-  });
+  toast.error(
+    "Une erreur est survenue. Veuillez rafraîchir si le problème persiste.",
+    {
+      duration: 5000,
+      id: "global-error", // ✨ évite les toasts en boucle
+    }
+  );
 });
 
 ReactDOM.createRoot(document.getElementById("root")).render(
