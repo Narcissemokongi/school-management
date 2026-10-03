@@ -17,10 +17,8 @@ function MobileMenuButton({ onClick, dark, variant = "default" }) {
 
   const isMessagerie = variant === "overlay";
 
-  // ✅ Safe-area top + left/right
   const style = isMessagerie
     ? {
-        // Mode messagerie : en haut à droite, style overlay
         position: "fixed",
         top: "calc(14px + env(safe-area-inset-top, 0px))",
         right: "calc(14px + env(safe-area-inset-right, 0px))",
@@ -51,7 +49,6 @@ function MobileMenuButton({ onClick, dark, variant = "default" }) {
         WebkitTapHighlightColor: "transparent",
       }
     : {
-        // Mode normal : en haut à gauche
         position: "fixed",
         top: "calc(16px + env(safe-area-inset-top, 0px))",
         left: "calc(16px + env(safe-area-inset-left, 0px))",
@@ -166,16 +163,13 @@ export function Layout({
   const fullHeight = isIOS ? "100dvh" : "100vh";
 
   // ✅ Calcul de la réserve d'espace pour le bouton menu mobile normal
-  //    (bouton 44px + top 16 + marge 8 = 68px)
   const mobileTopReserve = 68;
 
   return (
     <div
       style={{
         display: "flex",
-        // ✅ FIX #10 — overflow hidden pour éviter le débordement de la sidebar
         overflowX: "hidden",
-        // ✅ Fix #3 — `dvh` pour iOS
         minHeight: isMessagerie ? undefined : fullHeight,
         height: isMessagerie ? fullHeight : undefined,
         overflowY: isMessagerie ? "hidden" : "visible",
@@ -204,7 +198,6 @@ export function Layout({
           flex: 1,
           marginLeft: sidebarWidth,
           transition: "margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          // ✅ Messagerie : aucun padding
           padding: isMessagerie
             ? 0
             : isMobile
@@ -212,7 +205,6 @@ export function Layout({
             : "24px 32px 32px",
           backgroundColor: dark ? "#0F172A" : "#F8FAFC",
           color: dark ? "#F1F5F9" : "#1E293B",
-          // ✅ Fix #3 — `dvh` pour iOS
           minHeight: isMessagerie ? undefined : fullHeight,
           height: isMessagerie ? fullHeight : undefined,
           overflowY: isMessagerie ? "hidden" : "visible",
@@ -225,10 +217,6 @@ export function Layout({
         }}
       >
         {/* ═══════════ BOUTON MENU MOBILE ═══════════ */}
-        {/* ✅ Bouton menu standard (haut gauche) — masqué en messagerie
-            car il chevauchait les boutons d'appel du header de chat.
-            Le bouton menu en messagerie est maintenant dans le header
-            de ConversationList. */}
         {isMobile && !isMessagerie && (
           <MobileMenuButton
             onClick={handleOpenSidebar}
@@ -243,10 +231,11 @@ export function Layout({
             maxWidth: isMessagerie ? "none" : 1280,
             margin: isMessagerie ? 0 : "0 auto",
             width: "100%",
-            // ✅ FIX #7 — Le padding est géré sur <main>, plus de padding top ici
             paddingTop: 0,
+            // ✨ FIX CRITIQUE : en messagerie, ce wrapper utilise flex: 1 SANS
+            // height: 100% — sinon iOS Safari peut résoudre height à 0
+            // (parent = flex: 1 sans height explicite)
             flex: isMessagerie ? 1 : undefined,
-            height: isMessagerie ? "100%" : undefined,
             minHeight: isMessagerie ? 0 : undefined,
             display: isMessagerie ? "flex" : "block",
             flexDirection: isMessagerie ? "column" : undefined,
@@ -256,7 +245,6 @@ export function Layout({
           {children}
         </div>
 
-        {/* ✅ ScrollToTop : sauf en messagerie (scroll interne) */}
         {!isMessagerie && <ScrollToTop />}
       </main>
     </div>

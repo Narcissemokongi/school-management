@@ -672,8 +672,8 @@ export function MessagerieApp({ user, ecoleId }) {
           display: "flex",
           // ✨ FIX : hauteur = 100% du parent, pas 100dvh (le header au-dessus
           //          doit être déduit). minHeight: 0 permet au flex child de shrink.
-          height: "100%",
-          minHeight: 0,
+          height: "100dvh",
+          minHeight: "100dvh",
           flex: 1,
           overflow: "hidden",
           background: dark ? "#0F172A" : "#F8FAFC",

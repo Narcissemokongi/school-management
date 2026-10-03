@@ -54,9 +54,12 @@ function clearSavedUser() {
 // APP CONTENT
 // ============================================================
 export function AppContent() {
-  const [user, setUser] = useState(null);
+  // ✨ FIX #2 : user initialisé DIRECTEMENT depuis localStorage
+  // → app affichée instantanément, plus d'écran de chargement
+  const [savedUser] = useState(readSavedUser);
+  const [user, setUser] = useState(savedUser);
   const [showRegister, setShowRegister] = useState(false);
-  const [loadingSession, setLoadingSession] = useState(true);
+  const [loadingSession, setLoadingSession] = useState(!savedUser);
 
   const { dark } = useTheme();
   const isMobile = useIsMobile();
@@ -64,8 +67,6 @@ export function AppContent() {
   const { deferredPrompt, isInstalled, promptInstall, dismissPrompt } =
     useInstallPrompt();
 
-  // ✅ Lecture unique au mount (pas à chaque render)
-  const [savedUser] = useState(readSavedUser);
   const savedUserId = savedUser?._id ?? null;
 
   // ✅ Query session (skip si pas d'user)
@@ -74,30 +75,57 @@ export function AppContent() {
     savedUserId ? { userId: savedUserId } : "skip"
   );
 
-  // ✅ Vérification de session robuste
+  // ════════════════════════════════════════════════════════════════════
+  // ✨ FIX #1 : Vérification de session ROBUSTE
+  //
+  // Avant : si Convex retournait `null` au cold start (WS pas encore
+  //         connecté), on DÉCONNECTAIT l'utilisateur par erreur.
+  //
+  // Après : on garde la session optimiste, on ne déconnecte QUE sur
+  //         signal explicite (`status: "suspended"`, etc.)
+  // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (!savedUserId) {
-      // Pas d'user en localStorage → pas de session à vérifier
       setLoadingSession(false);
       setUser(null);
       return;
     }
 
-    // En attente de la réponse Convex
+    // Pas encore de réponse Convex → on laisse la session optimiste
     if (sessionQuery === undefined) return;
 
-    // Réponse reçue : session valide ou non
+    // 🔴 FIX CRITIQUE : Convex retourne null au cold start ?
+    // On NE déconnecte PAS — on attend le prochain passage
+    if (sessionQuery === null) {
+      console.warn(
+        "[AppContent] User introuvable côté Convex (cold start?) — session conservée"
+      );
+      return;
+    }
+
+    // Status explicitement mauvais → déconnexion justifiée
     if (
-      sessionQuery &&
-      sessionQuery._id &&
-      sessionQuery.status === "active"
+      sessionQuery.status === "suspended" ||
+      sessionQuery.status === "blocked" ||
+      sessionQuery.status === "deleted" ||
+      sessionQuery.isActive === false
     ) {
-      setUser(savedUser);
-    } else {
-      // Session invalide (suspendue, supprimée, ou introuvable)
+      console.warn(
+        `[AppContent] Session invalide (status: ${sessionQuery.status}) — déconnexion`
+      );
       clearSavedUser();
       setUser(null);
+      setLoadingSession(false);
+      return;
     }
+
+    // Status OK → on rafraîchit les infos du user
+    if (sessionQuery.status === "active") {
+      setUser({ ...savedUser, ...sessionQuery });
+      // Écriture silencieuse pour la prochaine session
+      writeSavedUser({ ...savedUser, ...sessionQuery });
+    }
+
     setLoadingSession(false);
   }, [savedUserId, sessionQuery, savedUser]);
 
@@ -119,8 +147,9 @@ export function AppContent() {
 
   // ============================================================
   // LOADING SESSION
+  // (uniquement pour le tout premier boot sans cache)
   // ============================================================
-  if (loadingSession) {
+  if (loadingSession && !user) {
     return (
       <>
         <style>{`
@@ -191,9 +220,9 @@ export function AppContent() {
         />
       )}
 
+      {/* ✨ FIX #3 : plus de `key={user._id}` — évite les remounts inutiles */}
       {user ? (
         <AuthenticatedApp
-          key={user._id}
           user={user}
           handleLogout={handleLogout}
         />
