@@ -6,6 +6,7 @@ workflows:
       vars:
         NODE_VERSION: "22.11.0"
         JAVA_VERSION: 17
+        NAPI_RS_FORCE_WASI: "error"
       node: 22.11.0
       java: 17
       groups:
@@ -14,31 +15,24 @@ workflows:
       - name: Install dependencies
         script: |
           set -e
-          echo "=== Node version ==="
-          node --version
-          echo "=== Architecture ==="
-          uname -m
+          echo "=== Node: $(node --version) | Arch: $(uname -m) ==="
           
           # Nettoyage complet
           rm -rf node_modules package-lock.json
           
-          # Installation avec --force (force l'install des optional deps)
-          npm install --force --include=optional
+          # Installation standard (ignore les erreurs de bindings natifs)
+          npm install --no-audit --no-fund || true
           
-          # Vérification critique : vite doit être installé
+          # ✨ FORCER l'installation du binding WASM
+          echo "=== Installation du binding WASM ==="
+          npm install --no-save --force @rolldown/binding-wasm32-wasi@1.2.12 || true
+          
+          # Vérification
           if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "❌ VITE NON INSTALLÉ"
-            echo "=== Contenu node_modules ==="
-            ls node_modules/ | head -30
-            exit 1
+            echo "❌ Vite manquant"; exit 1
           fi
-          echo "✅ Vite installé"
-          
-          # Vérification des bindings
-          echo "=== Bindings rolldown ==="
-          ls node_modules/@rolldown/ 2>/dev/null || echo "❌ Aucun binding rolldown"
-          echo "=== Bindings rollup ==="
-          ls node_modules/@rollup/ 2>/dev/null || echo "❌ Aucun binding rollup"
+          echo "✅ Vite OK"
+          ls node_modules/@rolldown/ 2>/dev/null || echo "(pas de binding natif, WASM utilisé)"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync
@@ -70,6 +64,7 @@ workflows:
         XCODE_VERSION: 15.4
         XCODE_WORKSPACE: "App.xcworkspace"
         XCODE_SCHEME: "App"
+        NAPI_RS_FORCE_WASI: "error"
       node: 22.11.0
       xcode: 15.4
       cocoapods: default
@@ -79,23 +74,19 @@ workflows:
       - name: Install dependencies
         script: |
           set -e
-          echo "=== Node version ==="
-          node --version
-          echo "=== Architecture ==="
-          uname -m
+          echo "=== Node: $(node --version) | Arch: $(uname -m) ==="
           
           rm -rf node_modules package-lock.json
-          npm install --force --include=optional
+          npm install --no-audit --no-fund || true
+          
+          echo "=== Installation du binding WASM ==="
+          npm install --no-save --force @rolldown/binding-wasm32-wasi@1.2.12 || true
           
           if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "❌ VITE NON INSTALLÉ"
-            ls node_modules/ | head -30
-            exit 1
+            echo "❌ Vite manquant"; exit 1
           fi
-          echo "✅ Vite installé"
-          
-          echo "=== Bindings rolldown ==="
-          ls node_modules/@rolldown/ 2>/dev/null || echo "❌ Aucun binding rolldown"
+          echo "✅ Vite OK"
+          ls node_modules/@rolldown/ 2>/dev/null || echo "(pas de binding natif, WASM utilisé)"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync iOS
@@ -130,6 +121,7 @@ workflows:
     environment:
       vars:
         NODE_VERSION: "22.11.0"
+        NAPI_RS_FORCE_WASI: "error"
       node: 22.11.0
       groups:
         - app-env
@@ -138,11 +130,11 @@ workflows:
         script: |
           set -e
           rm -rf node_modules package-lock.json
-          npm install --force --include=optional
+          npm install --no-audit --no-fund || true
+          npm install --no-save --force @rolldown/binding-wasm32-wasi@1.2.12 || true
           
           if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "❌ VITE NON INSTALLÉ"
-            exit 1
+            echo "❌ Vite manquant"; exit 1
           fi
       - name: Build web app
         script: npm run build
