@@ -1,193 +1,68 @@
-// src/components/messagerie/PrivateChatView.jsx
-import { useRef, useState, useMemo, useCallback, useEffect } from "react";
-import { useIsMobile } from "@/hooks/useIsMobile";
+// src/components/messagerie/ChatInput.jsx
+import { useRef, useEffect, useCallback, useState, useMemo } from "react";
 import { useStyles } from "@/styles/theme";
-import {
-  ArrowLeft,
-  Phone,
-  Video,
-  Loader,
-  ChevronDown,
-} from "lucide-react";
-import { MessageBubble } from "./MessageBubble";
-import { ChatInput } from "./ChatInput";
-import { MessagingHero } from "./MessagingHero";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { Paperclip, Send, X, Loader } from "lucide-react";
 
-// ════════════════════════════════════════════════════════════════════
-// KEYFRAMES module-level
-// ════════════════════════════════════════════════════════════════════
-const PrivateChatKeyframes = (
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
+const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
+
+const ChatInputKeyframes = (
   <style>{`
-    @keyframes pcv-spin {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
-    @keyframes pcv-fade-in {
-      from { opacity: 0; transform: translateY(4px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes mb-fade-in {
-      from { opacity: 0; transform: translateY(4px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .pcv-spin { animation: pcv-spin 0.9s linear infinite; }
-    .pcv-fade-in { animation: pcv-fade-in 0.25s ease-out; }
-    .mb-fade-in { animation: mb-fade-in 0.2s ease-out; }
-
-    .pcv-messages::-webkit-scrollbar { width: 6px; height: 6px; }
-    .pcv-messages::-webkit-scrollbar-thumb {
-      background: rgba(100,116,139,0.3);
-      border-radius: 3px;
-    }
-
+    @keyframes ci-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes ci-fade-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+    .ci-spin { animation: ci-spin 0.8s linear infinite; }
+    .ci-fade-in { animation: ci-fade-in 0.15s ease-out; }
     @media (prefers-reduced-motion: reduce) {
-      .pcv-spin, .pcv-fade-in, .mb-fade-in { animation: none !important; }
+      .ci-spin, .ci-fade-in { animation: none !important; }
     }
   `}</style>
 );
 
-// ════════════════════════════════════════════════════════════════════
-// SAFE-AREA
-// ════════════════════════════════════════════════════════════════════
-const SAFE_TOP = "env(safe-area-inset-top, 0px)";
-const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
-const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
-
-// ════════════════════════════════════════════════════════════════════
-// ✨ Détection prefers-reduced-motion (une seule fois)
-// ════════════════════════════════════════════════════════════════════
-function getPrefersReducedMotion() {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-// ════════════════════════════════════════════════════════════════════
-// TOKENS
-// ════════════════════════════════════════════════════════════════════
 function buildTokens(dark) {
   return {
-    bg: dark ? "#0F172A" : "#F8FAFC",
     surface: dark ? "#1E293B" : "#FFFFFF",
     surfaceHover: dark ? "#26334D" : "#F8FAFC",
-    messagesBg: dark ? "#0B1220" : "#F1F5F9",
-    border: dark ? "#334155" : "#E2E8F0",
-    text: dark ? "#F1F5F9" : "#1E293B",
+    inputBg: dark ? "#0F172A" : "#F1F5F9",
+    inputBorder: dark ? "#334155" : "#E2E8F0",
+    inputText: dark ? "#F1F5F9" : "#1E293B",
     textMuted: dark ? "#94A3B8" : "#64748B",
     primary: dark ? "#818CF8" : "#4F46E5",
     primaryHover: dark ? "#6366F1" : "#4338CA",
     primarySoft: dark ? "#312E81" : "#EEF2FF",
+    primarySoftText: dark ? "#C7D2FE" : "#4F46E5",
     ghostHover: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
     ghostActive: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
-    skeleton: dark ? "#334155" : "#E2E8F0",
+    disabledBg: dark ? "#334155" : "#E2E8F0",
+    disabledText: dark ? "#64748B" : "#94A3B8",
     danger: dark ? "#F87171" : "#EF4444",
-    success: dark ? "#34D399" : "#10B981",
-    groupBg: dark ? "#4C1D95" : "#EDE9FE",
-    groupFg: dark ? "#C4B5FD" : "#6D28D9",
-    shadowScrollBtn: dark
-      ? "0 4px 12px rgba(0,0,0,0.5)"
-      : "0 4px 12px rgba(0,0,0,0.12)",
-    separatorBg: dark ? "rgba(15,23,42,0.92)" : "rgba(248,250,252,0.92)",
-    messagesBgTransparent: dark
-      ? "linear-gradient(to bottom, #0B1220 0%, rgba(11,18,32,0.85) 60%, transparent 100%)"
-      : "linear-gradient(to bottom, #F1F5F9 0%, rgba(241,245,249,0.85) 60%, transparent 100%)",
+    dangerSoft: dark ? "#7F1D1D" : "#FEE2E2",
+    border: dark ? "#334155" : "#E2E8F0",
   };
 }
 
-// ════════════════════════════════════════════════════════════════════
-// HELPERS
-// ════════════════════════════════════════════════════════════════════
-const AVATAR_PALETTE = [
-  "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E",
-  "#F59E0B", "#10B981", "#14B8A6", "#3B82F6",
-];
-
-function getInitials(name) {
-  if (!name) return "?";
-  const parts = String(name).trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (
-    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
-  ).toUpperCase();
-}
-
-function getAvatarColor(name) {
-  if (!name) return AVATAR_PALETTE[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
-}
-
-function isSameDay(d1, d2) {
-  const a = new Date(d1);
-  const b = new Date(d2);
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function formatDateLabel(dateStr) {
-  const date = new Date(dateStr);
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-
-  if (isSameDay(date, today)) return "Aujourd'hui";
-  if (isSameDay(date, yesterday)) return "Hier";
-  if (date.getFullYear() === today.getFullYear()) {
-    return date.toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "long",
-    });
-  }
-  return date.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-const GROUP_THRESHOLD_MS = 5 * 60 * 1000;
-
-// ════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANTS
-// ════════════════════════════════════════════════════════════════════
-
-function HeaderIconButton({
-  icon,
-  label,
-  onClick,
-  tokens,
-  disabled = false,
-  variant = "ghost",
-}) {
+function CircleIconButton({ icon, label, onClick, tokens, disabled = false, variant = "ghost", size = 44 }) {
   const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [pressed, setPressed] = useState(false);
 
-  const size = isMobile ? 44 : 36;
+  let bg;
+  let color;
 
-  const bg = disabled
-    ? "transparent"
-    : variant === "primary"
-    ? pressed
-      ? tokens.primaryHover
-      : tokens.primary
-    : pressed
-    ? tokens.ghostActive
-    : hovered
-    ? tokens.ghostHover
-    : "transparent";
-
-  const color = disabled
-    ? tokens.textMuted
-    : variant === "primary"
-    ? "#FFFFFF"
-    : tokens.textMuted;
+  if (disabled) {
+    bg = variant === "primary" ? tokens.disabledBg : "transparent";
+    color = tokens.disabledText;
+  } else if (variant === "primary") {
+    bg = pressed || hovered
+      ? `linear-gradient(135deg, ${tokens.primaryHover}, ${tokens.primary})`
+      : `linear-gradient(135deg, ${tokens.primary}, ${tokens.primaryHover})`;
+    color = "#FFFFFF";
+  } else {
+    bg = pressed ? tokens.ghostActive : hovered ? tokens.ghostHover : "transparent";
+    color = tokens.textMuted;
+  }
 
   return (
     <button
@@ -204,20 +79,21 @@ function HeaderIconButton({
       style={{
         background: bg,
         border: "none",
-        cursor: disabled ? "not-allowed" : "pointer",
-        color,
+        borderRadius: "50%",
+        width: size,
+        height: size,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: size,
-        height: size,
-        borderRadius: 12,
-        transition: "background 0.12s ease, transform 0.1s ease",
-        transform: pressed ? "scale(0.94)" : "scale(1)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        color,
+        flexShrink: 0,
+        transition: "background 0.12s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
+        transform: pressed && !disabled ? "scale(0.92)" : "scale(1)",
+        boxShadow: variant === "primary" && !disabled && !pressed ? "0 4px 12px rgba(79,70,229,0.25)" : "none",
         outline: focused ? `2px solid ${tokens.primary}` : "none",
         outlineOffset: 2,
-        flexShrink: 0,
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.75 : 1,
         padding: 0,
         WebkitTapHighlightColor: "transparent",
         touchAction: "manipulation",
@@ -230,474 +106,274 @@ function HeaderIconButton({
   );
 }
 
-function HeaderAvatar({ name, size = 42 }) {
-  const bg = getAvatarColor(name);
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: bg,
-        color: "#FFFFFF",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 700,
-        fontSize: size * 0.4,
-        flexShrink: 0,
-        letterSpacing: "-0.02em",
-      }}
-      aria-hidden="true"
-    >
-      {getInitials(name)}
-    </div>
-  );
-}
+function AttachmentChip({ attachment, onRemove, tokens, isMobile }) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const removeSize = isMobile ? 28 : 22;
 
-function DateSeparator({ label, tokens, isMobile }) {
   return (
-    <div
+    <span
+      className="ci-fade-in"
       style={{
-        display: "flex",
-        justifyContent: "center",
-        position: "sticky",
-        top: 0,
-        zIndex: 5,
-        padding: isMobile ? "8px 0" : "10px 0",
-        pointerEvents: "none",
-        background: tokens.messagesBgTransparent,
+        background: tokens.primarySoft,
+        color: tokens.primarySoftText,
+        padding: isMobile ? "4px 6px 4px 12px" : "4px 4px 4px 10px",
+        borderRadius: 14,
+        fontSize: isMobile ? 12.5 : 11.5,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: isMobile ? 8 : 6,
+        maxWidth: "100%",
+        minWidth: 0,
+        minHeight: isMobile ? 36 : 28,
+        boxSizing: "border-box",
       }}
     >
+      <Paperclip size={isMobile ? 13 : 12} style={{ flexShrink: 0 }} />
       <span
         style={{
-          background: tokens.surface,
-          color: tokens.textMuted,
-          padding: "4px 12px",
-          borderRadius: 12,
-          fontSize: 11,
-          fontWeight: 600,
-          border: `1px solid ${tokens.border}`,
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-          pointerEvents: "auto",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+          maxWidth: isMobile ? 160 : 140,
         }}
+        title={attachment.nom}
       >
-        {label}
+        {attachment.nom}
       </span>
-    </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        onMouseEnter={() => !isMobile && setHovered(true)}
+        onMouseLeave={() => !isMobile && setHovered(false)}
+        onTouchStart={() => setPressed(true)}
+        onTouchEnd={() => setPressed(false)}
+        onTouchCancel={() => setPressed(false)}
+        style={{
+          background: pressed ? "rgba(0,0,0,0.15)" : hovered ? "rgba(0,0,0,0.1)" : "rgba(0,0,0,0.06)",
+          border: "none",
+          borderRadius: "50%",
+          cursor: "pointer",
+          color: "inherit",
+          width: removeSize,
+          height: removeSize,
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "background 0.12s ease, transform 0.1s ease",
+          transform: pressed ? "scale(0.85)" : "scale(1)",
+          flexShrink: 0,
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation",
+        }}
+        aria-label={`Retirer ${attachment.nom}`}
+        title={`Retirer ${attachment.nom}`}
+      >
+        <X size={isMobile ? 14 : 12} />
+      </button>
+    </span>
   );
 }
 
-function MessagesLoading({ tokens }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        padding: 40,
-      }}
-      aria-hidden="true"
-    >
-      <Loader
-        size={28}
-        className="pcv-spin"
-        style={{ color: tokens.primary }}
-      />
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// COMPOSANT PRINCIPAL
-// ════════════════════════════════════════════════════════════════════
-export function PrivateChatView({
-  selectedUser,
-  selectedUserObject,
-  messagesConversation,
-  user,
-  nouveauMessage,
-  setNouveauMessage,
+export function ChatInput({
+  message,
+  setMessage,
+  onSend,
+  fileInputRef,
   piecesJointes,
   setPiecesJointes,
-  handleSend,
   handleFileChange,
-  fileInputRef,
-  isMobile,
-  goBack,
-  handleCallUser,
-  selectedUserId,
-  messagesEndRef,
-  onVideoCall,
+  placeholder = "Écrivez un message...",
   isUploading = false,
 }) {
   const { dark } = useStyles();
-  const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [backPressed, setBackPressed] = useState(false);
-  const [scrollBtnPressed, setScrollBtnPressed] = useState(false);
-
-  const scrollRef = useRef(null);
-
+  const isMobile = useIsMobile();
   const tokens = useMemo(() => buildTokens(dark), [dark]);
 
-  const prefersReducedMotion = useMemo(
-    () => getPrefersReducedMotion(),
-    []
-  );
+  const textareaRef = useRef(null);
+  const [textareaFocused, setTextareaFocused] = useState(false);
 
-  const canCallAudio = Boolean(handleCallUser) && Boolean(selectedUserId);
-  const canCallVideo = Boolean(onVideoCall) && Boolean(selectedUserId);
+  const hasAttachments = piecesJointes?.length > 0;
+  const hasText = Boolean(message?.trim());
+  const disabled = !hasText && !hasAttachments;
 
-  // ════════════════════════════════════════════════════════════════════
-  // SCROLL INITIAL (une seule fois au premier chargement)
-  // ════════════════════════════════════════════════════════════════════
-  const hasScrolledInitialRef = useRef(false);
+  const buttonSize = isMobile ? 44 : 40;
+  const inputFontSize = isMobile ? 16 : 14;
 
   useEffect(() => {
-    if (hasScrolledInitialRef.current) return;
-    if (!messagesConversation || messagesConversation.length === 0) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const nextHeight = Math.min(el.scrollHeight, 120);
+    el.style.height = `${nextHeight}px`;
+  }, [message]);
 
-    hasScrolledInitialRef.current = true;
+  useEffect(() => {
+    if (!textareaFocused) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    const scrollIntoViewSafely = () => {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+    const timeoutId = setTimeout(scrollIntoViewSafely, 250);
+    if (isMobile && typeof window !== "undefined" && window.visualViewport) {
+      const vv = window.visualViewport;
+      const handler = () => scrollIntoViewSafely();
+      vv.addEventListener("resize", handler, { once: true });
+      return () => {
+        clearTimeout(timeoutId);
+        vv.removeEventListener("resize", handler);
+      };
+    }
+    return () => clearTimeout(timeoutId);
+  }, [textareaFocused, isMobile]);
 
-    const raf1 = requestAnimationFrame(() => {
-      const raf2 = requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: "auto",
-          block: "end",
-        });
-      });
-      return () => cancelAnimationFrame(raf2);
-    });
-
-    return () => cancelAnimationFrame(raf1);
-  }, [messagesConversation, messagesEndRef]);
-
-  // ════════════════════════════════════════════════════════════════════
-  // SUBTITLE
-  // ════════════════════════════════════════════════════════════════════
-  const subtitle = useMemo(() => {
-    if (!selectedUserObject) return "";
-    const parts = [];
-    if (selectedUserObject.role) parts.push(selectedUserObject.role);
-    if (selectedUserObject.classe) parts.push(selectedUserObject.classe);
-    return parts.join(" · ");
-  }, [selectedUserObject]);
-
-  // ════════════════════════════════════════════════════════════════════
-  // LAYOUT
-  // ════════════════════════════════════════════════════════════════════
-  const headerPadding = isMobile
-    ? `calc(10px + ${SAFE_TOP}) 12px 10px`
-    : "12px 16px";
-
-  const avatarSize = isMobile ? 40 : 42;
-
-  // ════════════════════════════════════════════════════════════════════
-  // HANDLERS
-  // ════════════════════════════════════════════════════════════════════
-  const handleScroll = useCallback((e) => {
-    const el = e.currentTarget;
-    const isNearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    setShowScrollBtn((prev) =>
-      prev === !isNearBottom ? prev : !isNearBottom
-    );
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-      block: "end",
-    });
-  }, [messagesEndRef, prefersReducedMotion]);
-
-  // ════════════════════════════════════════════════════════════════════
-  // CONSTRUCTION LISTE
-  // ════════════════════════════════════════════════════════════════════
-  const messagesWithSeparators = useMemo(() => {
-    const result = [];
-    let lastDate = null;
-
-    (messagesConversation || []).forEach((msg, idx, arr) => {
-      const isNewDay = !lastDate || !isSameDay(lastDate, msg.date);
-      if (isNewDay) {
-        result.push({
-          type: "separator",
-          label: formatDateLabel(msg.date),
-          key: `sep-${msg._id}`,
-        });
-        lastDate = msg.date;
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (!disabled) onSend();
+        return;
       }
+      if (e.key === "Escape" && message?.trim()) {
+        textareaRef.current?.blur();
+      }
+    },
+    [disabled, onSend, message]
+  );
 
-      const prevMsg = idx > 0 ? arr[idx - 1] : null;
-      const nextMsg = idx < arr.length - 1 ? arr[idx + 1] : null;
+  const handleRemoveAttachment = useCallback(
+    (idx) => {
+      setPiecesJointes((prev) => prev.filter((_, i) => i !== idx));
+    },
+    [setPiecesJointes]
+  );
 
-      const isFirstInGroup =
-        !prevMsg ||
-        prevMsg.expediteurId !== msg.expediteurId ||
-        isNewDay ||
-        new Date(msg.date) - new Date(prevMsg.date) > GROUP_THRESHOLD_MS;
+  const handleSendClick = useCallback(() => {
+    if (disabled) return;
+    onSend();
+    if (!isMobile) {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  }, [disabled, onSend, isMobile]);
 
-      const isLastInGroup =
-        !nextMsg ||
-        nextMsg.expediteurId !== msg.expediteurId ||
-        !isSameDay(msg.date, nextMsg.date) ||
-        new Date(nextMsg.date) - new Date(msg.date) > GROUP_THRESHOLD_MS;
-
-      result.push({
-        type: "message",
-        msg,
-        key: msg._id,
-        isFirstInGroup,
-        isLastInGroup,
-      });
-    });
-
-    return result;
-  }, [messagesConversation]);
+  const handleAttachClick = useCallback(() => {
+    if (isUploading) return;
+    fileInputRef?.current?.click();
+  }, [isUploading, fileInputRef]);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        // ✨ FIX CRITIQUE : 100dvh au lieu de 100%
-        // Sur iOS Safari, "height: 100%" ne fonctionne pas si un ancêtre
-        // n'a pas de hauteur fixe → la barre de saisie passe sous l'écran.
-        // "100dvh" = Dynamic Viewport Height = hauteur réelle visible.
-        height: "100dvh",
-        maxHeight: "100dvh",
-        minHeight: 0,
-        flex: 1,
-        overflow: "hidden",
-        position: "relative",
-        background: tokens.messagesBg,
-      }}
-    >
-      {PrivateChatKeyframes}
-
-      {/* ═══════════════════════ HEADER ═══════════════════════ */}
+    <>
+      {ChatInputKeyframes}
       <div
         style={{
-          padding: headerPadding,
-          borderBottom: `1px solid ${tokens.border}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
+          padding: isMobile
+            ? `8px calc(12px + ${SAFE_LEFT}) calc(8px + ${SAFE_BOTTOM}) calc(12px + ${SAFE_RIGHT})`
+            : "10px 16px",
+          borderTop: `1px solid ${tokens.border}`,
           background: tokens.surface,
-          flexShrink: 0,
-          zIndex: 20,
-          position: "relative",
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 6,
         }}
       >
-        {isMobile && (
-          <button
-            type="button"
-            onClick={goBack}
-            onTouchStart={() => setBackPressed(true)}
-            onTouchEnd={() => setBackPressed(false)}
-            onTouchCancel={() => setBackPressed(false)}
-            style={{
-              background: backPressed ? tokens.ghostActive : "none",
-              border: "none",
-              cursor: "pointer",
-              color: tokens.text,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 44,
-              height: 44,
-              padding: 0,
-              marginLeft: -8,
-              borderRadius: 12,
-              flexShrink: 0,
-              transition: "background 0.12s ease, transform 0.1s ease",
-              transform: backPressed ? "scale(0.92)" : "scale(1)",
-              WebkitTapHighlightColor: "transparent",
-              touchAction: "manipulation",
-            }}
-            aria-label="Retour"
-            title="Retour"
-          >
-            <ArrowLeft size={22} />
-          </button>
+        {fileInputRef && (
+          <>
+            <CircleIconButton
+              icon={isUploading ? <Loader size={18} className="ci-spin" /> : <Paperclip size={isMobile ? 20 : 19} />}
+              label={isUploading ? "Upload en cours…" : "Joindre un fichier"}
+              onClick={handleAttachClick}
+              tokens={tokens}
+              disabled={isUploading}
+              size={buttonSize}
+            />
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+              aria-hidden="true"
+            />
+          </>
         )}
 
-        <HeaderAvatar name={selectedUser} size={avatarSize} />
-
-        <div style={{ flex: 1, minWidth: 0, marginLeft: 4 }}>
-          <div
-            style={{
-              fontWeight: 600,
-              fontSize: isMobile ? 15 : 15.5,
-              color: tokens.text,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              lineHeight: 1.2,
-            }}
-          >
-            {selectedUser || "Utilisateur inconnu"}
-          </div>
-          {subtitle && (
-            <div
-              style={{
-                fontSize: isMobile ? 11.5 : 12,
-                color: tokens.textMuted,
-                textTransform: "capitalize",
-                marginTop: 2,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {subtitle}
+        <div
+          style={{
+            flex: 1,
+            background: tokens.inputBg,
+            border: `1.5px solid ${textareaFocused ? tokens.primary : tokens.inputBorder}`,
+            borderRadius: 22,
+            padding: isMobile ? "8px 14px" : "8px 16px",
+            minWidth: 0,
+            transition: "border-color 0.15s ease",
+            overscrollBehavior: "none",
+          }}
+        >
+          {hasAttachments && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap", overscrollBehavior: "contain" }}>
+              {piecesJointes.map((pj, idx) => (
+                <AttachmentChip
+                  key={`${pj.storageId || pj.url || pj.nom}-${idx}`}
+                  attachment={pj}
+                  onRemove={() => handleRemoveAttachment(idx)}
+                  tokens={tokens}
+                  isMobile={isMobile}
+                />
+              ))}
             </div>
           )}
+
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            style={{
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              fontSize: inputFontSize,
+              width: "100%",
+              color: tokens.inputText,
+              resize: "none",
+              fontFamily: "inherit",
+              lineHeight: 1.4,
+              maxHeight: 120,
+              boxSizing: "border-box",
+              padding: 0,
+              minHeight: 22,
+              WebkitAppearance: "none",
+              touchAction: "manipulation",
+            }}
+            placeholder={placeholder}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setTextareaFocused(true)}
+            onBlur={() => setTextareaFocused(false)}
+            aria-label={placeholder}
+            enterKeyHint={isMobile ? "send" : "enter"}
+            inputMode="text"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="sentences"
+            spellCheck="true"
+          />
         </div>
 
-        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-          <HeaderIconButton
-            icon={<Phone size={isMobile ? 20 : 19} />}
-            label="Appel audio"
-            onClick={() => canCallAudio && handleCallUser(selectedUserId)}
-            tokens={tokens}
-            disabled={!canCallAudio}
-          />
-          <HeaderIconButton
-            icon={<Video size={isMobile ? 20 : 19} />}
-            label="Appel vidéo"
-            onClick={() => canCallVideo && onVideoCall?.()}
-            tokens={tokens}
-            disabled={!canCallVideo}
-          />
-        </div>
-      </div>
-
-      {/* ═══════════════════════ ZONE MESSAGES ═══════════════════════ */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="pcv-messages"
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          padding: isMobile ? "4px 12px 8px" : "8px 16px 12px",
-          background: tokens.messagesBg,
-          position: "relative",
-          overscrollBehavior: "contain",
-          WebkitOverflowScrolling: "touch",
-          scrollPaddingTop: 8,
-        }}
-      >
-        {messagesConversation === undefined ? (
-          <MessagesLoading tokens={tokens} />
-        ) : messagesConversation.length === 0 ? (
-          <MessagingHero
-            avatarName={selectedUser || "Utilisateur"}
-            title="Commencez la conversation"
-            description={`Envoyez votre premier message à ${
-              selectedUser || "cet utilisateur"
-            }.`}
-            size="lg"
-            pulse
-            tokens={tokens}
-            isMobile={isMobile}
-          />
-        ) : (
-          <div className="pcv-fade-in">
-            {messagesWithSeparators.map((item) => {
-              if (item.type === "separator") {
-                return (
-                  <DateSeparator
-                    key={item.key}
-                    label={item.label}
-                    tokens={tokens}
-                    isMobile={isMobile}
-                  />
-                );
-              }
-              return (
-                <MessageBubble
-                  key={item.key}
-                  msg={item.msg}
-                  user={user}
-                  isFirstInGroup={item.isFirstInGroup}
-                  isLastInGroup={item.isLastInGroup}
-                />
-              );
-            })}
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* ═══════════════════════ SCROLL BUTTON ═══════════════════════ */}
-      {showScrollBtn && (
-        <button
-          type="button"
-          onClick={scrollToBottom}
-          onTouchStart={() => setScrollBtnPressed(true)}
-          onTouchEnd={() => setScrollBtnPressed(false)}
-          onTouchCancel={() => setScrollBtnPressed(false)}
-          style={{
-            position: "absolute",
-            bottom: isMobile
-              ? `calc(88px + ${SAFE_BOTTOM})`
-              : 72,
-            right: isMobile
-              ? `calc(16px + ${SAFE_RIGHT})`
-              : 16,
-            width: isMobile ? 48 : 44,
-            height: isMobile ? 48 : 44,
-            borderRadius: isMobile ? 24 : 22,
-            background: tokens.surface,
-            border: `1px solid ${tokens.border}`,
-            boxShadow: tokens.shadowScrollBtn,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: tokens.primary,
-            zIndex: 15,
-            padding: 0,
-            transition:
-              "transform 0.1s ease, background 0.12s ease, opacity 0.15s ease",
-            transform: scrollBtnPressed ? "scale(0.9)" : "scale(1)",
-            WebkitTapHighlightColor: "transparent",
-            touchAction: "manipulation",
-          }}
-          title="Descendre"
-          aria-label="Descendre en bas de la conversation"
-        >
-          <ChevronDown size={isMobile ? 22 : 20} />
-        </button>
-      )}
-
-      {/* ═══════════════════════ INPUT ═══════════════════════ */}
-      {/* ✨ FIX : retiré paddingBottom: SAFE_BOTTOM (double avec ChatInput) */}
-      <div
-        style={{
-          flexShrink: 0,
-          zIndex: 20,
-          position: "relative",
-        }}
-      >
-        <ChatInput
-          message={nouveauMessage}
-          setMessage={setNouveauMessage}
-          onSend={handleSend}
-          fileInputRef={fileInputRef}
-          piecesJointes={piecesJointes}
-          setPiecesJointes={setPiecesJointes}
-          handleFileChange={handleFileChange}
-          isMobile={isMobile}
-          isUploading={isUploading}
+        <CircleIconButton
+          icon={isUploading ? <Loader size={isMobile ? 18 : 17} className="ci-spin" /> : <Send size={isMobile ? 19 : 18} />}
+          label="Envoyer le message"
+          onClick={handleSendClick}
+          tokens={tokens}
+          disabled={disabled || isUploading}
+          variant="primary"
+          size={buttonSize}
         />
       </div>
-    </div>
+    </>
   );
 }
+
+export default ChatInput;
