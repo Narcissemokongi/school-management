@@ -4,9 +4,9 @@ workflows:
     max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: "20.19.0"
+        NODE_VERSION: "22.11.0"        # ✨ Capacitor 8 exige Node ≥22
         JAVA_VERSION: 17
-      node: 20.19.0
+      node: 22.11.0                     # ✨ Capacitor 8 exige Node ≥22
       java: 17
       groups:
         - app-env
@@ -41,11 +41,11 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.schoolmanagement.app   # ← TON bundle ID
       vars:
-        NODE_VERSION: "20.19.0"
+        NODE_VERSION: "22.11.0"        # ✨ Capacitor 8 exige Node ≥22
         XCODE_VERSION: 15.4
         XCODE_WORKSPACE: "App.xcworkspace"
         XCODE_SCHEME: "App"
-      node: 20.19.0
+      node: 22.11.0                     # ✨ Capacitor 8 exige Node ≥22
       xcode: 15.4
       cocoapods: default
       groups:
@@ -97,8 +97,8 @@ workflows:
     max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: "20.19.0"
-      node: 20.19.0
+        NODE_VERSION: "22.11.0"        # ✨ Capacitor 8 exige Node ≥22
+      node: 22.11.0                     # ✨ Capacitor 8 exige Node ≥22
       groups:
         - app-env
     scripts:
