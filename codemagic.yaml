@@ -4,15 +4,15 @@ workflows:
     max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: "22.11.0"        # ✨ Capacitor 8 exige Node ≥22
+        NODE_VERSION: "22.11.0"
         JAVA_VERSION: 17
-      node: 22.11.0                     # ✨ Capacitor 8 exige Node ≥22
+      node: 22.11.0
       java: 17
       groups:
         - app-env
     scripts:
       - name: Install dependencies
-        script: npm ci
+        script: npm install --include=optional --no-audit --no-fund
       - name: Build web app
         script: npm run build
       - name: Capacitor sync
@@ -34,43 +34,35 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     integrations:
-      # ✅ À configurer dans Codemagic → Team integrations → Developer Portal
       app_store_connect: codemagic
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.schoolmanagement.app   # ← TON bundle ID
+        bundle_identifier: com.schoolmanagement.app
       vars:
-        NODE_VERSION: "22.11.0"        # ✨ Capacitor 8 exige Node ≥22
+        NODE_VERSION: "22.11.0"
         XCODE_VERSION: 15.4
         XCODE_WORKSPACE: "App.xcworkspace"
         XCODE_SCHEME: "App"
-      node: 22.11.0                     # ✨ Capacitor 8 exige Node ≥22
+      node: 22.11.0
       xcode: 15.4
       cocoapods: default
       groups:
         - app-env
     scripts:
       - name: Install dependencies
-        script: npm ci
-      # ❌ RETIRÉ : npm install @capacitor/ios  (déjà dans package.json)
-      # ❌ RETIRÉ : sudo gem install cocoapods  (pré-installé, causait le crash Ruby 4.0.3)
-
+        script: npm install --include=optional --no-audit --no-fund
       - name: Build web app
         script: npm run build
-
       - name: Capacitor sync iOS
         script: npx cap sync ios
-
       - name: Install pods
         script: |
           cd ios/App
           pod install
-
       - name: Setup code signing
         script: |
           xcode-project use-profiles
-
       - name: Build IPA (Release, signé)
         script: |
           cd ios/App
@@ -87,23 +79,19 @@ workflows:
         notify:
           success: true
           failure: true
-      # ✅ Optionnel : upload TestFlight automatique
-      # app_store_connect:
-      #   auth: integration
-      #   submit_to_testflight: true
 
   desktop-build:
     name: Build Desktop
     max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: "22.11.0"        # ✨ Capacitor 8 exige Node ≥22
-      node: 22.11.0                     # ✨ Capacitor 8 exige Node ≥22
+        NODE_VERSION: "22.11.0"
+      node: 22.11.0
       groups:
         - app-env
     scripts:
       - name: Install dependencies
-        script: npm ci
+        script: npm install --include=optional --no-audit --no-fund
       - name: Build web app
         script: npm run build
       - name: Capacitor sync electron
