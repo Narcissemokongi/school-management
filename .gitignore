@@ -75,3 +75,6 @@ android/app/google-service.jsonpackage-lock.json
 
 # Lockfile — platform-specific bindings
 package-lock.json
+
+# Lockfile — platform-specific bindings
+package-lock.json

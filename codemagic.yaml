@@ -15,7 +15,12 @@ workflows:
         script: |
           rm -rf node_modules
           rm -f package-lock.json
-          npm install --no-audit --no-fund
+          npm_config_platform=all npm install --no-audit --no-fund
+          
+          # Vérification
+          echo "=== Bindings présents ==="
+          ls node_modules/@rolldown/ 2>/dev/null || echo "Aucun binding rolldown"
+          ls node_modules/@rollup/ 2>/dev/null || echo "Aucun binding rollup"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync
@@ -57,7 +62,11 @@ workflows:
         script: |
           rm -rf node_modules
           rm -f package-lock.json
-          npm install --no-audit --no-fund
+          npm_config_platform=all npm install --no-audit --no-fund
+          
+          echo "=== Bindings présents ==="
+          ls node_modules/@rolldown/ 2>/dev/null || echo "Aucun binding rolldown"
+          ls node_modules/@rollup/ 2>/dev/null || echo "Aucun binding rollup"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync iOS
@@ -100,7 +109,7 @@ workflows:
         script: |
           rm -rf node_modules
           rm -f package-lock.json
-          npm install --no-audit --no-fund
+          npm_config_platform=all npm install --no-audit --no-fund
       - name: Build web app
         script: npm run build
       - name: Capacitor sync electron
