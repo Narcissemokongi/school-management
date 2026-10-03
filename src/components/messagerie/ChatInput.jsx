@@ -305,17 +305,20 @@ export function ChatInput({
   // ════════════════════════════════════════════════════════════════════
   const handleKeyDown = useCallback(
     (e) => {
-      // Enter (sans Shift) → envoyer (desktop uniquement, mobile = ⏎ normal)
-      if (e.key === "Enter" && !e.shiftKey && !isMobile) {
+      // ✨ Enter → envoyer (desktop ET mobile)
+      // Sur mobile, le clavier affiche "Envoyer" (enterKeyHint="send")
+      // donc l'utilisateur s'attend à ce que ça envoie le message.
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (!disabled) onSend();
+        return;
       }
       // Escape → retirer le focus sans vider
       if (e.key === "Escape" && message?.trim()) {
         textareaRef.current?.blur();
       }
     },
-    [disabled, onSend, isMobile, message]
+    [disabled, onSend, message]
   );
 
   const handleRemoveAttachment = useCallback(
