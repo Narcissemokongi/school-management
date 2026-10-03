@@ -71,4 +71,7 @@ google-services.json
 GoogleService-Info.plist
 # Fichiers sensibles committés par erreur — NE PLUS JAMAIS
 clé
-android/app/google-service.json
+android/app/google-service.jsonpackage-lock.json
+
+# Lockfile � platform-specific bindings
+package-lock.json
