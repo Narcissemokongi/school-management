@@ -40,13 +40,25 @@ workflows:
             cd "$CM_BUILD_DIR"
           fi
 
+          # Force l'installation des dépendances du binding WASM
+          echo "=== Installation des dépendances WASM runtime ==="
+          npm install --no-save --no-audit --no-fund --force \
+            @napi-rs/wasm-runtime@1.1.4 \
+            @emnapi/core@1.10.0 \
+            @emnapi/runtime@1.10.0 \
+            @tybys/wasm-util@0.10.1 || true
+
           echo "=== Vérification finale ==="
           ls -la node_modules/@rolldown/ 2>/dev/null || true
           if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
             echo "❌ FATAL: binding WASM toujours absent"
             exit 1
           fi
-          echo "✅ Binding WASM présent"
+          if [ ! -d "node_modules/@napi-rs/wasm-runtime" ]; then
+            echo "❌ FATAL: @napi-rs/wasm-runtime manquant"
+            exit 1
+          fi
+          echo "✅ Binding WASM et dépendances présents"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync
@@ -113,13 +125,25 @@ workflows:
             cd "$CM_BUILD_DIR"
           fi
 
+          # Force l'installation des dépendances du binding WASM
+          echo "=== Installation des dépendances WASM runtime ==="
+          npm install --no-save --no-audit --no-fund --force \
+            @napi-rs/wasm-runtime@1.1.4 \
+            @emnapi/core@1.10.0 \
+            @emnapi/runtime@1.10.0 \
+            @tybys/wasm-util@0.10.1 || true
+
           echo "=== Vérification finale ==="
           ls -la node_modules/@rolldown/ 2>/dev/null || true
           if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
             echo "❌ FATAL: binding WASM toujours absent"
             exit 1
           fi
-          echo "✅ Binding WASM présent"
+          if [ ! -d "node_modules/@napi-rs/wasm-runtime" ]; then
+            echo "❌ FATAL: @napi-rs/wasm-runtime manquant"
+            exit 1
+          fi
+          echo "✅ Binding WASM et dépendances présents"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync iOS
@@ -187,13 +211,25 @@ workflows:
             cd "$CM_BUILD_DIR"
           fi
 
+          # Force l'installation des dépendances du binding WASM
+          echo "=== Installation des dépendances WASM runtime ==="
+          npm install --no-save --no-audit --no-fund --force \
+            @napi-rs/wasm-runtime@1.1.4 \
+            @emnapi/core@1.10.0 \
+            @emnapi/runtime@1.10.0 \
+            @tybys/wasm-util@0.10.1 || true
+
           echo "=== Vérification finale ==="
           ls -la node_modules/@rolldown/ 2>/dev/null || true
           if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
             echo "❌ FATAL: binding WASM toujours absent"
             exit 1
           fi
-          echo "✅ Binding WASM présent"
+          if [ ! -d "node_modules/@napi-rs/wasm-runtime" ]; then
+            echo "❌ FATAL: @napi-rs/wasm-runtime manquant"
+            exit 1
+          fi
+          echo "✅ Binding WASM et dépendances présents"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync electron
