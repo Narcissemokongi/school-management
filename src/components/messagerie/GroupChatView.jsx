@@ -442,7 +442,9 @@ export function GroupChatView({
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          padding: isMobile ? "4px 12px 8px" : "8px 16px 12px",
+          padding: isMobile
+            ? `4px 12px calc(100px + env(safe-area-inset-bottom, 0px))`
+            : "8px 16px 12px",
           background: tokens.messagesBg,
           position: "relative",
           // ✨ Mobile : empêche le pull-to-refresh + momentum iOS
@@ -538,9 +540,11 @@ export function GroupChatView({
       {/* ═══════════════════════ INPUT ═══════════════════════ */}
       <div
         style={{
-          flexShrink: 0,
-          zIndex: 20,
-          position: "relative",
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
         }}
       >
         <ChatInput

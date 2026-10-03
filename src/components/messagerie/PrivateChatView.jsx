@@ -588,7 +588,9 @@ export function PrivateChatView({
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          padding: isMobile ? "4px 12px 8px" : "8px 16px 12px",
+          padding: isMobile
+            ? `4px 12px calc(100px + env(safe-area-inset-bottom, 0px))`
+            : "8px 16px 12px",
           background: tokens.messagesBg,
           position: "relative",
           overscrollBehavior: "contain",
@@ -683,10 +685,14 @@ export function PrivateChatView({
       {/* ═══════════════════════ INPUT ═══════════════════════ */}
       <div
         style={{
-          flexShrink: 0,
-          // ✨ Retiré : ChatInput gère déjà SAFE_BOTTOM dans son padding
-          zIndex: 20,
-          position: "relative",
+          // ✨ FIX iOS : position fixed pour garantir la visibilité
+          // (échappe au conflit de hauteur flex sur iOS Safari)
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          // Le ChatInput gère déjà son safe-area padding-bottom
         }}
       >
         <ChatInput
