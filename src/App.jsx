@@ -25,10 +25,6 @@ import { UIShowcase } from "./components/UIShowcase";
 // ════════════════════════════════════════════════════════════════════
 const STORAGE_KEY = "eduDiscipline_user";
 
-/**
- * ✅ Lit et valide l'utilisateur depuis localStorage.
- * Retourne null si absent/corrompu.
- */
 // ✅ FIX SÉCURITÉ : durée de session maximale (8h)
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -42,7 +38,6 @@ function readSavedUser() {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
-    // ✅ FIX SÉCURITÉ : vérification de l'expiration de session
     if (parsed._sessionExpires && Date.now() > parsed._sessionExpires) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
@@ -129,7 +124,7 @@ function SessionLoader({ message = "Vérification de votre session..." }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ✅ FIX PERF MAJEUR — ProtectedRoute au MODULE-LEVEL
+// PROTECTED ROUTE
 // ════════════════════════════════════════════════════════════════════
 function ProtectedRoute({ user, sessionChecked, children }) {
   if (!sessionChecked) {
@@ -147,11 +142,12 @@ function ProtectedRoute({ user, sessionChecked, children }) {
 function AppRoutes() {
   const navigate = useNavigate();
 
+  // ✨ FIX #1 : user initialisé DIRECTEMENT depuis localStorage
   const [savedUser] = useState(readSavedUser);
-  const savedUserId = savedUser?._id ?? null;
+  const [user, setUser] = useState(savedUser); // ← optimiste
+  const [sessionChecked, setSessionChecked] = useState(!savedUser); // ← skip si user
 
-  const [user, setUser] = useState(null);
-  const [sessionChecked, setSessionChecked] = useState(false);
+  const savedUserId = savedUser?._id ?? null;
 
   const sessionArgs = useMemo(
     () => (savedUserId ? { userId: savedUserId } : "skip"),
@@ -159,26 +155,59 @@ function AppRoutes() {
   );
   const sessionQuery = useQuery(api.users.get, sessionArgs);
 
+  // ✨ FIX #2 : ne JAMAIS déconnecter sur cold start
   useEffect(() => {
     if (!savedUserId) {
       setSessionChecked(true);
       return;
     }
+
+    // Pas encore de réponse Convex → on garde la session optimiste
     if (sessionQuery === undefined) return;
 
-    const isValid =
-      sessionQuery &&
-      sessionQuery._id &&
-      sessionQuery.status === "active";
+    // 🔴 FIX CRITIQUE : Convex retourne null au cold start ?
+    // On NE déconnecte PAS — session conservée
+    if (sessionQuery === null) {
+      console.warn(
+        "[App] User introuvable côté Convex (cold start?) — session conservée"
+      );
+      setSessionChecked(true);
+      return;
+    }
 
-    if (isValid) {
-      setUser(savedUser);
-    } else {
+    // Status explicitement mauvais → déconnexion justifiée
+    if (
+      sessionQuery.status === "suspended" ||
+      sessionQuery.status === "blocked" ||
+      sessionQuery.status === "deleted" ||
+      sessionQuery.isActive === false
+    ) {
+      console.warn(
+        `[App] Session invalide (status: ${sessionQuery.status}) — déconnexion`
+      );
       try {
         localStorage.removeItem(STORAGE_KEY);
       } catch {}
       setUser(null);
+      setSessionChecked(true);
+      return;
     }
+
+    // Status OK → on rafraîchit les infos du user
+    if (sessionQuery.status === "active") {
+      const merged = { ...savedUser, ...sessionQuery };
+      setUser(merged);
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            ...merged,
+            _sessionExpires: savedUser._sessionExpires || Date.now() + SESSION_TTL_MS,
+          })
+        );
+      } catch {}
+    }
+
     setSessionChecked(true);
   }, [savedUserId, sessionQuery, savedUser]);
 
@@ -186,13 +215,16 @@ function AppRoutes() {
     (userData) => {
       if (!userData || !userData._id) return;
       try {
-        // ✅ FIX SÉCURITÉ : ajout d'une expiration de session (8h)
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          ...userData,
-          _sessionExpires: Date.now() + SESSION_TTL_MS,
-        }));
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            ...userData,
+            _sessionExpires: Date.now() + SESSION_TTL_MS,
+          })
+        );
       } catch {}
       setUser(userData);
+      setSessionChecked(true);
 
       const role = userData?.role;
       if (role === "superAdmin" || (role === "admin" && !userData.ecoleId)) {
@@ -209,6 +241,7 @@ function AppRoutes() {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
     setUser(null);
+    setSessionChecked(true);
     navigate("/login");
   }, [navigate]);
 
@@ -217,10 +250,8 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* ✅ FIX SÉCURITÉ : route de dev UIShowcase supprimée (exposait le design system publiquement) */}
       {import.meta.env.DEV && <Route path="/ui-showcase" element={<UIShowcase />} />}
 
-      {/* ═══════════ AUTH ═══════════ */}
       <Route
         path="/login"
         element={
@@ -245,13 +276,11 @@ function AppRoutes() {
         }
       />
 
-      {/* ═══════════ REDIRECT — /super-admin (sans section) ═══════════ */}
       <Route
         path="/super-admin"
         element={<Navigate to="/super-admin/overview" replace />}
       />
 
-      {/* ═══════════ ROUTE GLOBALE ═══════════ */}
       <Route
         path="/*"
         element={
@@ -261,15 +290,11 @@ function AppRoutes() {
         }
       />
 
-      {/* ═══════════ 404 ═══════════ */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
 
-// ════════════════════════════════════════════════════════════════════
-// APP
-// ════════════════════════════════════════════════════════════════════
 export default function App() {
   return (
     <BrowserRouter>
