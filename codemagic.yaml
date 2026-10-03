@@ -16,23 +16,37 @@ workflows:
         script: |
           set -e
           echo "=== Node: $(node --version) | Arch: $(uname -m) ==="
-          
-          # Nettoyage complet
+
           rm -rf node_modules package-lock.json
-          
-          # Installation standard (ignore les erreurs de bindings natifs)
           npm install --no-audit --no-fund || true
-          
-          # ✨ FORCER l'installation du binding WASM
-          echo "=== Installation du binding WASM ==="
-          npm install --no-save --force @rolldown/binding-wasm32-wasi@1.2.12 || true
-          
-          # Vérification
+
           if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "❌ Vite manquant"; exit 1
+            echo "❌ Vite manquant après npm install"; exit 1
           fi
-          echo "✅ Vite OK"
-          ls node_modules/@rolldown/ 2>/dev/null || echo "(pas de binding natif, WASM utilisé)"
+
+          echo "=== Tentative install WASM binding (flags plateforme) ==="
+          npm install --no-save --no-audit --no-fund \
+            --cpu=wasm32 --os=wasip1-threads --force \
+            @rolldown/binding-wasm32-wasi@1.0.0-rc.17 || true
+
+          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
+            echo "⚠️  Install npm échouée, fallback: extraction manuelle du tarball"
+            mkdir -p /tmp/wasm-binding
+            cd /tmp/wasm-binding
+            npm pack @rolldown/binding-wasm32-wasi@1.0.0-rc.17
+            tar -xzf rolldown-binding-wasm32-wasi-1.0.0-rc.17.tgz
+            mkdir -p "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi"
+            cp -R package/. "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi/"
+            cd "$CM_BUILD_DIR"
+          fi
+
+          echo "=== Vérification finale ==="
+          ls -la node_modules/@rolldown/ 2>/dev/null || true
+          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
+            echo "❌ FATAL: binding WASM toujours absent"
+            exit 1
+          fi
+          echo "✅ Binding WASM présent"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync
@@ -75,18 +89,37 @@ workflows:
         script: |
           set -e
           echo "=== Node: $(node --version) | Arch: $(uname -m) ==="
-          
+
           rm -rf node_modules package-lock.json
           npm install --no-audit --no-fund || true
-          
-          echo "=== Installation du binding WASM ==="
-          npm install --no-save --force @rolldown/binding-wasm32-wasi@1.2.12 || true
-          
+
           if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "❌ Vite manquant"; exit 1
+            echo "❌ Vite manquant après npm install"; exit 1
           fi
-          echo "✅ Vite OK"
-          ls node_modules/@rolldown/ 2>/dev/null || echo "(pas de binding natif, WASM utilisé)"
+
+          echo "=== Tentative install WASM binding (flags plateforme) ==="
+          npm install --no-save --no-audit --no-fund \
+            --cpu=wasm32 --os=wasip1-threads --force \
+            @rolldown/binding-wasm32-wasi@1.0.0-rc.17 || true
+
+          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
+            echo "⚠️  Install npm échouée, fallback: extraction manuelle du tarball"
+            mkdir -p /tmp/wasm-binding
+            cd /tmp/wasm-binding
+            npm pack @rolldown/binding-wasm32-wasi@1.0.0-rc.17
+            tar -xzf rolldown-binding-wasm32-wasi-1.0.0-rc.17.tgz
+            mkdir -p "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi"
+            cp -R package/. "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi/"
+            cd "$CM_BUILD_DIR"
+          fi
+
+          echo "=== Vérification finale ==="
+          ls -la node_modules/@rolldown/ 2>/dev/null || true
+          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
+            echo "❌ FATAL: binding WASM toujours absent"
+            exit 1
+          fi
+          echo "✅ Binding WASM présent"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync iOS
@@ -129,13 +162,38 @@ workflows:
       - name: Install dependencies
         script: |
           set -e
+          echo "=== Node: $(node --version) | Arch: $(uname -m) ==="
+
           rm -rf node_modules package-lock.json
           npm install --no-audit --no-fund || true
-          npm install --no-save --force @rolldown/binding-wasm32-wasi@1.2.12 || true
-          
+
           if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "❌ Vite manquant"; exit 1
+            echo "❌ Vite manquant après npm install"; exit 1
           fi
+
+          echo "=== Tentative install WASM binding (flags plateforme) ==="
+          npm install --no-save --no-audit --no-fund \
+            --cpu=wasm32 --os=wasip1-threads --force \
+            @rolldown/binding-wasm32-wasi@1.0.0-rc.17 || true
+
+          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
+            echo "⚠️  Install npm échouée, fallback: extraction manuelle du tarball"
+            mkdir -p /tmp/wasm-binding
+            cd /tmp/wasm-binding
+            npm pack @rolldown/binding-wasm32-wasi@1.0.0-rc.17
+            tar -xzf rolldown-binding-wasm32-wasi-1.0.0-rc.17.tgz
+            mkdir -p "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi"
+            cp -R package/. "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi/"
+            cd "$CM_BUILD_DIR"
+          fi
+
+          echo "=== Vérification finale ==="
+          ls -la node_modules/@rolldown/ 2>/dev/null || true
+          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
+            echo "❌ FATAL: binding WASM toujours absent"
+            exit 1
+          fi
+          echo "✅ Binding WASM présent"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync electron
