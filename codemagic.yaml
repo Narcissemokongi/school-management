@@ -13,16 +13,13 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          set -e
           rm -rf node_modules
           rm -f package-lock.json
           npm install --no-audit --no-fund
-          npm install --no-save --force @rolldown/binding-darwin-arm64@1.2.12 || true
-          npm install --no-save --force @rolldown/binding-darwin-universal@1.2.12 || true
-          npm install --no-save --force @rolldown/binding-wasm32-wasi@1.2.12 || true
-          echo "NAPI_RS_FORCE_WASI=error" >> $CM_ENV
-          echo "=== Bindings installés ==="
-          ls node_modules/@rolldown/ 2>/dev/null || echo "❌ Aucun binding"
+          echo "=== Bindings rolldown ==="
+          ls node_modules/@rolldown/ 2>/dev/null || echo "❌ Aucun binding rolldown"
+          echo "=== Bindings rollup ==="
+          ls node_modules/@rollup/ 2>/dev/null || echo "❌ Aucun binding rollup"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync
@@ -34,6 +31,97 @@ workflows:
           ./gradlew assembleDebug
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
+    publishing:
+      email:
+        recipients:
+          - narcissemokongi@gmail.com
+
+  ios-build:
+    name: Build iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: codemagic
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.schoolmanagement.app
+      vars:
+        NODE_VERSION: "22.11.0"
+        XCODE_VERSION: 15.4
+        XCODE_WORKSPACE: "App.xcworkspace"
+        XCODE_SCHEME: "App"
+      node: 22.11.0
+      xcode: 15.4
+      cocoapods: default
+      groups:
+        - app-env
+    scripts:
+      - name: Install dependencies
+        script: |
+          rm -rf node_modules
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+          echo "=== Bindings rolldown ==="
+          ls node_modules/@rolldown/ 2>/dev/null || echo "❌ Aucun binding rolldown"
+          echo "=== Bindings rollup ==="
+          ls node_modules/@rollup/ 2>/dev/null || echo "❌ Aucun binding rollup"
+      - name: Build web app
+        script: npm run build
+      - name: Capacitor sync iOS
+        script: npx cap sync ios
+      - name: Install pods
+        script: |
+          cd ios/App
+          pod install
+      - name: Setup code signing
+        script: |
+          xcode-project use-profiles
+      - name: Build IPA (Release, signé)
+        script: |
+          cd ios/App
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - narcissemokongi@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  desktop-build:
+    name: Build Desktop
+    max_build_duration: 60
+    environment:
+      vars:
+        NODE_VERSION: "22.11.0"
+      node: 22.11.0
+      groups:
+        - app-env
+    scripts:
+      - name: Install dependencies
+        script: |
+          rm -rf node_modules
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+      - name: Build web app
+        script: npm run build
+      - name: Capacitor sync electron
+        script: npx cap sync electron
+      - name: Package Electron
+        script: |
+          cd electron
+          npm install
+          npm run electron:build
+    artifacts:
+      - electron/release/*.exe
+      - electron/release/*.dmg
+      - electron/release/*.AppImage
     publishing:
       email:
         recipients:
