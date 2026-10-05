@@ -44,8 +44,8 @@ workflows:
           echo "=== Installation des dépendances WASM runtime ==="
           npm install --no-save --no-audit --no-fund --force \
             @napi-rs/wasm-runtime@1.1.4 \
-            @emnapi/core@1.10.0 \
-            @emnapi/runtime@1.10.0 \
+            @emnapi/core@1.11.1 \
+            @emnapi/runtime@1.11.1 \
             @tybys/wasm-util@0.10.1 || true
 
           echo "=== Vérification finale ==="
@@ -129,8 +129,8 @@ workflows:
           echo "=== Installation des dépendances WASM runtime ==="
           npm install --no-save --no-audit --no-fund --force \
             @napi-rs/wasm-runtime@1.1.4 \
-            @emnapi/core@1.10.0 \
-            @emnapi/runtime@1.10.0 \
+            @emnapi/core@1.11.1 \
+            @emnapi/runtime@1.11.1 \
             @tybys/wasm-util@0.10.1 || true
 
           echo "=== Vérification finale ==="
@@ -215,8 +215,8 @@ workflows:
           echo "=== Installation des dépendances WASM runtime ==="
           npm install --no-save --no-audit --no-fund --force \
             @napi-rs/wasm-runtime@1.1.4 \
-            @emnapi/core@1.10.0 \
-            @emnapi/runtime@1.10.0 \
+            @emnapi/core@1.11.1 \
+            @emnapi/runtime@1.11.1 \
             @tybys/wasm-util@0.10.1 || true
 
           echo "=== Vérification finale ==="
