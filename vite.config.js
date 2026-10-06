@@ -36,13 +36,13 @@ export default defineConfig({
   },
 
   build: {
-    // ✅ Cible compatible Safari / iOS (au lieu de 'esnext')
+    // ✅ Cible compatible Safari / iOS (au lieu de 'esnext' qui casse Safari)
     target: ['es2020', 'safari14', 'ios14', 'chrome90', 'firefox88'],
 
-    // ✅ Force esbuild (Oxc casse Safari sur certaines syntaxes)
+    // ✅ Force esbuild (Oxc produit du code hostile à WebKit)
     minify: 'esbuild',
 
-    // ✅ Cible CSS aussi (dvh, :has(), etc.)
+    // ✅ Cible CSS compatible iOS (dvh, :has(), nesting)
     cssTarget: ['safari14', 'ios14'],
 
     sourcemap: false,
@@ -60,10 +60,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         globIgnores: ['**/node_modules/**/*'],
-        // ✅ Fix cache Safari : skipWaiting + clientsClaim
+        // ✅ Met à jour le SW immédiatement (évite le vieux cache)
         skipWaiting: true,
         clientsClaim: true,
-        // ✅ Ne pas précacher le HTML (cause d'écran blanc si mismatch)
+        // ✅ Empêche le SW de servir un vieux HTML → écran blanc
         navigateFallback: null,
       },
       manifest: {
