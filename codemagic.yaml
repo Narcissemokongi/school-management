@@ -4,10 +4,9 @@ workflows:
     max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: "22.11.0"
+        NODE_VERSION: "22.12.0"
         JAVA_VERSION: 17
-        NAPI_RS_FORCE_WASI: "error"
-      node: 22.11.0
+      node: 22.12.0
       java: 17
       groups:
         - app-env
@@ -24,41 +23,17 @@ workflows:
             echo "❌ Vite manquant après npm install"; exit 1
           fi
 
-          echo "=== Tentative install WASM binding (flags plateforme) ==="
-          npm install --no-save --no-audit --no-fund \
-            --cpu=wasm32 --os=wasip1-threads --force \
-            @rolldown/binding-wasm32-wasi@1.0.0-rc.17 || true
-
-          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
-            echo "⚠️  Install npm échouée, fallback: extraction manuelle du tarball"
-            mkdir -p /tmp/wasm-binding
-            cd /tmp/wasm-binding
-            npm pack @rolldown/binding-wasm32-wasi@1.0.0-rc.17
-            tar -xzf rolldown-binding-wasm32-wasi-1.0.0-rc.17.tgz
-            mkdir -p "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi"
-            cp -R package/. "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi/"
-            cd "$CM_BUILD_DIR"
-          fi
-
-          # Force l'installation des dépendances du binding WASM
-          echo "=== Installation des dépendances WASM runtime ==="
+          echo "=== Installation du binding NATIF darwin-arm64 ==="
           npm install --no-save --no-audit --no-fund --force \
-            @napi-rs/wasm-runtime@1.1.4 \
-            @emnapi/core@1.11.1 \
-            @emnapi/runtime@1.11.1 \
-            @tybys/wasm-util@0.10.1 || true
+            @rolldown/binding-darwin-arm64@1.0.0-rc.17 || true
 
           echo "=== Vérification finale ==="
           ls -la node_modules/@rolldown/ 2>/dev/null || true
-          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
-            echo "❌ FATAL: binding WASM toujours absent"
+          if [ ! -d "node_modules/@rolldown/binding-darwin-arm64" ]; then
+            echo "❌ FATAL: binding natif darwin-arm64 absent"
             exit 1
           fi
-          if [ ! -d "node_modules/@napi-rs/wasm-runtime" ]; then
-            echo "❌ FATAL: @napi-rs/wasm-runtime manquant"
-            exit 1
-          fi
-          echo "✅ Binding WASM et dépendances présents"
+          echo "✅ Binding natif darwin-arm64 présent"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync
@@ -86,12 +61,11 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.schoolmanagement.app
       vars:
-        NODE_VERSION: "22.11.0"
+        NODE_VERSION: "22.12.0"
         XCODE_VERSION: 15.4
         XCODE_WORKSPACE: "App.xcworkspace"
         XCODE_SCHEME: "App"
-        NAPI_RS_FORCE_WASI: "error"
-      node: 22.11.0
+      node: 22.12.0
       xcode: 15.4
       cocoapods: default
       groups:
@@ -109,41 +83,17 @@ workflows:
             echo "❌ Vite manquant après npm install"; exit 1
           fi
 
-          echo "=== Tentative install WASM binding (flags plateforme) ==="
-          npm install --no-save --no-audit --no-fund \
-            --cpu=wasm32 --os=wasip1-threads --force \
-            @rolldown/binding-wasm32-wasi@1.0.0-rc.17 || true
-
-          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
-            echo "⚠️  Install npm échouée, fallback: extraction manuelle du tarball"
-            mkdir -p /tmp/wasm-binding
-            cd /tmp/wasm-binding
-            npm pack @rolldown/binding-wasm32-wasi@1.0.0-rc.17
-            tar -xzf rolldown-binding-wasm32-wasi-1.0.0-rc.17.tgz
-            mkdir -p "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi"
-            cp -R package/. "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi/"
-            cd "$CM_BUILD_DIR"
-          fi
-
-          # Force l'installation des dépendances du binding WASM
-          echo "=== Installation des dépendances WASM runtime ==="
+          echo "=== Installation du binding NATIF darwin-arm64 ==="
           npm install --no-save --no-audit --no-fund --force \
-            @napi-rs/wasm-runtime@1.1.4 \
-            @emnapi/core@1.11.1 \
-            @emnapi/runtime@1.11.1 \
-            @tybys/wasm-util@0.10.1 || true
+            @rolldown/binding-darwin-arm64@1.0.0-rc.17 || true
 
           echo "=== Vérification finale ==="
           ls -la node_modules/@rolldown/ 2>/dev/null || true
-          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
-            echo "❌ FATAL: binding WASM toujours absent"
+          if [ ! -d "node_modules/@rolldown/binding-darwin-arm64" ]; then
+            echo "❌ FATAL: binding natif darwin-arm64 absent"
             exit 1
           fi
-          if [ ! -d "node_modules/@napi-rs/wasm-runtime" ]; then
-            echo "❌ FATAL: @napi-rs/wasm-runtime manquant"
-            exit 1
-          fi
-          echo "✅ Binding WASM et dépendances présents"
+          echo "✅ Binding natif darwin-arm64 présent"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync iOS
@@ -177,9 +127,8 @@ workflows:
     max_build_duration: 60
     environment:
       vars:
-        NODE_VERSION: "22.11.0"
-        NAPI_RS_FORCE_WASI: "error"
-      node: 22.11.0
+        NODE_VERSION: "22.12.0"
+      node: 22.12.0
       groups:
         - app-env
     scripts:
@@ -195,41 +144,17 @@ workflows:
             echo "❌ Vite manquant après npm install"; exit 1
           fi
 
-          echo "=== Tentative install WASM binding (flags plateforme) ==="
-          npm install --no-save --no-audit --no-fund \
-            --cpu=wasm32 --os=wasip1-threads --force \
-            @rolldown/binding-wasm32-wasi@1.0.0-rc.17 || true
-
-          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
-            echo "⚠️  Install npm échouée, fallback: extraction manuelle du tarball"
-            mkdir -p /tmp/wasm-binding
-            cd /tmp/wasm-binding
-            npm pack @rolldown/binding-wasm32-wasi@1.0.0-rc.17
-            tar -xzf rolldown-binding-wasm32-wasi-1.0.0-rc.17.tgz
-            mkdir -p "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi"
-            cp -R package/. "$CM_BUILD_DIR/node_modules/@rolldown/binding-wasm32-wasi/"
-            cd "$CM_BUILD_DIR"
-          fi
-
-          # Force l'installation des dépendances du binding WASM
-          echo "=== Installation des dépendances WASM runtime ==="
+          echo "=== Installation du binding NATIF darwin-arm64 ==="
           npm install --no-save --no-audit --no-fund --force \
-            @napi-rs/wasm-runtime@1.1.4 \
-            @emnapi/core@1.11.1 \
-            @emnapi/runtime@1.11.1 \
-            @tybys/wasm-util@0.10.1 || true
+            @rolldown/binding-darwin-arm64@1.0.0-rc.17 || true
 
           echo "=== Vérification finale ==="
           ls -la node_modules/@rolldown/ 2>/dev/null || true
-          if [ ! -d "node_modules/@rolldown/binding-wasm32-wasi" ]; then
-            echo "❌ FATAL: binding WASM toujours absent"
+          if [ ! -d "node_modules/@rolldown/binding-darwin-arm64" ]; then
+            echo "❌ FATAL: binding natif darwin-arm64 absent"
             exit 1
           fi
-          if [ ! -d "node_modules/@napi-rs/wasm-runtime" ]; then
-            echo "❌ FATAL: @napi-rs/wasm-runtime manquant"
-            exit 1
-          fi
-          echo "✅ Binding WASM et dépendances présents"
+          echo "✅ Binding natif darwin-arm64 présent"
       - name: Build web app
         script: npm run build
       - name: Capacitor sync electron
