@@ -163,7 +163,7 @@ workflows:
         script: |
           cd electron
           npm install
-          npm run electron:build
+          npm run electron:make
     artifacts:
       - electron/release/*.exe
       - electron/release/*.dmg
