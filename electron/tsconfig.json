@@ -12,6 +12,7 @@
     "allowJs": true,
     "rootDir": ".",
     "skipLibCheck": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "noEmitOnError": false
   }
 }
