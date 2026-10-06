@@ -14,11 +14,11 @@
   "license": "MIT",
   "main": "build/src/index.js",
   "scripts": {
-    "build": "echo TypeScript build skipped",
+    "build": "tsc",
     "electron:start-live": "node ./live-runner.js",
     "electron:start": "if exist node_modules\\electron\\dist\\electron.exe (node_modules\\electron\\dist\\electron.exe --inspect=5858 .) else echo Electron introuvable, veuillez l'extraire manuellement.",
-    "electron:pack": "electron-builder build --dir -c ./electron-builder.config.json",
-    "electron:make": "electron-builder build -c ./electron-builder.config.json -p always"
+    "electron:pack": "npm run build && electron-builder build --dir -c ./electron-builder.config.json",
+    "electron:make": "npm run build && electron-builder build -c ./electron-builder.config.json -p always"
   },
   "dependencies": {
     "@capacitor-community/electron": "^5.0.0",

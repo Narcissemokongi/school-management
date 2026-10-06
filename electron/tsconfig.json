@@ -11,8 +11,7 @@
     "typeRoots": ["./node_modules/@types"],
     "allowJs": true,
     "rootDir": ".",
-    "skipLibCheck": true,           // ← ignorer les erreurs dans les fichiers .d.ts
-    "noImplicitAny": false,         // ← accepter les paramètres implicites 'any'
-    "suppressImplicitAnyIndexErrors": true
+    "skipLibCheck": true,
+    "noImplicitAny": false
   }
 }
