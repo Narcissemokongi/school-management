@@ -1,4 +1,11 @@
 // src/main.jsx
+
+// ✅ vConsole — debug iOS (à retirer après diagnostic)
+import VConsole from "vconsole";
+if (import.meta.env.PROD) {
+  new VConsole({ theme: "dark" });
+}
+
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
@@ -29,7 +36,7 @@ window.addEventListener("unhandledrejection", (event) => {
   if (!isTransient) {
     toast.error("Une erreur réseau est survenue. Veuillez réessayer.", {
       duration: 5000,
-      id: "network-error", // ✨ évite les toasts en boucle
+      id: "network-error",
     });
   }
 
@@ -42,13 +49,12 @@ window.addEventListener("error", (event) => {
 
   // ⚠️ On ne recharge PLUS la page automatiquement.
   // React ErrorBoundary gère déjà les erreurs de rendu.
-  // Un reload auto pouvait causer une boucle infinie.
 
   toast.error(
     "Une erreur est survenue. Veuillez rafraîchir si le problème persiste.",
     {
       duration: 5000,
-      id: "global-error", // ✨ évite les toasts en boucle
+      id: "global-error",
     }
   );
 });
