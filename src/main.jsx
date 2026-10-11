@@ -20,11 +20,29 @@ import "./lib/pdfWorker";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
 
-// ✨ FIX : handler de rejet de promesse — LOG UNIQUEMENT, pas de reload
+// ✅ Gestion des chunks obsolètes (déploiement + PWA)
+window.addEventListener('vite:preloadError', (event) => {
+  const key = 'app-chunk-reload-at';
+  let last = 0;
+  try {
+    last = Number(sessionStorage.getItem(key) || 0);
+  } catch {
+    return;
+  }
+  if (Date.now() - last < 10_000) return;
+
+  try {
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+
+  event.preventDefault();
+  window.location.reload();
+});
+
 window.addEventListener("unhandledrejection", (event) => {
   console.error("[Global] Erreur réseau non gérée :", event.reason);
-
-  // Ignore les erreurs transitoires connues (cold start Convex, WS disconnect)
   const msg = String(event.reason?.message || event.reason || "");
   const isTransient =
     msg.includes("WebSocket") ||
@@ -32,30 +50,20 @@ window.addEventListener("unhandledrejection", (event) => {
     msg.includes("fetch failed") ||
     msg.includes("Convex") ||
     msg.includes("timeout");
-
   if (!isTransient) {
     toast.error("Une erreur réseau est survenue. Veuillez réessayer.", {
       duration: 5000,
       id: "network-error",
     });
   }
-
   event.preventDefault();
 });
 
-// ✨ FIX : handler d'erreur globale — LOG UNIQUEMENT, PAS de reload auto
 window.addEventListener("error", (event) => {
   console.error("[Global] Erreur globale :", event.error);
-
-  // ⚠️ On ne recharge PLUS la page automatiquement.
-  // React ErrorBoundary gère déjà les erreurs de rendu.
-
   toast.error(
     "Une erreur est survenue. Veuillez rafraîchir si le problème persiste.",
-    {
-      duration: 5000,
-      id: "global-error",
-    }
+    { duration: 5000, id: "global-error" }
   );
 });
 
