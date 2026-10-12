@@ -729,6 +729,95 @@ export function GestionEleves({
 
   const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
   const releaseBtn = useCallback(() => setPressedBtn(null), []);
+    // ════════════════════════════════════════════════════════════════════
+  // ✅ IMPORT EXCEL — parse le fichier et appelle importEleves
+  // ════════════════════════════════════════════════════════════════════
+  const handleImport = useCallback(
+    async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      if (!ecoleId || !anneeId || !user?._id) {
+        toast.error("Session ou année scolaire manquante.");
+        return;
+      }
+
+      setImporting(true);
+      try {
+        const XLSX = await import("xlsx");
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+        if (rows.length === 0) {
+          toast.error("Le fichier est vide.");
+          return;
+        }
+
+        // ✅ Mapping des 17 colonnes
+        const eleves = rows.map((row) => {
+          const sexeRaw = String(row.sexe || "").trim().toUpperCase();
+          return {
+            nom: String(row.nom || "").trim(),
+            postnom: String(row.postnom || "").trim(),
+            prenom: String(row.prenom || "").trim(),
+            classe: String(row.classe || "").trim(),
+            sexe: sexeRaw === "M" || sexeRaw === "F" ? sexeRaw : undefined,
+            dateNaissance: String(row.dateNaissance || "").trim(),
+            lieuNaissance: String(row.lieuNaissance || "").trim(),
+            province: String(row.province || "").trim(),
+            territoire: String(row.territoire || "").trim(),
+            secteur: String(row.secteur || "").trim(),
+            village: String(row.village || "").trim(),
+            adresse: String(row.adresse || "").trim(),
+            telephone: String(row.telephone || "").trim(),
+            nomPere: String(row.nomPere || "").trim(),
+            nomMere: String(row.nomMere || "").trim(),
+            tuteurNom: String(row.tuteurNom || "").trim(),
+            tuteurTelephone: String(row.tuteurTelephone || "").trim(),
+          };
+        });
+
+        // ✅ Validation minimale
+        const invalides = eleves.filter(
+          (e) => !e.nom || !e.postnom || !e.classe
+        );
+        if (invalides.length > 0) {
+          toast.error(
+            `${invalides.length} ligne(s) invalide(s) : nom, postnom et classe sont obligatoires.`
+          );
+          return;
+        }
+
+        if (eleves.length > 500) {
+          toast.error(
+            `Trop d'élèves (${eleves.length}). Maximum 500 par import.`
+          );
+          return;
+        }
+
+        // ✅ Appel backend
+        const result = await importEleves({
+          eleves,
+          ecoleId,
+          anneeId,
+          actionUserId: user._id,
+        });
+
+        toast.success(`${result.inserted} élève(s) importé(s) avec succès.`);
+
+        // ✅ Reset input file (permet de réimporter le même fichier)
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } catch (err) {
+        console.error("[importEleves] Erreur:", err);
+        toast.error(err?.message || "Erreur lors de l'import.");
+      } finally {
+        setImporting(false);
+      }
+    },
+    [ecoleId, anneeId, user?._id, importEleves]
+  );
 
   const classesTriees = useMemo(
     () => [...classes].sort((a, b) => trierClasses(a.nom, b.nom)),
@@ -2157,7 +2246,7 @@ export function GestionEleves({
         <ImportExcel
           fileInputRef={fileInputRef}
           importing={importing}
-          onImport={() => {}}
+          onImport={handleImport}
         />
       </div>
 
