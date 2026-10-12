@@ -6,13 +6,46 @@ import AgoraRTC from "agora-rtc-sdk-ng";
 import {
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff,
   PhoneOff, Clock, Loader2, Wifi, WifiOff, SwitchCamera,
-  Volume2, VolumeX, Pause, Play, User,
+  Volume2, VolumeX, Pause, Play, User, RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 const APP_ID = import.meta.env.VITE_AGORA_APP_ID;
 const MAX_CALL_DURATION_MINUTES = 60;
 
+// ════════════════════════════════════════════════════════════════════
+// DESIGN TOKENS — cohérence visuelle
+// ════════════════════════════════════════════════════════════════════
+const RADIUS = {
+  button: 16,       // boutons de contrôle
+  container: 24,    // barres
+  pill: 999,        // pills / badges arrondis
+};
+
+const BORDER_OPACITY = 0.12;
+const BORDER_TOP_OPACITY = 0.2;
+
+const GLASS_BG = "rgba(15, 23, 42, 0.65)";
+const GLASS_BG_STRONG = "rgba(15, 23, 42, 0.85)";
+const GLASS_BLUR = "blur(40px) saturate(180%)";
+
+const NETWORK_LABELS = {
+  good: "Bonne",
+  fair: "Moyenne",
+  poor: "Faible",
+  unknown: "—",
+};
+
+const NETWORK_COLORS = {
+  good: "#10B981",
+  fair: "#F59E0B",
+  poor: "#EF4444",
+  unknown: "#64748B",
+};
+
+// ════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export function AppelVideo({
   channelName,
   userId,
@@ -37,7 +70,8 @@ export function AppelVideo({
   const [hasJoined, setHasJoined] = useState(false);
   const [permissionError, setPermissionError] = useState(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
-  const [wavePhase, setWavePhase] = useState(0);
+  // ✨ Fallback : iOS Safari peut bloquer getUserMedia hors user gesture
+  const [needsUserGesture, setNeedsUserGesture] = useState(false);
 
   const endCallMutation = useMutation(api.appels.endCall);
   const generateToken = useAction(api.agora.generateToken);
@@ -49,7 +83,7 @@ export function AppelVideo({
   const screenTrackRef = useRef(null);
   const onCallEndRef = useRef(onCallEnd);
   const destroyedRef = useRef(false);
-  const waveIntervalRef = useRef(null);
+  const reattachTimeoutRef = useRef(null);
 
   useEffect(() => {
     onCallEndRef.current = onCallEnd;
@@ -66,20 +100,7 @@ export function AppelVideo({
     };
   }, []);
 
-  // ✨ Animation waveform (mode audio uniquement)
-  useEffect(() => {
-    if (!hasJoined || callType !== "audio") return;
-    waveIntervalRef.current = setInterval(() => {
-      setWavePhase((p) => (p + 1) % 4);
-    }, 140);
-    return () => {
-      clearInterval(waveIntervalRef.current);
-      waveIntervalRef.current = null;
-    };
-  }, [hasJoined, callType]);
-
   // ✨ Re-attacher la piste vidéo locale quand la zone change
-  // (PiP ↔ plein écran, caméra on ↔ off)
   useEffect(() => {
     if (!hasJoined) return;
     const videoTrack = localTracksRef.current[1];
@@ -102,12 +123,13 @@ export function AppelVideo({
       }
     };
 
-    // Petit délai pour laisser React finir le montage du nouveau div
     const timeoutId = setTimeout(reattach, 50);
+    reattachTimeoutRef.current = timeoutId;
 
     return () => {
       cancelled = true;
       clearTimeout(timeoutId);
+      reattachTimeoutRef.current = null;
     };
   }, [hasJoined, remoteUsers.length, isVideoOff]);
 
@@ -137,8 +159,10 @@ export function AppelVideo({
     }
     clearInterval(timerRef.current);
     timerRef.current = null;
-    clearInterval(waveIntervalRef.current);
-    waveIntervalRef.current = null;
+    if (reattachTimeoutRef.current) {
+      clearTimeout(reattachTimeoutRef.current);
+      reattachTimeoutRef.current = null;
+    }
     setRemoteUsers([]);
     setIsScreenSharing(false);
     setIsMuted(false);
@@ -174,7 +198,7 @@ export function AppelVideo({
   );
 
   // ═══════════════════════════════════════════════════════════════
-  // START CALL — déclenché par l'utilisateur (requis iOS Safari)
+  // START CALL
   // ═══════════════════════════════════════════════════════════════
   const startCall = useCallback(async () => {
     if (!APP_ID || !channelName) {
@@ -183,8 +207,12 @@ export function AppelVideo({
       return;
     }
 
+    // Garde-fou : éviter les doubles démarrages
+    if (clientRef.current) return;
+
     destroyedRef.current = false;
     setPermissionError(null);
+    setNeedsUserGesture(false);
 
     let token;
     let agoraUid;
@@ -206,6 +234,7 @@ export function AppelVideo({
 
     agoraClient.on("connection-state-change", (curState) => {
       if (curState === "CONNECTED") setConnectionState("CONNECTED");
+      else if (curState === "RECONNECTING") setConnectionState("RECONNECTING");
       else if (curState === "DISCONNECTED" || curState === "DISCONNECTING")
         setConnectionState("DISCONNECTED");
     });
@@ -252,6 +281,21 @@ export function AppelVideo({
         await agoraClient.publish([tracks[0], tracks[1]]);
       }
 
+      // ═══════════════════════════════════════════════════════════
+      // ✅ FIX iOS : kick du pipeline audio
+      // Sur iOS Safari et certains Chrome Android, la piste micro
+      // est publiée mais reste muette jusqu'à un premier cycle
+      // disable→enable. On force ce cycle tout de suite.
+      // ═══════════════════════════════════════════════════════════
+      try {
+        tracks[0].setEnabled(false);
+        await new Promise((r) => setTimeout(r, 60));
+        tracks[0].setEnabled(true);
+        setIsMuted(false);
+      } catch (e) {
+        console.warn("[AppelVideo] mic kick failed:", e);
+      }
+
       if (callType === "video" && localVideoRef.current && tracks[1]) {
         tracks[1].play(localVideoRef.current);
       }
@@ -273,10 +317,12 @@ export function AppelVideo({
       console.error("[AppelVideo] getUserMedia failed:", err);
       const code = err?.code || err?.name;
       let userMsg = "Impossible d'accéder à la caméra/micro.";
+      let needsGesture = false;
 
       if (code === "PERMISSION_DENIED" || err?.name === "NotAllowedError") {
         userMsg =
           "Autorisation refusée. Vérifie que Safari a l'accès à la caméra/micro dans Réglages iOS → Safari.";
+        needsGesture = true;
       } else if (err?.name === "NotFoundError") {
         userMsg = "Aucune caméra/microphone détecté sur cet appareil.";
       } else if (err?.name === "NotReadableError") {
@@ -288,8 +334,12 @@ export function AppelVideo({
 
       setPermissionError(userMsg);
       setConnectionState("ERROR");
-      toast.error(userMsg);
-      handleEndCall();
+      if (needsGesture) setNeedsUserGesture(true);
+      // Nettoyage de la partie Agora (client) mais garde le composant monté
+      try {
+        agoraClient.leave();
+      } catch (e) {}
+      clientRef.current = null;
       return;
     }
 
@@ -316,6 +366,7 @@ export function AppelVideo({
       setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
     });
 
+    // Filet de sécurité : rejoindre les éventuels users déjà présents
     setTimeout(() => {
       if (destroyedRef.current || !agoraClient) return;
       agoraClient.remoteUsers.forEach((user) => {
@@ -326,10 +377,6 @@ export function AppelVideo({
         );
       });
     }, 800);
-
-    timerRef.current = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
   }, [
     channelName,
     userId,
@@ -338,6 +385,23 @@ export function AppelVideo({
     handleEndCall,
   ]);
 
+  // ═══════════════════════════════════════════════════════════════
+  // AUTO-START — remplace l'ancien écran de pré-appel
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      if (!cancelled && !destroyedRef.current) {
+        startCall();
+      }
+    }, 80);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [startCall]);
+
+  // Cleanup au démontage
   useEffect(() => {
     return () => {
       destroyedRef.current = true;
@@ -345,6 +409,30 @@ export function AppelVideo({
     };
   }, [cleanupLocal]);
 
+  // ═══════════════════════════════════════════════════════════════
+  // TIMER — démarre seulement quand un correspondant est là
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!hasJoined) return;
+    if (remoteUsers.length === 0) {
+      // Timer pas encore démarré : on remet à 0
+      setCallDuration(0);
+      return;
+    }
+    // Démarre le timer
+    if (timerRef.current) return;
+    timerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+    return () => {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
+  }, [hasJoined, remoteUsers.length]);
+
+  // ═══════════════════════════════════════════════════════════════
+  // Limite de durée
+  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     if (callDuration >= MAX_CALL_DURATION_MINUTES * 60) {
       toast("Appel terminé (limite de 60 min)", { icon: "⏰" });
@@ -352,15 +440,23 @@ export function AppelVideo({
     }
   }, [callDuration, handleEndCall]);
 
-  const toggleMute = () => {
-    if (localTracksRef.current.length > 0) {
-      const newMuted = !isMuted;
-      localTracksRef.current[0].setEnabled(!newMuted);
+  // ═══════════════════════════════════════════════════════════════
+  // ACTIONS UTILISATEUR
+  // ═══════════════════════════════════════════════════════════════
+  const toggleMute = useCallback(() => {
+    const micTrack = localTracksRef.current[0];
+    if (!micTrack) return;
+    const newMuted = !isMuted;
+    try {
+      micTrack.setEnabled(!newMuted);
       setIsMuted(newMuted);
+    } catch (err) {
+      console.error("[AppelVideo] toggleMute failed:", err);
+      toast.error("Impossible de modifier le micro");
     }
-  };
+  }, [isMuted]);
 
-  const toggleVideo = () => {
+  const toggleVideo = useCallback(() => {
     const videoTrack = localTracksRef.current[1];
     if (!videoTrack) return;
 
@@ -369,7 +465,6 @@ export function AppelVideo({
     setIsVideoOff(newVideoOff);
 
     if (!newVideoOff && localVideoRef.current) {
-      // ⚠️ Stop avant re-play (Agora exige)
       try {
         videoTrack.stop();
       } catch (e) {}
@@ -388,32 +483,31 @@ export function AppelVideo({
         });
       }
     }
-  };
+  }, [isVideoOff, callType]);
 
-  const switchCamera = async () => {
-    if (localTracksRef.current[1]) {
-      try {
-        const cameras = await AgoraRTC.getCameras();
-        const currentTrack = localTracksRef.current[1];
-        const currentDeviceId =
-          currentTrack?.getMediaStreamTrack?.()?.getSettings?.()?.deviceId || "";
-        const currentIndex = cameras.findIndex(
-          (cam) => cam.deviceId === currentDeviceId
-        );
-        const nextIndex = (currentIndex + 1) % cameras.length;
-        const nextDeviceId = cameras[nextIndex]?.deviceId;
-        if (nextDeviceId) {
-          await localTracksRef.current[1].setDevice(nextDeviceId);
-          setIsFrontCamera(nextIndex !== 1);
-        }
-      } catch (err) {
-        console.error("[AppelVideo] switchCamera failed:", err);
-        toast.error("Impossible de changer de caméra");
+  const switchCamera = useCallback(async () => {
+    if (!localTracksRef.current[1]) return;
+    try {
+      const cameras = await AgoraRTC.getCameras();
+      const currentTrack = localTracksRef.current[1];
+      const currentDeviceId =
+        currentTrack?.getMediaStreamTrack?.()?.getSettings?.()?.deviceId || "";
+      const currentIndex = cameras.findIndex(
+        (cam) => cam.deviceId === currentDeviceId
+      );
+      const nextIndex = (currentIndex + 1) % cameras.length;
+      const nextDeviceId = cameras[nextIndex]?.deviceId;
+      if (nextDeviceId) {
+        await localTracksRef.current[1].setDevice(nextDeviceId);
+        setIsFrontCamera(nextIndex !== 1);
       }
+    } catch (err) {
+      console.error("[AppelVideo] switchCamera failed:", err);
+      toast.error("Impossible de changer de caméra");
     }
-  };
+  }, []);
 
-  const toggleSpeaker = async () => {
+  const toggleSpeaker = useCallback(async () => {
     try {
       const newSpeakerState = !isSpeakerOn;
       await AgoraRTC.setSpeakerphoneOn(newSpeakerState);
@@ -427,22 +521,27 @@ export function AppelVideo({
     } catch (err) {
       console.warn("setSpeakerphoneOn non supporté", err);
     }
-  };
+  }, [isSpeakerOn, isMobile]);
 
-  const toggleHold = () => {
+  const toggleHold = useCallback(() => {
     const newHold = !isOnHold;
-    if (newHold) {
-      localTracksRef.current.forEach((track) => track.setEnabled(false));
-    } else {
-      localTracksRef.current[0]?.setEnabled(!isMuted);
-      if (localTracksRef.current[1]) {
-        localTracksRef.current[1].setEnabled(!isVideoOff);
-      }
-    }
-    setIsOnHold(newHold);
-  };
+    const [micTrack, camTrack] = localTracksRef.current;
 
-  const startScreenShare = async () => {
+    try {
+      if (newHold) {
+        micTrack?.setEnabled(false);
+        camTrack?.setEnabled(false);
+      } else {
+        micTrack?.setEnabled(!isMuted);
+        camTrack?.setEnabled(!isVideoOff);
+      }
+      setIsOnHold(newHold);
+    } catch (err) {
+      console.error("[AppelVideo] toggleHold failed:", err);
+    }
+  }, [isOnHold, isMuted, isVideoOff]);
+
+  const startScreenShare = useCallback(async () => {
     if (!clientRef.current || destroyedRef.current) return;
     if (isScreenSharing) {
       if (screenTrackRef.current) {
@@ -463,7 +562,7 @@ export function AppelVideo({
         toast.error("Impossible de partager l'écran");
       }
     }
-  };
+  }, [isScreenSharing]);
 
   const unlockRemoteAudio = useCallback(() => {
     console.log("[AppelVideo] tentative de déblocage audio distant");
@@ -485,6 +584,17 @@ export function AppelVideo({
     setAutoplayBlocked(false);
   }, [remoteUsers]);
 
+  const retryCall = useCallback(() => {
+    // Reset propre avant de relancer
+    destroyedRef.current = false;
+    setPermissionError(null);
+    setConnectionState("IDLE");
+    setNeedsUserGesture(false);
+    setRemoteUsers([]);
+    setHasJoined(false);
+    startCall();
+  }, [startCall]);
+
   const formatDuration = (sec) => {
     const mins = Math.floor(sec / 60)
       .toString()
@@ -493,19 +603,8 @@ export function AppelVideo({
     return `${mins}:${secs}`;
   };
 
-  const networkQualityLabel = {
-    good: "Excellente",
-    fair: "Moyenne",
-    poor: "Faible",
-    unknown: "—",
-  }[networkQuality];
-
-  const networkQualityColor = {
-    good: "#10B981",
-    fair: "#F59E0B",
-    poor: "#EF4444",
-    unknown: "#64748B",
-  }[networkQuality];
+  const networkQualityLabel = NETWORK_LABELS[networkQuality];
+  const networkQualityColor = NETWORK_COLORS[networkQuality];
 
   const isAudioCall = callType === "audio";
 
@@ -515,6 +614,9 @@ export function AppelVideo({
 
   const waveBars = [0.3, 0.7, 0.45, 0.9, 0.5, 0.8, 0.35, 0.65, 0.4];
 
+  // ═══════════════════════════════════════════════════════════════
+  // RENDU
+  // ═══════════════════════════════════════════════════════════════
   return (
     <div
       style={{
@@ -556,8 +658,8 @@ export function AppelVideo({
         }
       `}</style>
 
-      {/* Overlay CONNECTING */}
-      {connectionState === "CONNECTING" && (
+      {/* Overlay CONNECTING (sans pré-appel) */}
+      {connectionState === "CONNECTING" && !hasJoined && (
         <div
           role="status"
           aria-live="polite"
@@ -571,10 +673,47 @@ export function AppelVideo({
             justifyContent: "center",
             background: "rgba(15,23,42,0.95)",
             zIndex: 20,
+            gap: 16,
+            padding: 24,
+            boxSizing: "border-box",
           }}
         >
-          <Loader2 size={48} className="av-spin" style={{ color: "#818CF8" }} />
-          <p style={{ marginTop: 16, fontSize: 16 }}>Connexion en cours…</p>
+          <div
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: "50%",
+              background: "#1E293B",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              border: `3px solid rgba(129,140,248,0.5)`,
+            }}
+          >
+            {contactAvatar ? (
+              <img
+                src={contactAvatar}
+                alt={contactName}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <User size={48} color="#94A3B8" />
+            )}
+          </div>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: isMobile ? 20 : 22,
+              textAlign: "center",
+            }}
+          >
+            {contactName || (isAudioCall ? "Appel audio" : "Appel vidéo")}
+          </h2>
+          <Loader2 size={36} className="av-spin" style={{ color: "#818CF8" }} />
+          <p style={{ margin: 0, fontSize: 14, color: "#94A3B8" }}>
+            Connexion en cours…
+          </p>
         </div>
       )}
 
@@ -593,168 +732,142 @@ export function AppelVideo({
             zIndex: 20,
             padding: 24,
             boxSizing: "border-box",
+            gap: 12,
           }}
         >
           <WifiOff size={48} color="#EF4444" />
           <h2
             style={{
-              marginTop: 16,
+              marginTop: 8,
               textAlign: "center",
               fontSize: isMobile ? 18 : 20,
             }}
           >
-            {permissionError
+            {needsUserGesture
+              ? "Autorisation requise"
+              : permissionError
               ? "Accès caméra/micro refusé"
               : "Échec de la connexion"}
           </h2>
           {permissionError && (
             <p
               style={{
-                marginTop: 12,
+                marginTop: 4,
                 color: "#94A3B8",
                 fontSize: 14,
                 textAlign: "center",
                 maxWidth: 380,
+                lineHeight: 1.5,
               }}
             >
               {permissionError}
             </p>
           )}
-          <button
-            type="button"
-            onClick={handleEndCall}
-            onTouchStart={pressBtn("quit-error")}
-            onTouchEnd={releaseBtn}
-            onTouchCancel={releaseBtn}
-            style={{
-              marginTop: 20,
-              padding: "12px 24px",
-              background: "#EF4444",
-              border: "none",
-              borderRadius: 12,
-              color: "white",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: 15,
-              minHeight: 44,
-              transform:
-                pressedBtn === "quit-error" ? "scale(0.97)" : "scale(1)",
-              transition: "transform 0.1s ease",
-              WebkitTapHighlightColor: "transparent",
-              touchAction: "manipulation",
-              fontFamily: "inherit",
-            }}
-          >
-            Quitter
-          </button>
-        </div>
-      )}
-
-      {/* Écran pré-appel */}
-      {!hasJoined &&
-        connectionState !== "CONNECTING" &&
-        connectionState !== "ERROR" && (
           <div
             style={{
-              position: "absolute",
-              inset: 0,
               display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
+              gap: 10,
+              marginTop: 16,
+              flexWrap: "wrap",
               justifyContent: "center",
-              background: "rgba(15,23,42,0.98)",
-              zIndex: 15,
-              gap: 20,
-              padding: 24,
-              boxSizing: "border-box",
-              paddingTop: "calc(24px + env(safe-area-inset-top, 0px))",
-              paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
             }}
           >
-            <div
-              style={{
-                width: 96,
-                height: 96,
-                borderRadius: "50%",
-                background: "#1E293B",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-                border: "3px solid #818CF8",
-              }}
-            >
-              {contactAvatar ? (
-                <img
-                  src={contactAvatar}
-                  alt={contactName}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              ) : (
-                <User size={48} color="#94A3B8" />
-              )}
-            </div>
-            <h2 style={{ margin: 0, fontSize: 22, textAlign: "center" }}>
-              {contactName || (isAudioCall ? "Appel audio" : "Appel vidéo")}
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                color: "#94A3B8",
-                fontSize: 14,
-                textAlign: "center",
-                maxWidth: 340,
-              }}
-            >
-              Appuie sur le bouton pour autoriser la caméra et le micro
-            </p>
             <button
               type="button"
-              onClick={startCall}
+              onClick={retryCall}
+              onTouchStart={pressBtn("retry")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
               style={{
-                marginTop: 12,
-                padding: "14px 32px",
-                background: "#10B981",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "12px 22px",
+                background: "#4F46E5",
                 border: "none",
-                borderRadius: 999,
+                borderRadius: RADIUS.button,
                 color: "white",
-                fontWeight: 700,
-                fontSize: 16,
+                fontWeight: 600,
                 cursor: "pointer",
-                minHeight: 52,
+                fontSize: 15,
+                minHeight: 44,
+                transform:
+                  pressedBtn === "retry" ? "scale(0.97)" : "scale(1)",
+                transition: "transform 0.1s ease",
                 WebkitTapHighlightColor: "transparent",
                 touchAction: "manipulation",
                 fontFamily: "inherit",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
               }}
             >
-              <PhoneOff size={20} style={{ transform: "rotate(135deg)" }} />
-              {isAudioCall ? "Répondre" : "Rejoindre l'appel"}
+              <RotateCcw size={16} />
+              Réessayer
             </button>
             <button
               type="button"
               onClick={handleEndCall}
+              onTouchStart={pressBtn("quit-error")}
+              onTouchEnd={releaseBtn}
+              onTouchCancel={releaseBtn}
               style={{
-                marginTop: 4,
-                padding: "10px 20px",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "12px 22px",
                 background: "transparent",
-                border: "1px solid rgba(255,255,255,0.2)",
-                borderRadius: 999,
-                color: "#94A3B8",
-                fontSize: 14,
+                border: `1px solid rgba(239,68,68,0.5)`,
+                borderRadius: RADIUS.button,
+                color: "#FCA5A5",
+                fontWeight: 600,
                 cursor: "pointer",
+                fontSize: 15,
                 minHeight: 44,
+                transform:
+                  pressedBtn === "quit-error" ? "scale(0.97)" : "scale(1)",
+                transition: "transform 0.1s ease",
                 WebkitTapHighlightColor: "transparent",
                 touchAction: "manipulation",
                 fontFamily: "inherit",
               }}
             >
-              Annuler
+              <PhoneOff size={16} />
+              Quitter
             </button>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Bannière RECONNEXION */}
+      {connectionState === "RECONNECTING" && hasJoined && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            top: isMobile
+              ? "calc(80px + env(safe-area-inset-top, 0px))"
+              : 96,
+            left: "50%",
+            transform: "translateX(-50%)",
+            padding: "8px 16px",
+            background: "rgba(245,158,11,0.9)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            borderRadius: RADIUS.pill,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            color: "white",
+            boxShadow: "0 4px 16px rgba(245,158,11,0.4)",
+            zIndex: 25,
+            pointerEvents: "none",
+          }}
+        >
+          <Loader2 size={14} className="av-spin" />
+          Reconnexion en cours…
+        </div>
+      )}
 
       {/* Top bar — pill glass */}
       <div
@@ -777,12 +890,12 @@ export function AppelVideo({
             alignItems: "center",
             gap: 10,
             padding: isMobile ? "8px 12px" : "10px 16px",
-            background: "rgba(15, 23, 42, 0.55)",
-            backdropFilter: "blur(40px) saturate(180%)",
-            WebkitBackdropFilter: "blur(40px) saturate(180%)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderTop: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 999,
+            background: GLASS_BG,
+            backdropFilter: GLASS_BLUR,
+            WebkitBackdropFilter: GLASS_BLUR,
+            border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
+            borderTop: `1px solid rgba(255,255,255,${BORDER_TOP_OPACITY})`,
+            borderRadius: RADIUS.pill,
             boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
             pointerEvents: "auto",
             maxWidth: "100%",
@@ -799,7 +912,7 @@ export function AppelVideo({
               justifyContent: "center",
               overflow: "hidden",
               flexShrink: 0,
-              border: "1.5px solid rgba(255,255,255,0.15)",
+              border: `1.5px solid rgba(255,255,255,${BORDER_OPACITY})`,
             }}
           >
             {contactAvatar ? (
@@ -838,7 +951,9 @@ export function AppelVideo({
               }}
             >
               <span
-                className={connectionState === "CONNECTED" ? "av-pulse-dot" : ""}
+                className={
+                  connectionState === "CONNECTED" ? "av-pulse-dot" : ""
+                }
                 style={{
                   display: "inline-block",
                   width: 5,
@@ -858,7 +973,7 @@ export function AppelVideo({
             style={{
               width: 1,
               height: 24,
-              background: "rgba(255,255,255,0.12)",
+              background: `rgba(255,255,255,${BORDER_OPACITY})`,
               flexShrink: 0,
             }}
           />
@@ -883,7 +998,7 @@ export function AppelVideo({
               alignItems: "center",
               gap: 4,
               padding: "3px 8px",
-              borderRadius: 999,
+              borderRadius: RADIUS.pill,
               background: `${networkQualityColor}22`,
               border: `1px solid ${networkQualityColor}55`,
               flexShrink: 0,
@@ -1006,16 +1121,19 @@ export function AppelVideo({
             {waveBars.map((h, i) => (
               <span
                 key={i}
-                className={isMuted ? "" : "av-wave"}
+                className={isMuted || remoteUsers.length === 0 ? "" : "av-wave"}
                 style={{
                   display: "inline-block",
                   width: 4,
                   height: 32,
                   borderRadius: 2,
-                  background: isMuted
-                    ? "rgba(148,163,184,0.3)"
-                    : "linear-gradient(180deg, #818CF8, #6366F1)",
-                  transform: `scaleY(${isMuted ? 0.15 : h})`,
+                  background:
+                    isMuted || remoteUsers.length === 0
+                      ? "rgba(148,163,184,0.3)"
+                      : "linear-gradient(180deg, #818CF8, #6366F1)",
+                  transform: `scaleY(${
+                    isMuted || remoteUsers.length === 0 ? 0.15 : h
+                  })`,
                   animationDelay: `${(i % 4) * 0.15}s`,
                   transition: "background 0.3s ease",
                 }}
@@ -1039,6 +1157,8 @@ export function AppelVideo({
                 <MicOff size={14} />
                 Micro coupé
               </>
+            ) : remoteUsers.length === 0 ? (
+              "En attente du correspondant…"
             ) : (
               "En communication"
             )}
@@ -1062,11 +1182,11 @@ export function AppelVideo({
                   right: isMobile ? 12 : 16,
                   width: isMobile ? 96 : 128,
                   height: isMobile ? 132 : 176,
-                  borderRadius: 16,
+                  borderRadius: RADIUS.button,
                   overflow: "hidden",
                   boxShadow:
                     "0 20px 48px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(255,255,255,0.15)",
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
                   zIndex: 10,
                   background: "#1E293B",
                 }}
@@ -1102,14 +1222,14 @@ export function AppelVideo({
                     background: "rgba(0,0,0,0.55)",
                     backdropFilter: "blur(8px)",
                     WebkitBackdropFilter: "blur(8px)",
-                    borderRadius: 999,
+                    borderRadius: RADIUS.pill,
                     padding: "3px 10px",
                     fontSize: 10.5,
                     fontWeight: 600,
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
                   }}
                 >
-                  Vous
+                  {isScreenSharing ? "Écran partagé" : "Vous"}
                 </div>
               </div>
             </>
@@ -1152,11 +1272,11 @@ export function AppelVideo({
                   top: "50%",
                   left: "50%",
                   transform: "translate(-50%,-50%)",
-                  background: "rgba(15,23,42,0.7)",
+                  background: GLASS_BG_STRONG,
                   backdropFilter: "blur(20px)",
                   WebkitBackdropFilter: "blur(20px)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 999,
+                  border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
+                  borderRadius: RADIUS.pill,
                   padding: "8px 18px",
                   fontSize: 13,
                   fontWeight: 600,
@@ -1186,14 +1306,14 @@ export function AppelVideo({
                   background: "rgba(0,0,0,0.55)",
                   backdropFilter: "blur(8px)",
                   WebkitBackdropFilter: "blur(8px)",
-                  borderRadius: 999,
+                  borderRadius: RADIUS.pill,
                   padding: "4px 12px",
                   fontSize: 12,
                   fontWeight: 600,
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
                 }}
               >
-                Vous
+                {isScreenSharing ? "Écran partagé" : "Vous"}
               </div>
             </div>
           )}
@@ -1207,13 +1327,15 @@ export function AppelVideo({
           onClick={unlockRemoteAudio}
           style={{
             position: "absolute",
-            bottom: isMobile ? 140 : 160,
+            bottom: isMobile
+              ? "calc(env(safe-area-inset-bottom, 0px) + 120px)"
+              : 160,
             left: "50%",
             transform: "translateX(-50%)",
             padding: "12px 24px",
             background: "#F59E0B",
             border: "none",
-            borderRadius: 999,
+            borderRadius: RADIUS.pill,
             color: "white",
             fontWeight: 700,
             fontSize: 14,
@@ -1258,12 +1380,12 @@ export function AppelVideo({
             alignItems: "flex-start",
             gap: isMobile ? 6 : 12,
             padding: isMobile ? "10px 12px" : "12px 16px",
-            background: "rgba(15, 23, 42, 0.65)",
-            backdropFilter: "blur(40px) saturate(180%)",
-            WebkitBackdropFilter: "blur(40px) saturate(180%)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderTop: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 28,
+            background: GLASS_BG,
+            backdropFilter: GLASS_BLUR,
+            WebkitBackdropFilter: GLASS_BLUR,
+            border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
+            borderTop: `1px solid rgba(255,255,255,${BORDER_TOP_OPACITY})`,
+            borderRadius: RADIUS.container,
             boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
           }}
         >
@@ -1315,7 +1437,7 @@ export function AppelVideo({
             }
             label={isMobile ? "Son" : ""}
             active={!isSpeakerOn}
-            activeColor="red"
+            activeColor="neutral"
             pressed={pressedBtn === "speaker"}
             onPress={pressBtn("speaker")}
             onRelease={releaseBtn}
@@ -1402,7 +1524,7 @@ export function AppelVideo({
               style={{
                 width: isMobile ? 52 : 60,
                 height: isMobile ? 52 : 60,
-                borderRadius: 20,
+                borderRadius: RADIUS.button,
                 border: "none",
                 background: "linear-gradient(135deg, #EF4444, #DC2626)",
                 color: "white",
@@ -1411,10 +1533,8 @@ export function AppelVideo({
                 justifyContent: "center",
                 cursor: "pointer",
                 boxShadow: "0 8px 24px rgba(239,68,68,0.5)",
-                transform:
-                  pressedBtn === "end" ? "scale(0.92)" : "scale(1)",
-                transition:
-                  "transform 0.1s ease, box-shadow 0.15s ease",
+                transform: pressedBtn === "end" ? "scale(0.92)" : "scale(1)",
+                transition: "transform 0.1s ease, box-shadow 0.15s ease",
                 WebkitTapHighlightColor: "transparent",
                 touchAction: "manipulation",
                 padding: 0,
@@ -1474,6 +1594,13 @@ function ControlButton({
         color: "#93C5FD",
       };
     }
+    if (activeColor === "neutral") {
+      return {
+        background: "rgba(100,116,139,0.2)",
+        borderColor: "rgba(100,116,139,0.4)",
+        color: "#CBD5E1",
+      };
+    }
     return {};
   })();
 
@@ -1496,8 +1623,8 @@ function ControlButton({
         style={{
           width: size,
           height: size,
-          borderRadius: 20,
-          border: "1px solid rgba(255,255,255,0.14)",
+          borderRadius: RADIUS.button,
+          border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
           background: "rgba(255,255,255,0.06)",
           color: "#E2E8F0",
           display: "flex",
@@ -1568,7 +1695,7 @@ function RemoteVideo({ user, fullscreen }) {
         flex: fullscreen ? "none" : "1 1 45%",
         minWidth: fullscreen ? "auto" : 280,
         background: "#1E293B",
-        borderRadius: fullscreen ? 0 : 16,
+        borderRadius: fullscreen ? 0 : RADIUS.button,
         overflow: "hidden",
         boxShadow: fullscreen ? "none" : "0 4px 12px rgba(0,0,0,0.3)",
       }}
@@ -1585,11 +1712,11 @@ function RemoteVideo({ user, fullscreen }) {
           background: "rgba(0,0,0,0.55)",
           backdropFilter: "blur(8px)",
           WebkitBackdropFilter: "blur(8px)",
-          borderRadius: 999,
+          borderRadius: RADIUS.pill,
           padding: "4px 12px",
           fontSize: 12,
           fontWeight: 600,
-          border: "1px solid rgba(255,255,255,0.1)",
+          border: `1px solid rgba(255,255,255,${BORDER_OPACITY})`,
         }}
       >
         Participant {user.uid}
