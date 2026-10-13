@@ -1,12 +1,12 @@
 // src/components/LoginScreen.jsx
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Loader2, User, Lock, Eye, EyeOff, LogIn, Clock, ShieldCheck,
-  AlertCircle,
+  AlertCircle, ArrowLeft, Mail, AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -18,13 +18,33 @@ const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
 const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
 
-// ✨ Taille minimale tap target mobile
 const MOBILE_TAP = 44;
 
 // ════════════════════════════════════════════════════════════════════
-// COMPTE À REBOURS pour le renvoi de code
+// RADIUS UNIFIÉS
+// ════════════════════════════════════════════════════════════════════
+const RADIUS = {
+  card: 16,
+  input: 12,
+  button: 12,
+  small: 8,
+};
+
+// ════════════════════════════════════════════════════════════════════
+// COMPTE À REBOURS
 // ════════════════════════════════════════════════════════════════════
 const RESEND_COOLDOWN_S = 30;
+
+// ════════════════════════════════════════════════════════════════════
+// UTILITAIRES
+// ════════════════════════════════════════════════════════════════════
+function maskEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  const [user, domain] = email.split("@");
+  if (!user || !domain) return email;
+  const visible = user.slice(0, Math.min(2, user.length));
+  return `${visible}***@${domain}`;
+}
 
 // ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level
@@ -35,11 +55,19 @@ const LoginKeyframes = (
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
+    @keyframes lg-shake {
+      0%, 100% { transform: translateX(0); }
+      25%      { transform: translateX(-4px); }
+      75%      { transform: translateX(4px); }
+    }
     .lg-spin {
       animation: lg-spin 1s linear infinite;
     }
+    .lg-shake {
+      animation: lg-shake 0.3s ease-in-out;
+    }
     @media (prefers-reduced-motion: reduce) {
-      .lg-spin { animation: none !important; }
+      .lg-spin, .lg-shake { animation: none !important; }
     }
   `}</style>
 );
@@ -61,10 +89,12 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const [sendingCode, setSendingCode] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // ✨ Focus states (remplacent les mutations DOM)
+  // ✨ États améliorés
   const [focusedField, setFocusedField] = useState(null);
-  // ✨ Feedback tap
   const [pressedBtn, setPressedBtn] = useState(null);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
+  const [shakeError, setShakeError] = useState(false);
 
   const codeInputRef = useRef(null);
 
@@ -86,13 +116,47 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   }, [resendCooldown]);
 
   // ════════════════════════════════════════════════════════════════════
-  // Effet : focus auto sur le champ code en 2FA
+  // Effet : focus auto sur le champ code en 2FA (avec cleanup)
   // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
-    if (step === "twoFactor") {
+    if (step !== "twoFactor") return;
+    const t = setTimeout(() => {
       codeInputRef.current?.focus();
-    }
+    }, 120);
+    return () => clearTimeout(t);
   }, [step]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Effet : détecter le Caps Lock sur le champ password
+  // ════════════════════════════════════════════════════════════════════
+  const handleKeyEvent = useCallback((e) => {
+    if (typeof e.getModifierState === "function") {
+      setCapsLockOn(e.getModifierState("CapsLock"));
+    }
+  }, []);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Effet : déclencher shake à chaque erreur
+  // ════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!error) return;
+    setShakeError(true);
+    const t = setTimeout(() => setShakeError(false), 400);
+    return () => clearTimeout(t);
+  }, [error]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // RETOUR AUX IDENTIFIANTS
+  // ════════════════════════════════════════════════════════════════════
+  const handleBackToCredentials = useCallback(() => {
+    setStep("credentials");
+    setPendingUser(null);
+    setUserId(null);
+    setCode("");
+    setError("");
+    setErrorType("normal");
+    setResendCooldown(0);
+  }, []);
 
   // ════════════════════════════════════════════════════════════════════
   // SOUMISSION DES IDENTIFIANTS
@@ -119,10 +183,14 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
       }
 
       if (user.requiresTwoFactor) {
+        // ✨ On nettoie l'erreur AVANT de changer d'étape
+        setError("");
+        setErrorType("normal");
         setPendingUser(user);
         setUserId(user._id);
         setCode("");
-        setResendCooldown(0);
+        // ✨ Cooldown démarré pour empêcher double envoi immédiat
+        setResendCooldown(RESEND_COOLDOWN_S);
         setStep("twoFactor");
       } else {
         onLogin(user);
@@ -164,6 +232,13 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
         (err && typeof err === "object" && err.message) ||
         (typeof err === "string" ? err : "") ||
         "Code invalide.";
+
+      // ✨ Détection "expiré" pour message adapté
+      if (typeof msg === "string" && /expir/i.test(msg)) {
+        setErrorType("expired");
+      } else {
+        setErrorType("normal");
+      }
       setError(msg);
     } finally {
       setLoading(false);
@@ -213,30 +288,35 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   const buttonBgHover = dark ? "#6366F1" : "#4338CA";
   const buttonDisabled = "#A5B4FC";
   const accent = dark ? "#818CF8" : "#4F46E5";
-  const errorBg =
-    errorType === "locked"
-      ? dark
-        ? "#78350F"
-        : "#FEF3C7"
-      : dark
-      ? "#7F1D1D"
-      : "#FEE2E2";
-  const errorText =
-    errorType === "locked"
-      ? dark
-        ? "#FBBF24"
-        : "#92400E"
-      : dark
-      ? "#F87171"
-      : "#B91C1C";
   const linkColor = accent;
   const iconColor = dark ? "#94A3B8" : "#9CA3AF";
 
-  const inputFontSize = isMobile ? 16 : 14; // 16px évite le zoom iOS
-  const cardPadding = isMobile ? "28px 20px" : "40px 32px";
+  // ✨ Couleurs d'erreur selon type
+  const errorStyles = {
+    locked: {
+      bg: dark ? "#78350F" : "#FEF3C7",
+      text: dark ? "#FBBF24" : "#92400E",
+      icon: Clock,
+    },
+    expired: {
+      bg: dark ? "#7C2D12" : "#FEF3C7",
+      text: dark ? "#FDBA74" : "#9A3412",
+      icon: AlertTriangle,
+    },
+    normal: {
+      bg: dark ? "#7F1D1D" : "#FEE2E2",
+      text: dark ? "#F87171" : "#B91C1C",
+      icon: AlertCircle,
+    },
+  };
+  const currentErrorStyle = errorStyles[errorType] || errorStyles.normal;
+  const ErrorIcon = currentErrorStyle.icon;
+
+  const inputFontSize = isMobile ? 16 : 14;
+  const cardPadding = isMobile ? "24px 18px" : "32px 28px";
   const logoSize = isMobile ? 64 : 72;
 
-  // ✨ inputStyle fonctionnel (focus par state, pas par DOM)
+  // ✨ inputStyle fonctionnel
   const inputStyle = useCallback(
     (fieldName, hasRightPadding = false) => ({
       width: "100%",
@@ -246,7 +326,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
       border: `1.5px solid ${
         focusedField === fieldName ? accent : inputBorder
       }`,
-      borderRadius: 10,
+      borderRadius: RADIUS.input,
       fontSize: inputFontSize,
       outline: "none",
       background: inputBg,
@@ -256,7 +336,6 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
       fontFamily: "inherit",
       WebkitAppearance: "none",
       minHeight: isMobile ? MOBILE_TAP : undefined,
-      // ✨ Neutralise tap delay
       WebkitTapHighlightColor: "transparent",
       touchAction: "manipulation",
     }),
@@ -269,22 +348,17 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
   return (
     <div
       style={{
-        // ✨ 100dvh pour iOS + safe-area
         minHeight: "100vh",
-        height: isMobile ? "100dvh" : undefined,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        display: "flex",           // ← ajoute
+        flexDirection: "column",   // ← ajoute
         background: containerBg,
-        // ✨ Safe-area partout
         padding: isMobile
-          ? `calc(16px + ${SAFE_TOP}) calc(16px + ${SAFE_RIGHT}) calc(16px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_LEFT})`
-          : "24px",
+              ? `calc(16px + ${SAFE_TOP}) calc(16px + ${SAFE_RIGHT}) calc(16px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_LEFT})`
+              : "24px",
         transition: "background-color 0.3s",
         boxSizing: "border-box",
         overflowY: "auto",
         WebkitOverflowScrolling: "touch",
-        overscrollBehavior: "contain",
       }}
     >
       {LoginKeyframes}
@@ -292,30 +366,117 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
       <div
         style={{
           background: cardBg,
-          borderRadius: 16,
+          borderRadius: RADIUS.card,
           boxShadow: dark
-            ? "0 4px 12px rgba(0,0,0,0.5)"
+            ? "0 4px 12px rgba(0,0,0,0.3)"
             : "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
           border: `1px solid ${cardBorder}`,
           padding: cardPadding,
           width: "100%",
           maxWidth: 420,
+          margin: "auto",
           transition: "background-color 0.3s, border-color 0.3s",
           boxSizing: "border-box",
+          position: "relative",
         }}
       >
-        {/* ═══ En-tête ═══ */}
-        <div style={{ textAlign: "center", marginBottom: isMobile ? 24 : 32 }}>
-          <img
-            src="/logo.png"
-            alt="School Management"
+        {/* ✨ Bouton Retour (uniquement en 2FA) */}
+        {step === "twoFactor" && (
+          <button
+            type="button"
+            onClick={handleBackToCredentials}
+            onTouchStart={pressBtn("back")}
+            onTouchEnd={releaseBtn}
+            onTouchCancel={releaseBtn}
+            aria-label="Retour aux identifiants"
             style={{
-              width: logoSize,
-              height: logoSize,
-              marginBottom: 16,
-              objectFit: "contain",
+              position: "absolute",
+              top: isMobile ? 12 : 16,
+              left: isMobile ? 12 : 16,
+              background: "transparent",
+              border: "none",
+              color: textSecondary,
+              cursor: "pointer",
+              padding: 0,
+              width: MOBILE_TAP,
+              height: MOBILE_TAP,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: RADIUS.small,
+              transform: pressedBtn === "back" ? "scale(0.9)" : "scale(1)",
+              transition: "transform 0.1s ease",
+              WebkitTapHighlightColor: "transparent",
+              touchAction: "manipulation",
             }}
-          />
+          >
+            <ArrowLeft size={20} />
+          </button>
+        )}
+
+        {/* ✨ Indicateur d'étape (uniquement en 2FA) */}
+        {step === "twoFactor" && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 6,
+              marginBottom: 12,
+            }}
+            aria-label="Étape 2 sur 2"
+          >
+            <div
+              style={{
+                width: 24,
+                height: 4,
+                borderRadius: 2,
+                background: cardBorder,
+              }}
+            />
+            <div
+              style={{
+                width: 24,
+                height: 4,
+                borderRadius: 2,
+                background: accent,
+              }}
+            />
+          </div>
+        )}
+
+        {/* ═══ En-tête ═══ */}
+        <div style={{ textAlign: "center", marginBottom: isMobile ? 20 : 28 }}>
+          {!logoFailed ? (
+            <img
+              src="/logo.png"
+              alt="School Management"
+              onError={() => setLogoFailed(true)}
+              style={{
+                width: logoSize,
+                height: logoSize,
+                marginBottom: 12,
+                objectFit: "contain",
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              style={{
+                width: logoSize,
+                height: logoSize,
+                marginBottom: 12,
+                marginLeft: "auto",
+                marginRight: "auto",
+                borderRadius: "50%",
+                background: dark ? "#312E81" : "#EEF2FF",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ShieldCheck size={logoSize / 2} color={accent} />
+            </div>
+          )}
           <h1
             style={{
               fontSize: isMobile ? 22 : 24,
@@ -332,11 +493,15 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
             style={{
               color: textSecondary,
               marginTop: 8,
+              marginBottom: 0,
               fontSize: 14,
+              lineHeight: 1.5,
             }}
           >
             {step === "credentials"
               ? "Connectez-vous à votre compte"
+              : pendingUser?.email
+              ? `Un code a été envoyé à ${maskEmail(pendingUser.email)}`
               : "Un code a été envoyé à votre adresse email."}
           </p>
         </div>
@@ -345,7 +510,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
         {step === "credentials" && (
           <form onSubmit={handleCredentialsSubmit} autoComplete="off">
             {/* Identifiant */}
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 18 }}>
               <label
                 htmlFor="login-input"
                 style={{
@@ -361,6 +526,8 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
               <div style={{ position: "relative" }}>
                 <User
                   size={18}
+                  width={18}
+                  height={18}
                   style={{
                     position: "absolute",
                     left: 12,
@@ -382,7 +549,6 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                   onFocus={() => setFocusedField("login")}
                   onBlur={() => setFocusedField(null)}
                   autoComplete="username"
-                  autoFocus
                   inputMode="text"
                   enterKeyHint="next"
                   autoCapitalize="none"
@@ -394,7 +560,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
             </div>
 
             {/* Mot de passe */}
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 18 }}>
               <label
                 htmlFor="password-input"
                 style={{
@@ -410,6 +576,8 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
               <div style={{ position: "relative" }}>
                 <Lock
                   size={18}
+                  width={18}
+                  height={18}
                   style={{
                     position: "absolute",
                     left: 12,
@@ -430,12 +598,16 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     if (error) setError("");
                   }}
                   onFocus={() => setFocusedField("password")}
-                  onBlur={() => setFocusedField(null)}
+                  onBlur={() => {
+                    setFocusedField(null);
+                    setCapsLockOn(false);
+                  }}
+                  onKeyDown={handleKeyEvent}
+                  onKeyUp={handleKeyEvent}
                   autoComplete="current-password"
                   enterKeyHint="go"
                   style={inputStyle("password", true)}
                 />
-                {/* ✨ Bouton toggle password : zone 44×44px */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -459,13 +631,12 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     color: iconColor,
                     cursor: "pointer",
                     padding: 0,
-                    // ✨ Zone tap 44×44
                     width: isMobile ? MOBILE_TAP : 36,
                     height: isMobile ? MOBILE_TAP : 36,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    borderRadius: 8,
+                    borderRadius: RADIUS.small,
                     transition: "transform 0.1s ease",
                     WebkitTapHighlightColor: "transparent",
                     touchAction: "manipulation",
@@ -474,30 +645,44 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
+              {/* ✨ Warning Caps Lock */}
+              {capsLockOn && (
+                <div
+                  role="status"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: dark ? "#FBBF24" : "#92400E",
+                  }}
+                >
+                  <AlertTriangle size={12} />
+                  Verrouillage majuscules activé
+                </div>
+              )}
             </div>
 
             {/* Erreur */}
             {error && (
               <div
                 role="alert"
+                className={shakeError ? "lg-shake" : ""}
                 style={{
                   padding: "10px 14px",
-                  borderRadius: 8,
+                  borderRadius: RADIUS.small,
                   fontSize: 13,
                   fontWeight: 500,
                   marginBottom: 16,
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  background: errorBg,
-                  color: errorText,
+                  background: currentErrorStyle.bg,
+                  color: currentErrorStyle.text,
                 }}
               >
-                {errorType === "locked" ? (
-                  <Clock size={16} style={{ flexShrink: 0 }} />
-                ) : (
-                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
-                )}
+                <ErrorIcon size={16} style={{ flexShrink: 0 }} />
                 <span>{error}</span>
               </div>
             )}
@@ -519,7 +704,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                   : buttonBg,
                 color: "#FFFFFF",
                 border: "none",
-                borderRadius: 10,
+                borderRadius: RADIUS.button,
                 fontSize: 16,
                 fontWeight: 600,
                 cursor: loading ? "not-allowed" : "pointer",
@@ -560,7 +745,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
         {/* ═══ ÉTAPE 2 : 2FA ═══ */}
         {step === "twoFactor" && (
           <form onSubmit={handleTwoFactorSubmit} autoComplete="off">
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 18 }}>
               <label
                 htmlFor="code-input"
                 style={{
@@ -574,8 +759,10 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                 Code de vérification
               </label>
               <div style={{ position: "relative" }}>
-                <ShieldCheck
+                <Mail
                   size={18}
+                  width={18}
+                  height={18}
                   style={{
                     position: "absolute",
                     left: 12,
@@ -593,7 +780,8 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                   placeholder="6 chiffres"
                   value={code}
                   onChange={(e) => {
-                    setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                    // ✨ N'accepte que les chiffres 0-9 ASCII
+                    setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6));
                     if (error) setError("");
                   }}
                   onFocus={() => setFocusedField("code")}
@@ -615,21 +803,50 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
             {error && (
               <div
                 role="alert"
+                className={shakeError ? "lg-shake" : ""}
                 style={{
                   padding: "10px 14px",
-                  borderRadius: 8,
+                  borderRadius: RADIUS.small,
                   fontSize: 13,
                   fontWeight: 500,
                   marginBottom: 16,
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: 8,
-                  background: errorBg,
-                  color: errorText,
+                  background: currentErrorStyle.bg,
+                  color: currentErrorStyle.text,
                 }}
               >
-                <AlertCircle size={16} style={{ flexShrink: 0 }} />
-                <span>{error}</span>
+                <ErrorIcon size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                <div style={{ flex: 1 }}>
+                  <div>{error}</div>
+                  {errorType === "expired" && (
+                    <button
+                      type="button"
+                      onClick={handleResendCode}
+                      disabled={sendingCode || resendCooldown > 0}
+                      style={{
+                        marginTop: 6,
+                        background: "transparent",
+                        border: "none",
+                        color: "inherit",
+                        textDecoration: "underline",
+                        fontWeight: 600,
+                        fontSize: 12,
+                        cursor:
+                          sendingCode || resendCooldown > 0
+                            ? "not-allowed"
+                            : "pointer",
+                        padding: 0,
+                        opacity:
+                          sendingCode || resendCooldown > 0 ? 0.6 : 1,
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      Demander un nouveau code
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -655,7 +872,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                     : buttonBg,
                 color: "#FFFFFF",
                 border: "none",
-                borderRadius: 10,
+                borderRadius: RADIUS.button,
                 fontSize: 16,
                 fontWeight: 600,
                 cursor:
@@ -692,7 +909,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
               )}
             </button>
 
-            {/* Renvoyer le code — ✨ zone tap 44px */}
+            {/* Renvoyer le code */}
             <button
               type="button"
               onClick={handleResendCode}
@@ -720,10 +937,9 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                 fontWeight: 500,
                 textDecoration: "underline",
                 width: "100%",
-                // ✨ Zone tap 44px
                 minHeight: MOBILE_TAP,
                 padding: "10px 12px",
-                borderRadius: 8,
+                borderRadius: RADIUS.small,
                 transform:
                   pressedBtn === "resend" &&
                   !sendingCode &&
@@ -748,11 +964,11 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
         {/* ═══ Lien inscription ═══ */}
         {step === "credentials" && (
           <div style={{ marginTop: 20, textAlign: "center" }}>
-            <p
+            <div
+              role="group"
               style={{
                 color: textSecondary,
                 fontSize: 14,
-                margin: 0,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -760,7 +976,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                 flexWrap: "wrap",
               }}
             >
-              Pas de compte ?
+              <span>Pas de compte ?</span>
               <button
                 type="button"
                 onClick={onSwitchToRegister}
@@ -776,7 +992,6 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
                   cursor: "pointer",
                   fontSize: 14,
                   padding: "6px 4px",
-                  // ✨ Zone tap verticale agrandie
                   minHeight: 40,
                   display: "inline-flex",
                   alignItems: "center",
@@ -790,7 +1005,7 @@ export function LoginScreen({ onLogin, onSwitchToRegister }) {
               >
                 Créer un compte
               </button>
-            </p>
+            </div>
           </div>
         )}
       </div>

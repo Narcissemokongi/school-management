@@ -6,7 +6,7 @@ import { useStyles } from "@/styles/theme";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   Loader2, User, Lock, Eye, EyeOff, School, UserCheck, BadgeCheck,
-  CheckCircle2, XCircle, AlertCircle, Check,
+  CheckCircle2, XCircle, AlertCircle, Check, AlertTriangle, ShieldCheck,
 } from "lucide-react";
 
 // ════════════════════════════════════════════════════════════════════
@@ -17,8 +17,22 @@ const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
 const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
 
-// ✨ Taille minimale tap target mobile
 const MOBILE_TAP = 44;
+
+// ════════════════════════════════════════════════════════════════════
+// RADIUS UNIFIÉS (aligné LoginScreen)
+// ════════════════════════════════════════════════════════════════════
+const RADIUS = {
+  card: 16,
+  input: 12,
+  button: 12,
+  small: 8,
+};
+
+// ════════════════════════════════════════════════════════════════════
+// REDIRECT COUNTDOWN
+// ════════════════════════════════════════════════════════════════════
+const REDIRECT_SECONDS = 5;
 
 // ════════════════════════════════════════════════════════════════════
 // KEYFRAMES module-level
@@ -29,11 +43,19 @@ const RegisterKeyframes = (
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
+    @keyframes rs-shake {
+      0%, 100% { transform: translateX(0); }
+      25%      { transform: translateX(-4px); }
+      75%      { transform: translateX(4px); }
+    }
     .rs-spin {
       animation: rs-spin 1s linear infinite;
     }
+    .rs-shake {
+      animation: rs-shake 0.3s ease-in-out;
+    }
     @media (prefers-reduced-motion: reduce) {
-      .rs-spin { animation: none !important; }
+      .rs-spin, .rs-shake { animation: none !important; }
     }
   `}</style>
 );
@@ -58,17 +80,30 @@ export function RegisterScreen({ onSwitchToLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
+  const [errorField, setErrorField] = useState(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState(REDIRECT_SECONDS);
   const [acceptConditions, setAcceptConditions] = useState(false);
 
-  // ✨ Focus state React (remplace DOM manipulation)
+  // ✨ Focus / feedback / warnings
   const [focusedField, setFocusedField] = useState(null);
-  // ✨ Feedback tap
   const [pressedBtn, setPressedBtn] = useState(null);
+  const [capsLockOn, setCapsLockOn] = useState(false);
+  const [shakeError, setShakeError] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const register = useMutation(api.users.register);
   const redirectTimeoutRef = useRef(null);
+  const countdownTimeoutRef = useRef(null);
+
+  // Refs pour focus dynamique
+  const nomRef = useRef(null);
+  const loginRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmRef = useRef(null);
+  const codeEcoleRef = useRef(null);
+  const matriculeRef = useRef(null);
 
   // ✨ Handlers touch génériques
   const pressBtn = useCallback((id) => () => setPressedBtn(id), []);
@@ -79,9 +114,8 @@ export function RegisterScreen({ onSwitchToLogin }) {
   // ════════════════════════════════════════════════════════════════════
   useEffect(() => {
     return () => {
-      if (redirectTimeoutRef.current) {
-        clearTimeout(redirectTimeoutRef.current);
-      }
+      if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current);
+      if (countdownTimeoutRef.current) clearTimeout(countdownTimeoutRef.current);
     };
   }, []);
 
@@ -91,13 +125,20 @@ export function RegisterScreen({ onSwitchToLogin }) {
   const passwordStrength = useMemo(() => {
     if (!password) return null;
     const checks = {
-      length: password.length >= 6,
+      hasMinLength: password.length >= 6,
+      long: password.length >= 10,
       uppercase: /[A-Z]/.test(password),
       number: /[0-9]/.test(password),
       special: /[^A-Za-z0-9]/.test(password),
-      long: password.length >= 10,
     };
-    const score = Object.values(checks).filter(Boolean).length;
+    const score = [
+      checks.hasMinLength,
+      checks.uppercase,
+      checks.number,
+      checks.special,
+      checks.long,
+    ].filter(Boolean).length;
+
     let label, color, width;
     if (score <= 2) {
       label = "Faible";
@@ -116,31 +157,133 @@ export function RegisterScreen({ onSwitchToLogin }) {
   }, [password]);
 
   // ════════════════════════════════════════════════════════════════════
+  // Shake à chaque erreur
+  // ════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!error) return;
+    setShakeError(true);
+    const t = setTimeout(() => setShakeError(false), 400);
+    return () => clearTimeout(t);
+  }, [error]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Caps Lock détection
+  // ════════════════════════════════════════════════════════════════════
+  const handleKeyEvent = useCallback((e) => {
+    if (typeof e.getModifierState === "function") {
+      setCapsLockOn(e.getModifierState("CapsLock"));
+    }
+  }, []);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Focus sur le premier champ en erreur
+  // ════════════════════════════════════════════════════════════════════
+  const focusField = useCallback((field) => {
+    const map = {
+      nom: nomRef,
+      login: loginRef,
+      password: passwordRef,
+      confirm: confirmRef,
+      codeEcole: codeEcoleRef,
+      matricule: matriculeRef,
+    };
+    const ref = map[field];
+    if (ref?.current) {
+      ref.current.focus();
+      ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, []);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Effacement d'erreur au tap dans un champ
+  // ════════════════════════════════════════════════════════════════════
+  const clearError = useCallback(() => {
+    if (error) {
+      setError("");
+      setErrorField(null);
+    }
+  }, [error]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Validation
+  // ════════════════════════════════════════════════════════════════════
+  const validateForm = useCallback(() => {
+    if (!nom.trim()) return { field: "nom", msg: "Le nom complet est requis." };
+    if (!login.trim()) return { field: "login", msg: "L'identifiant est requis." };
+    if (!/^[a-zA-Z0-9._-]{3,20}$/.test(login.trim())) {
+      return {
+        field: "login",
+        msg: "L'identifiant doit contenir entre 3 et 20 caractères (lettres, chiffres, points, tirets, underscores).",
+      };
+    }
+    if (!password) return { field: "password", msg: "Le mot de passe est requis." };
+    if (password.length < 6) {
+      return {
+        field: "password",
+        msg: "Le mot de passe doit contenir au moins 6 caractères.",
+      };
+    }
+    if (password !== confirmPassword) {
+      return {
+        field: "confirm",
+        msg: "Les mots de passe ne correspondent pas.",
+      };
+    }
+    if (role === "eleve" && !matricule.trim()) {
+      return { field: "matricule", msg: "Le matricule est requis pour les élèves." };
+    }
+    if (!codeEcole.trim()) {
+      return { field: "codeEcole", msg: "Le code de l'école est requis." };
+    }
+    if (!role) return { field: "role", msg: "Veuillez sélectionner un rôle." };
+    if (!acceptConditions) {
+      return {
+        field: "conditions",
+        msg: "Vous devez accepter les conditions d'utilisation.",
+      };
+    }
+    return null;
+  }, [nom, login, password, confirmPassword, codeEcole, role, matricule, acceptConditions]);
+
+  // ════════════════════════════════════════════════════════════════════
+  // Redirection avec compte à rebours
+  // ════════════════════════════════════════════════════════════════════
+  const startRedirectCountdown = useCallback(() => {
+    let remaining = REDIRECT_SECONDS;
+    setRedirectCountdown(remaining);
+
+    const tick = () => {
+      remaining -= 1;
+      setRedirectCountdown(remaining);
+      if (remaining <= 0) {
+        onSwitchToLogin();
+        return;
+      }
+      countdownTimeoutRef.current = setTimeout(tick, 1000);
+    };
+    countdownTimeoutRef.current = setTimeout(tick, 1000);
+  }, [onSwitchToLogin]);
+
+  // ════════════════════════════════════════════════════════════════════
   // Soumission
   // ════════════════════════════════════════════════════════════════════
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (loading) return;
+    if (loading || success) return;
 
     setError("");
+    setErrorField(null);
 
-    if (!nom.trim()) return setError("Le nom complet est requis.");
-    if (!login.trim()) return setError("L'identifiant est requis.");
-    if (!/^[a-zA-Z0-9._-]{3,20}$/.test(login.trim()))
-      return setError(
-        "L'identifiant doit contenir entre 3 et 20 caractères (lettres, chiffres, points, tirets, underscores)."
-      );
-    if (!password) return setError("Le mot de passe est requis.");
-    if (password.length < 6)
-      return setError("Le mot de passe doit contenir au moins 6 caractères.");
-    if (password !== confirmPassword)
-      return setError("Les mots de passe ne correspondent pas.");
-    if (!codeEcole.trim()) return setError("Le code de l'école est requis.");
-    if (!role) return setError("Veuillez sélectionner un rôle.");
-    if (role === "eleve" && !matricule.trim())
-      return setError("Le matricule est requis pour les élèves.");
-    if (!acceptConditions)
-      return setError("Vous devez accepter les conditions d'utilisation.");
+    const validation = validateForm();
+    if (validation) {
+      setError(validation.msg);
+      setErrorField(validation.field);
+      // Focus uniquement sur un champ input réel
+      if (validation.field !== "role" && validation.field !== "conditions") {
+        setTimeout(() => focusField(validation.field), 100);
+      }
+      return;
+    }
 
     setLoading(true);
     try {
@@ -154,10 +297,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
           role === "eleve" ? matricule.trim().toUpperCase() : undefined,
       });
       setSuccess(true);
-      redirectTimeoutRef.current = setTimeout(() => {
-        redirectTimeoutRef.current = null;
-        onSwitchToLogin();
-      }, 2500);
+      startRedirectCountdown();
     } catch (err) {
       const msg =
         (err && typeof err === "object" && err.message) ||
@@ -179,9 +319,12 @@ export function RegisterScreen({ onSwitchToLogin }) {
   const textSecondary = dark ? "#CBD5E1" : "#64748B";
   const hintColor = dark ? "#94A3B8" : "#6B7280";
   const labelColor = dark ? "#CBD5E1" : "#374151";
+  const cardBg = dark ? "#1E293B" : "#FFFFFF";
+  const cardBorder = dark ? "#334155" : "#E2E8F0";
   const inputBg = dark ? "#0F172A" : "#F9FAFB";
   const inputText = dark ? "#F1F5F9" : "#1E293B";
-  const inputBorder = dark ? "rgba(255,255,255,0.1)" : "#E2E8F0";
+  const inputBorder = dark ? "#334155" : "#E2E8F0";
+  const errorBorder = "#EF4444";
 
   const labelStyle = {
     display: "block",
@@ -191,34 +334,39 @@ export function RegisterScreen({ onSwitchToLogin }) {
     color: labelColor,
   };
 
+  const requiredStar = (
+    <span style={{ color: "#EF4444", marginLeft: 3 }} aria-hidden="true">
+      *
+    </span>
+  );
+
   const containerPadding = isMobile
     ? `calc(16px + ${SAFE_TOP}) calc(16px + ${SAFE_RIGHT}) calc(16px + ${SAFE_BOTTOM}) calc(16px + ${SAFE_LEFT})`
     : "24px";
-  const cardPadding = isMobile ? "28px 20px" : "40px 32px";
-  const logoSize = isMobile ? 80 : 100;
-  const titleFontSize = isMobile ? 20 : 24;
-  const roleButtonPadding = isMobile ? "10px 14px" : "8px 16px";
-  const errorFontSize = isMobile ? 14 : 13;
-  const successFontSize = isMobile ? 14 : 13;
-  const conditionsFontSize = isMobile ? 14 : 13;
+  const cardPadding = isMobile ? "24px 18px" : "32px 28px";
+  const logoSize = isMobile ? 64 : 72;
+  const titleFontSize = isMobile ? 22 : 24;
 
-  // ✨ fieldContainerStyle avec focus state
+  // ✨ fieldContainerStyle avec état erreur
   const fieldContainerStyle = useCallback(
-    (fieldName) => ({
-      display: "flex",
-      alignItems: "center",
-      border: `1.5px solid ${
-        focusedField === fieldName ? accent : inputBorder
-      }`,
-      borderRadius: 10,
-      background: inputBg,
-      transition: "border-color 0.2s ease",
-      height: isMobile ? MOBILE_TAP + 8 : 46,
-      boxSizing: "border-box",
-      position: "relative",
-      WebkitTapHighlightColor: "transparent",
-    }),
-    [focusedField, accent, inputBorder, inputBg, isMobile]
+    (fieldName) => {
+      const hasError = errorField === fieldName;
+      return {
+        display: "flex",
+        alignItems: "center",
+        border: `1.5px solid ${
+          hasError ? errorBorder : focusedField === fieldName ? accent : inputBorder
+        }`,
+        borderRadius: RADIUS.input,
+        background: inputBg,
+        transition: "border-color 0.2s ease",
+        height: isMobile ? MOBILE_TAP + 8 : 46,
+        boxSizing: "border-box",
+        position: "relative",
+        WebkitTapHighlightColor: "transparent",
+      };
+    },
+    [errorField, focusedField, accent, inputBorder, inputBg, isMobile]
   );
 
   const iconStyle = {
@@ -245,62 +393,75 @@ export function RegisterScreen({ onSwitchToLogin }) {
     touchAction: "manipulation",
   };
 
-  // ✅ Force majuscules pendant la saisie
-  const handleCodeEcoleChange = (e) => {
-    setCodeEcole(e.target.value.toUpperCase());
-  };
-
+  // ════════════════════════════════════════════════════════════════════
+  // RENDU
+  // ════════════════════════════════════════════════════════════════════
   return (
     <div
       style={{
-        // ✨ 100dvh + safe-area pour iOS
         minHeight: "100vh",
-        height: isMobile ? "100dvh" : undefined,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        display: "flex",           // ← ajoute
+        flexDirection: "column",   // ← ajoute
         background: dark ? "#0F172A" : "#F3F4F6",
         padding: containerPadding,
         transition: "background-color 0.3s",
         boxSizing: "border-box",
         overflowY: "auto",
         WebkitOverflowScrolling: "touch",
-        overscrollBehavior: "contain",
       }}
     >
       {RegisterKeyframes}
 
       <div
         style={{
-          background: dark ? "#1E293B" : "#FFFFFF",
-          borderRadius: 16,
+          background: cardBg,
+          borderRadius: RADIUS.card,
           boxShadow: dark
-            ? "0 4px 12px rgba(0,0,0,0.5)"
+            ? "0 4px 12px rgba(0,0,0,0.3)"
             : "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
+          border: `1px solid ${cardBorder}`,
           padding: cardPadding,
           width: "100%",
           maxWidth: 480,
-          transition: "background-color 0.3s",
+          margin: "auto",
+          transition: "background-color 0.3s, border-color 0.3s",
           boxSizing: "border-box",
+          position: "relative",
         }}
       >
         {/* ═══ En-tête ═══ */}
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: isMobile ? 24 : 32,
-          }}
-        >
-          <img
-            src="/logo.png"
-            alt="School Management"
-            style={{
-              width: logoSize,
-              height: logoSize,
-              marginBottom: 12,
-              objectFit: "contain",
-            }}
-          />
+        <div style={{ textAlign: "center", marginBottom: isMobile ? 20 : 28 }}>
+          {!logoFailed ? (
+            <img
+              src="/logo.png"
+              alt="School Management"
+              onError={() => setLogoFailed(true)}
+              style={{
+                width: logoSize,
+                height: logoSize,
+                marginBottom: 12,
+                objectFit: "contain",
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              style={{
+                width: logoSize,
+                height: logoSize,
+                marginBottom: 12,
+                marginLeft: "auto",
+                marginRight: "auto",
+                borderRadius: "50%",
+                background: dark ? "#312E81" : "#EEF2FF",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ShieldCheck size={logoSize / 2} color={accent} />
+            </div>
+          )}
           <h1
             style={{
               fontSize: titleFontSize,
@@ -315,6 +476,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
             style={{
               color: textSecondary,
               marginTop: 8,
+              marginBottom: 0,
               fontSize: 14,
             }}
           >
@@ -322,7 +484,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
           </p>
         </div>
 
-        {/* ═══ Succès ═══ */}
+        {/* ═══ SUCCÈS ═══ */}
         {success && (
           <div
             role="status"
@@ -330,56 +492,85 @@ export function RegisterScreen({ onSwitchToLogin }) {
             style={{
               background: dark ? "#064E3B" : "#D1FAE5",
               color: dark ? "#34D399" : "#065F46",
-              padding: "12px 14px",
-              borderRadius: 8,
-              fontSize: successFontSize,
+              padding: "14px 16px",
+              borderRadius: RADIUS.small,
+              fontSize: isMobile ? 14 : 13,
               fontWeight: 500,
               marginBottom: 20,
               display: "flex",
-              alignItems: "center",
-              gap: 8,
+              alignItems: "flex-start",
+              gap: 10,
             }}
           >
-            <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
-            Compte créé avec succès ! Redirection...
+            <CheckCircle2 size={20} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                Compte créé avec succès !
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.9 }}>
+                Redirection vers la connexion dans{" "}
+                <strong>{Math.max(redirectCountdown, 0)}s</strong>…
+              </div>
+              <button
+                type="button"
+                onClick={onSwitchToLogin}
+                style={{
+                  marginTop: 8,
+                  background: "transparent",
+                  border: "none",
+                  color: "inherit",
+                  textDecoration: "underline",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 12,
+                  padding: 0,
+                  fontFamily: "inherit",
+                }}
+              >
+                Se connecter maintenant
+              </button>
+            </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} autoComplete="off">
+        <form
+          onSubmit={handleSubmit}
+          autoComplete="off"
+          style={success ? { pointerEvents: "none", opacity: 0.5 } : undefined}
+        >
           {/* ═══ Nom complet ═══ */}
           <div style={{ marginBottom: 20 }}>
             <label htmlFor="nom" style={labelStyle}>
-              Nom complet
+              Nom complet {requiredStar}
             </label>
             <div style={fieldContainerStyle("nom")}>
               <span style={iconStyle} aria-hidden="true">
                 <User size={18} />
               </span>
               <input
+                ref={nomRef}
                 id="nom"
                 type="text"
                 placeholder="Votre nom"
                 value={nom}
                 onChange={(e) => {
                   setNom(e.target.value);
-                  if (error) setError("");
+                  clearError();
                 }}
                 onFocus={() => setFocusedField("nom")}
                 onBlur={() => setFocusedField(null)}
                 style={inputStyle}
                 autoComplete="name"
-                autoFocus
                 enterKeyHint="next"
                 autoCorrect="off"
                 spellCheck="false"
-                required
               />
             </div>
           </div>
 
           {/* ═══ Rôle ═══ */}
           <div style={{ marginBottom: 24 }}>
-            <label style={labelStyle}>Vous êtes</label>
+            <label style={labelStyle}>Vous êtes {requiredStar}</label>
             <div
               style={{
                 display: "flex",
@@ -391,13 +582,14 @@ export function RegisterScreen({ onSwitchToLogin }) {
             >
               {ROLES.map((r) => {
                 const isPressed = pressedBtn === `role-${r.value}`;
+                const hasError = errorField === "role" && !role;
                 return (
                   <button
                     key={r.value}
                     type="button"
                     onClick={() => {
                       setRole(r.value);
-                      if (error) setError("");
+                      clearError();
                     }}
                     onTouchStart={pressBtn(`role-${r.value}`)}
                     onTouchEnd={releaseBtn}
@@ -406,7 +598,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
                       display: "flex",
                       alignItems: "center",
                       gap: 6,
-                      padding: roleButtonPadding,
+                      padding: isMobile ? "10px 14px" : "8px 16px",
                       background: role === r.value ? accent : "transparent",
                       color:
                         role === r.value
@@ -415,17 +607,19 @@ export function RegisterScreen({ onSwitchToLogin }) {
                           ? "#CBD5E1"
                           : "#374151",
                       border: `1.5px solid ${
-                        role === r.value ? accent : inputBorder
+                        hasError
+                          ? errorBorder
+                          : role === r.value
+                          ? accent
+                          : inputBorder
                       }`,
-                      borderRadius: 10,
+                      borderRadius: RADIUS.input,
                       fontSize: 14,
                       fontWeight: 500,
                       cursor: "pointer",
-                      transition:
-                        "all 0.15s ease, transform 0.1s ease",
+                      transition: "all 0.15s ease, transform 0.1s ease",
                       transform: isPressed ? "scale(0.97)" : "scale(1)",
                       minHeight: isMobile ? MOBILE_TAP : undefined,
-                      // ✨ Neutralise tap delay
                       WebkitTapHighlightColor: "transparent",
                       touchAction: "manipulation",
                       fontFamily: "inherit",
@@ -445,20 +639,21 @@ export function RegisterScreen({ onSwitchToLogin }) {
           {role === "eleve" && (
             <div style={{ marginBottom: 20 }}>
               <label htmlFor="matricule" style={labelStyle}>
-                Matricule de l'élève
+                Matricule de l'élève {requiredStar}
               </label>
               <div style={fieldContainerStyle("matricule")}>
                 <span style={iconStyle} aria-hidden="true">
                   <BadgeCheck size={18} />
                 </span>
                 <input
+                  ref={matriculeRef}
                   id="matricule"
                   type="text"
                   placeholder="Ex: A1B2C3"
                   value={matricule}
                   onChange={(e) => {
                     setMatricule(e.target.value);
-                    if (error) setError("");
+                    clearError();
                   }}
                   onFocus={() => setFocusedField("matricule")}
                   onBlur={() => setFocusedField(null)}
@@ -467,7 +662,6 @@ export function RegisterScreen({ onSwitchToLogin }) {
                   enterKeyHint="next"
                   autoCapitalize="characters"
                   autoCorrect="off"
-                  required
                 />
               </div>
               <p
@@ -486,20 +680,21 @@ export function RegisterScreen({ onSwitchToLogin }) {
           {/* ═══ Identifiant ═══ */}
           <div style={{ marginBottom: 20 }}>
             <label htmlFor="login" style={labelStyle}>
-              Identifiant
+              Identifiant {requiredStar}
             </label>
             <div style={fieldContainerStyle("login")}>
               <span style={iconStyle} aria-hidden="true">
                 <User size={18} />
               </span>
               <input
+                ref={loginRef}
                 id="login"
                 type="text"
                 placeholder="Choisissez un identifiant"
                 value={login}
                 onChange={(e) => {
                   setLogin(e.target.value);
-                  if (error) setError("");
+                  clearError();
                 }}
                 onFocus={() => setFocusedField("login")}
                 onBlur={() => setFocusedField(null)}
@@ -509,7 +704,6 @@ export function RegisterScreen({ onSwitchToLogin }) {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck="false"
-                required
               />
             </div>
           </div>
@@ -517,29 +711,33 @@ export function RegisterScreen({ onSwitchToLogin }) {
           {/* ═══ Mot de passe ═══ */}
           <div style={{ marginBottom: 20 }}>
             <label htmlFor="password" style={labelStyle}>
-              Mot de passe
+              Mot de passe {requiredStar}
             </label>
             <div style={fieldContainerStyle("password")}>
               <span style={iconStyle} aria-hidden="true">
                 <Lock size={18} />
               </span>
               <input
+                ref={passwordRef}
                 id="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Minimum 6 caractères"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
-                  if (error) setError("");
+                  clearError();
                 }}
                 onFocus={() => setFocusedField("password")}
-                onBlur={() => setFocusedField(null)}
+                onBlur={() => {
+                  setFocusedField(null);
+                  setCapsLockOn(false);
+                }}
+                onKeyDown={handleKeyEvent}
+                onKeyUp={handleKeyEvent}
                 style={{ ...inputStyle, paddingRight: isMobile ? 48 : 42 }}
                 autoComplete="new-password"
                 enterKeyHint="next"
-                required
               />
-              {/* ✨ Toggle password : zone 44×44 */}
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
@@ -568,7 +766,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  borderRadius: 8,
+                  borderRadius: RADIUS.small,
                   transition: "transform 0.1s ease",
                   WebkitTapHighlightColor: "transparent",
                   touchAction: "manipulation",
@@ -577,6 +775,24 @@ export function RegisterScreen({ onSwitchToLogin }) {
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
+
+            {/* Caps Lock warning */}
+            {capsLockOn && (
+              <div
+                role="status"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: dark ? "#FBBF24" : "#92400E",
+                }}
+              >
+                <AlertTriangle size={12} />
+                Verrouillage majuscules activé
+              </div>
+            )}
 
             {/* Force du mot de passe */}
             {password && passwordStrength && (
@@ -629,7 +845,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
                   >
                     {[
                       {
-                        ok: passwordStrength.checks.length,
+                        ok: passwordStrength.checks.hasMinLength,
                         label: "6+ caractères",
                       },
                       {
@@ -667,29 +883,28 @@ export function RegisterScreen({ onSwitchToLogin }) {
           {/* ═══ Confirmation ═══ */}
           <div style={{ marginBottom: 20 }}>
             <label htmlFor="confirm-password" style={labelStyle}>
-              Confirmer le mot de passe
+              Confirmer le mot de passe {requiredStar}
             </label>
             <div style={fieldContainerStyle("confirm")}>
               <span style={iconStyle} aria-hidden="true">
                 <Lock size={18} />
               </span>
               <input
+                ref={confirmRef}
                 id="confirm-password"
                 type={showConfirm ? "text" : "password"}
                 placeholder="Répéter le mot de passe"
                 value={confirmPassword}
                 onChange={(e) => {
                   setConfirmPassword(e.target.value);
-                  if (error) setError("");
+                  clearError();
                 }}
                 onFocus={() => setFocusedField("confirm")}
                 onBlur={() => setFocusedField(null)}
                 style={{ ...inputStyle, paddingRight: isMobile ? 48 : 42 }}
                 autoComplete="new-password"
                 enterKeyHint="next"
-                required
               />
-              {/* ✨ Toggle confirm : zone 44×44 */}
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
@@ -718,7 +933,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  borderRadius: 8,
+                  borderRadius: RADIUS.small,
                   transition: "transform 0.1s ease",
                   WebkitTapHighlightColor: "transparent",
                   touchAction: "manipulation",
@@ -748,18 +963,22 @@ export function RegisterScreen({ onSwitchToLogin }) {
           {/* ═══ Code école ═══ */}
           <div style={{ marginBottom: 24 }}>
             <label htmlFor="codeEcole" style={labelStyle}>
-              Code de l'école
+              Code de l'école {requiredStar}
             </label>
             <div style={fieldContainerStyle("codeEcole")}>
               <span style={iconStyle} aria-hidden="true">
                 <School size={18} />
               </span>
               <input
+                ref={codeEcoleRef}
                 id="codeEcole"
                 type="text"
                 placeholder="Ex: ABC123"
                 value={codeEcole}
-                onChange={handleCodeEcoleChange}
+                onChange={(e) => {
+                  setCodeEcole(e.target.value.toUpperCase());
+                  clearError();
+                }}
                 onFocus={() => setFocusedField("codeEcole")}
                 onBlur={() => setFocusedField(null)}
                 style={{ ...inputStyle, letterSpacing: 1, fontWeight: 600 }}
@@ -768,7 +987,6 @@ export function RegisterScreen({ onSwitchToLogin }) {
                 autoCapitalize="characters"
                 autoCorrect="off"
                 spellCheck="false"
-                required
               />
             </div>
             <p
@@ -792,7 +1010,6 @@ export function RegisterScreen({ onSwitchToLogin }) {
               gap: 10,
             }}
           >
-            {/* ✨ Checkbox avec zone tap agrandie */}
             <div
               style={{
                 position: "relative",
@@ -806,23 +1023,28 @@ export function RegisterScreen({ onSwitchToLogin }) {
                 checked={acceptConditions}
                 onChange={(e) => {
                   setAcceptConditions(e.target.checked);
-                  if (error) setError("");
+                  clearError();
                 }}
                 style={{
                   width: isMobile ? 22 : 18,
                   height: isMobile ? 22 : 18,
                   cursor: "pointer",
                   accentColor: accent,
+                  outline:
+                    errorField === "conditions"
+                      ? `2px solid ${errorBorder}`
+                      : "none",
+                  outlineOffset: 2,
+                  borderRadius: 4,
                   WebkitTapHighlightColor: "transparent",
                   touchAction: "manipulation",
                 }}
-                required
               />
             </div>
             <label
               htmlFor="conditions"
               style={{
-                fontSize: conditionsFontSize,
+                fontSize: isMobile ? 14 : 13,
                 color: dark ? "#CBD5E1" : "#4B5563",
                 cursor: "pointer",
                 lineHeight: 1.5,
@@ -830,28 +1052,32 @@ export function RegisterScreen({ onSwitchToLogin }) {
               }}
             >
               J'accepte les conditions d'utilisation et la politique de
-              confidentialité.
+              confidentialité. {requiredStar}
             </label>
           </div>
 
-          {/* ═══ Erreur ═══ */}
+          {/* ═══ ERREUR (juste au-dessus du bouton) ═══ */}
           {error && (
             <div
               role="alert"
+              className={shakeError ? "rs-shake" : ""}
               style={{
                 background: dark ? "#7F1D1D" : "#FEE2E2",
                 color: dark ? "#F87171" : "#B91C1C",
                 padding: "10px 14px",
-                borderRadius: 8,
-                fontSize: errorFontSize,
+                borderRadius: RADIUS.small,
+                fontSize: isMobile ? 14 : 13,
                 fontWeight: 500,
                 marginBottom: 16,
                 display: "flex",
-                alignItems: "center",
+                alignItems: "flex-start",
                 gap: 8,
               }}
             >
-              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <AlertCircle
+                size={16}
+                style={{ flexShrink: 0, marginTop: 1 }}
+              />
               <span>{error}</span>
             </div>
           )}
@@ -876,7 +1102,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
                   : accent,
               color: "#FFFFFF",
               border: "none",
-              borderRadius: 10,
+              borderRadius: RADIUS.button,
               fontSize: 16,
               fontWeight: 600,
               cursor: loading || success ? "not-allowed" : "pointer",
@@ -913,11 +1139,11 @@ export function RegisterScreen({ onSwitchToLogin }) {
 
         {/* ═══ Pied ═══ */}
         <div style={{ marginTop: 20, textAlign: "center" }}>
-          <p
+          <div
+            role="group"
             style={{
               color: dark ? "#CBD5E1" : "#6B7280",
               fontSize: 14,
-              margin: 0,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -925,7 +1151,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
               flexWrap: "wrap",
             }}
           >
-            Déjà un compte ?
+            <span>Déjà un compte ?</span>
             <button
               type="button"
               onClick={onSwitchToLogin}
@@ -941,7 +1167,6 @@ export function RegisterScreen({ onSwitchToLogin }) {
                 cursor: "pointer",
                 fontSize: 14,
                 padding: "6px 4px",
-                // ✨ Zone tap verticale agrandie
                 minHeight: 40,
                 display: "inline-flex",
                 alignItems: "center",
@@ -955,7 +1180,7 @@ export function RegisterScreen({ onSwitchToLogin }) {
             >
               Se connecter
             </button>
-          </p>
+          </div>
         </div>
       </div>
     </div>
