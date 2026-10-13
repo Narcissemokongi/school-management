@@ -10,7 +10,7 @@ workflows:
       java: 17
       groups:
         - app-env
-        - android_signing          # ← AJOUT : groupe avec les secrets du keystore
+        - android_signing
     scripts:
       - name: Install dependencies
         script: |
@@ -28,8 +28,6 @@ workflows:
           npm install --no-save --no-audit --no-fund --force \
             @rolldown/binding-darwin-arm64@1.0.0-rc.17 || true
 
-          echo "=== Vérification finale ==="
-          ls -la node_modules/@rolldown/ 2>/dev/null || true
           if [ ! -d "node_modules/@rolldown/binding-darwin-arm64" ]; then
             echo "❌ FATAL: binding natif darwin-arm64 absent"
             exit 1
@@ -42,7 +40,7 @@ workflows:
       - name: Capacitor sync
         script: npx cap sync android
 
-      # ✨ Restaure le keystore depuis la variable CM_KEYSTORE (base64)
+      # ✨ Restaure le keystore à l'emplacement attendu par build.gradle
       - name: Set up Android keystore
         script: |
           set -e
@@ -51,37 +49,7 @@ workflows:
           ls -la "$CM_BUILD_DIR/android/app/release.keystore"
           echo "✅ Keystore restauré"
 
-      # ✨ Injecte la configuration de signature dans build.gradle
-      - name: Configure signing in build.gradle
-        script: |
-          set -e
-          cd android/app
-          cat >> build.gradle << 'EOF'
-
-          // ═══════════════════════════════════════════════════════
-          // SIGNATURE RELEASE — injectée par Codemagic
-          // ═══════════════════════════════════════════════════════
-          android {
-              signingConfigs {
-                  release {
-                      storeFile file("release.keystore")
-                      storePassword System.getenv("CM_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("CM_KEY_ALIAS")
-                      keyPassword System.getenv("CM_KEY_PASSWORD")
-                  }
-              }
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                      shrinkResources false
-                  }
-              }
-          }
-          EOF
-          echo "✅ Signing config injectée"
-
-      # ✨ Build RELEASE signé (au lieu de debug)
+      # ✨ Build RELEASE (build.gradle gère déjà la signature)
       - name: Build APK (release signé)
         script: |
           cd android
@@ -132,8 +100,6 @@ workflows:
           npm install --no-save --no-audit --no-fund --force \
             @rolldown/binding-darwin-arm64@1.0.0-rc.17 || true
 
-          echo "=== Vérification finale ==="
-          ls -la node_modules/@rolldown/ 2>/dev/null || true
           if [ ! -d "node_modules/@rolldown/binding-darwin-arm64" ]; then
             echo "❌ FATAL: binding natif darwin-arm64 absent"
             exit 1
@@ -193,8 +159,6 @@ workflows:
           npm install --no-save --no-audit --no-fund --force \
             @rolldown/binding-darwin-arm64@1.0.0-rc.17 || true
 
-          echo "=== Vérification finale ==="
-          ls -la node_modules/@rolldown/ 2>/dev/null || true
           if [ ! -d "node_modules/@rolldown/binding-darwin-arm64" ]; then
             echo "❌ FATAL: binding natif darwin-arm64 absent"
             exit 1
