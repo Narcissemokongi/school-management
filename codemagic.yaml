@@ -10,6 +10,7 @@ workflows:
       java: 17
       groups:
         - app-env
+        - android_signing          # ← AJOUT : groupe avec les secrets du keystore
     scripts:
       - name: Install dependencies
         script: |
@@ -34,17 +35,61 @@ workflows:
             exit 1
           fi
           echo "✅ Binding natif darwin-arm64 présent"
+
       - name: Build web app
         script: npm run build
+
       - name: Capacitor sync
         script: npx cap sync android
-      - name: Build APK (debug)
+
+      # ✨ Restaure le keystore depuis la variable CM_KEYSTORE (base64)
+      - name: Set up Android keystore
+        script: |
+          set -e
+          echo "=== Décodage du keystore ==="
+          echo "$CM_KEYSTORE" | base64 --decode > "$CM_BUILD_DIR/android/app/release.keystore"
+          ls -la "$CM_BUILD_DIR/android/app/release.keystore"
+          echo "✅ Keystore restauré"
+
+      # ✨ Injecte la configuration de signature dans build.gradle
+      - name: Configure signing in build.gradle
+        script: |
+          set -e
+          cd android/app
+          cat >> build.gradle << 'EOF'
+
+          // ═══════════════════════════════════════════════════════
+          // SIGNATURE RELEASE — injectée par Codemagic
+          // ═══════════════════════════════════════════════════════
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file("release.keystore")
+                      storePassword System.getenv("CM_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("CM_KEY_ALIAS")
+                      keyPassword System.getenv("CM_KEY_PASSWORD")
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                      shrinkResources false
+                  }
+              }
+          }
+          EOF
+          echo "✅ Signing config injectée"
+
+      # ✨ Build RELEASE signé (au lieu de debug)
+      - name: Build APK (release signé)
         script: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease --stacktrace
+
     artifacts:
-      - android/app/build/outputs/apk/debug/app-debug.apk
+      - android/app/build/outputs/apk/release/*.apk
     publishing:
       email:
         recipients:
