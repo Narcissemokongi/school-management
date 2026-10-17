@@ -1,11 +1,3 @@
-// src/main.jsx
-
-// ✅ vConsole — debug iOS (à retirer après diagnostic)
-import VConsole from "vconsole";
-if (import.meta.env.PROD) {
-  new VConsole({ theme: "dark" });
-}
-
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
