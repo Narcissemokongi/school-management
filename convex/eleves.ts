@@ -351,6 +351,11 @@ export const add = mutation({
     tuteurNom: v.optional(v.string()),
     tuteurTelephone: v.optional(v.string()),
     userId: v.id("users"),
+
+    // ✅ AJOUT : champs envoyés par AddEleveForm.jsx
+    anneeId: v.optional(v.id("anneesScolaires")),
+    classe: v.optional(v.string()),
+    parentId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     await requireEcoleAdmin(ctx, args.userId, args.ecoleId);
@@ -372,6 +377,7 @@ export const add = mutation({
       }
     }
 
+    // 1️⃣ Insérer l'élève avec tous les champs
     const newId = await ctx.db.insert("eleves", {
       nom: args.nom,
       postnom: args.postnom,
@@ -391,9 +397,23 @@ export const add = mutation({
       nomMere: args.nomMere,
       tuteurNom: args.tuteurNom,
       tuteurTelephone: args.tuteurTelephone,
+      parentId: args.parentId,        // ✅ AJOUT
       codeUtilise: false,
     });
 
+    // 2️⃣ Créer l'inscription si anneeId + classe fournis
+    if (args.anneeId && args.classe) {
+      await ctx.db.insert("inscriptions", {
+        eleveId: newId,
+        ecoleId: args.ecoleId,
+        anneeId: args.anneeId,
+        classe: args.classe,
+        statut: "inscrit",
+        dateInscription: new Date().toISOString(),
+      });
+    }
+
+    // 3️⃣ Audit
     await ctx.db.insert("audit", {
       userId: args.userId,
       action: "create_eleve",
@@ -401,13 +421,14 @@ export const add = mutation({
       documentId: newId,
       date: new Date().toISOString(),
       ecoleId: args.ecoleId,
-      details: `Création de l'élève ${args.nom} ${args.postnom} (matricule: ${code})`,
+      details: `Création de l'élève ${args.nom} ${args.postnom} (matricule: ${code})${
+        args.classe ? ` — classe ${args.classe}` : ""
+      }`,
     });
 
     return { success: true, eleveId: newId, code };
   },
 });
-
 export const update = mutation({
   args: {
     id: v.id("eleves"),
@@ -523,6 +544,19 @@ export const importEleves = mutation({
         postnom: v.string(),
         prenom: v.optional(v.string()),
         classe: v.string(),
+        sexe: v.optional(v.union(v.literal("M"), v.literal("F"))),
+        dateNaissance: v.optional(v.string()),
+        lieuNaissance: v.optional(v.string()),
+        province: v.optional(v.string()),
+        territoire: v.optional(v.string()),
+        secteur: v.optional(v.string()),
+        village: v.optional(v.string()),
+        adresse: v.optional(v.string()),
+        telephone: v.optional(v.string()),
+        nomPere: v.optional(v.string()),
+        nomMere: v.optional(v.string()),
+        tuteurNom: v.optional(v.string()),
+        tuteurTelephone: v.optional(v.string()),
       })
     ),
     ecoleId: v.id("ecoles"),
@@ -566,6 +600,19 @@ export const importEleves = mutation({
         code,
         codeUtilise: false,
         ecoleId: args.ecoleId,
+        sexe: el.sexe,
+        dateNaissance: el.dateNaissance,
+        lieuNaissance: el.lieuNaissance,
+        province: el.province,
+        territoire: el.territoire,
+        secteur: el.secteur,
+        village: el.village,
+        adresse: el.adresse,
+        telephone: el.telephone,
+        nomPere: el.nomPere,
+        nomMere: el.nomMere,
+        tuteurNom: el.tuteurNom,
+        tuteurTelephone: el.tuteurTelephone,
       });
 
       await ctx.db.insert("inscriptions", {
@@ -593,7 +640,6 @@ export const importEleves = mutation({
     return { success: true, inserted };
   },
 });
-
 export const updateDecision = mutation({
   args: {
     inscriptionId: v.id("inscriptions"),

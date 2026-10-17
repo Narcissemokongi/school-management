@@ -734,16 +734,23 @@ export function GestionEleves({
   // ════════════════════════════════════════════════════════════════════
   const handleImport = useCallback(
     async (event) => {
+      console.log("🔥 1. handleImport appelé");
       const file = event.target.files?.[0];
-      if (!file) return;
-
+      if (!file) {
+        console.log("❌ 2. Aucun fichier sélectionné");
+        return;
+      }
+      console.log("📁 3. Fichier reçu :", file.name, file.size, "bytes");
+      
       if (!ecoleId || !anneeId || !user?._id) {
+        console.log("❌ 4. Paramètres manquants :", { ecoleId, anneeId, userId: user?._id });
         toast.error("Session ou année scolaire manquante.");
         return;
       }
 
       setImporting(true);
       try {
+        console.log("📥 5. Début du parsing Excel");
         const XLSX = await import("xlsx");
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data);

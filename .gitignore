@@ -78,3 +78,6 @@ package-lock.json
 
 # Lockfile — platform-specific bindings
 package-lock.json
+
+*.keystore
+keystore-base64.txt

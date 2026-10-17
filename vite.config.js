@@ -37,26 +37,18 @@ export default defineConfig({
   },
 
   build: {
-    // ✅ Cible moderne (ESM) pour les navigateurs récents
-    target: ['es2020', 'safari14', 'ios14', 'chrome90', 'firefox88'],
-
+    // ⚠️ PAS de 'target' ici — c'est le plugin legacy qui le gère
     // ✅ Force esbuild (Oxc produit du code hostile à WebKit)
     minify: 'esbuild',
 
     // ✅ Cible CSS compatible iOS
     cssTarget: ['safari14', 'ios14'],
 
-    // ✅ Force la cible pour les workers
-    worker: {
-      format: 'es',
-      target: 'es2020',
-    },
-
     sourcemap: false,
     chunkSizeWarningLimit: 2000,
-    rollupOptions: {
-      maxParallelFileOps: 2,
-    },
+
+    // ❌ maxParallelFileOps retiré (invalide avec Rolldown / Vite 8)
+    // ❌ worker retiré (Rolldown gère)
   },
 
   plugins: [
@@ -66,10 +58,7 @@ export default defineConfig({
     // IMPORTANT : doit être placé AVANT VitePWA
     legacy({
       targets: ['safari >= 14', 'ios >= 14', 'chrome >= 90', 'firefox >= 88'],
-      // Polyfills modernes pour les navigateurs qui supportent ESM
-      // mais pas certaines APIs récentes
       modernPolyfills: true,
-      // Polyfills legacy (pour les navigateurs sans ESM)
       renderLegacyChunks: true,
     }),
 
@@ -78,20 +67,16 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        globIgnores: ['**/node_modules/**/*'],
-        // ✅ Met à jour le SW immédiatement
-        skipWaiting: true,
-        clientsClaim: true,
-        // ✅ Empêche le SW de servir un vieux HTML → écran blanc
-        navigateFallback: null,
-        // ✅ Supprime les anciens caches (fix chunks obsolètes)
-        cleanupOutdatedCaches: true,
-        // ✅ Ne pas précacher les fichiers legacy (trop gros)
+        // ✅ UNE SEULE clé globIgnores (avec tous les patterns fusionnés)
         globIgnores: [
           '**/node_modules/**/*',
           '**/legacy-*.js',
           '**/polyfills-legacy-*.js',
         ],
+        skipWaiting: true,
+        clientsClaim: true,
+        navigateFallback: null,
+        cleanupOutdatedCaches: true,
       },
       manifest: {
         name: 'School Management',
