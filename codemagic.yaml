@@ -15,7 +15,7 @@ workflows:
       - name: Install dependencies
         script: |
           set -e
-          echo "=== Node: $(node --version) | Arch: $(uname -m) ==="
+          echo "=== Node: $(node --version) | Arch: $(uname -m) | OS: $(uname -s) ==="
 
           rm -rf node_modules package-lock.json
           npm install --no-audit --no-fund || true
@@ -24,16 +24,40 @@ workflows:
             echo "❌ Vite manquant après npm install"; exit 1
           fi
 
-          echo "=== Installation du binding NATIF LINUX (pour Android) ==="
-          # ✅ CORRECTION : linux-x64-gnu au lieu de darwin-arm64
-          npm install --no-save --no-audit --no-fund --force \
-            @rolldown/binding-linux-x64-gnu@1.0.0-rc.17 || true
+          # ✅ Détection automatique de l'OS et de l'architecture
+          OS=$(uname -s)
+          ARCH=$(uname -m)
+          BINDING=""
 
-          if [ ! -d "node_modules/@rolldown/binding-linux-x64-gnu" ]; then
-            echo "❌ FATAL: binding natif linux-x64-gnu absent"
+          if [ "$OS" = "Darwin" ]; then
+            if [ "$ARCH" = "arm64" ]; then
+              BINDING="@rolldown/binding-darwin-arm64@1.0.0-rc.17"
+            else
+              BINDING="@rolldown/binding-darwin-x64@1.0.0-rc.17"
+            fi
+          elif [ "$OS" = "Linux" ]; then
+            if [ "$ARCH" = "arm64" ]; then
+              BINDING="@rolldown/binding-linux-arm64-gnu@1.0.0-rc.17"
+            else
+              BINDING="@rolldown/binding-linux-x64-gnu@1.0.0-rc.17"
+            fi
+          fi
+
+          if [ -z "$BINDING" ]; then
+            echo "❌ OS/Arch non supporté : $OS / $ARCH"
             exit 1
           fi
-          echo "✅ Binding natif linux-x64-gnu présent"
+
+          echo "=== Installation du binding pour $OS / $ARCH : $BINDING ==="
+          npm install --no-save --no-audit --no-fund --force $BINDING || true
+
+          # Vérification
+          BINDING_DIR=$(echo $BINDING | cut -d'@' -f1)
+          if [ ! -d "node_modules/$BINDING_DIR" ]; then
+            echo "❌ FATAL: $BINDING_DIR absent"
+            exit 1
+          fi
+          echo "✅ Binding présent : $BINDING_DIR"
 
       - name: Build web app
         script: npm run build
